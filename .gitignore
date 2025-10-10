@@ -60,11 +60,11 @@ vgcore.*
 test_results/
 *.test
 
-# CMake (if you ever switch to CMake)
+# CMake files
 CMakeCache.txt
 CMakeFiles/
 cmake_install.cmake
-Makefile
+#Makefile
 install_manifest.txt
 
 # Backup files
