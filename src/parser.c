@@ -337,6 +337,7 @@ static Type* parse_type(Parser *p) {
         case TOK_TYPE_BOOL: kind = TYPE_BOOL; break;
         case TOK_TYPE_STRING: kind = TYPE_STRING; break;
         case TOK_TYPE_PTR: kind = TYPE_PTR; break;
+        case TOK_TYPE_BUFFER: kind = TYPE_BUFFER; break;
         default:
             error_at_current(p, "Expect type name");
             return type_new(TYPE_INFER);

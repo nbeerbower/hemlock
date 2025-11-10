@@ -101,6 +101,7 @@ typedef enum {
     TYPE_BOOL,
     TYPE_STRING,
     TYPE_PTR,
+    TYPE_BUFFER,
     TYPE_NULL,
     TYPE_INFER,      // No annotation, infer from value
 } TypeKind;

@@ -200,6 +200,35 @@ Value val_string_take(char *data, int length, int capacity) {
     return v;
 }
 
+// ========== BUFFER OPERATIONS ==========
+
+void buffer_free(Buffer *buf) {
+    if (buf) {
+        free(buf->data);
+        free(buf);
+    }
+}
+
+Value val_buffer(int size) {
+    if (size <= 0) {
+        fprintf(stderr, "Runtime error: buffer size must be positive\n");
+        exit(1);
+    }
+
+    Value v;
+    v.type = VAL_BUFFER;
+    Buffer *buf = malloc(sizeof(Buffer));
+    buf->data = malloc(size);
+    if (buf->data == NULL) {
+        fprintf(stderr, "Runtime error: Failed to allocate buffer\n");
+        exit(1);
+    }
+    buf->length = size;
+    buf->capacity = size;
+    v.as.as_buffer = buf;
+    return v;
+}
+
 // ========== VALUE OPERATIONS ==========
 
 Value val_i8(int8_t value) {
@@ -320,6 +349,12 @@ void print_value(Value val) {
             break;
         case VAL_PTR:
             printf("%p", val.as.as_ptr);
+            break;
+        case VAL_BUFFER:
+            printf("<buffer %p length=%d capacity=%d>",
+                   val.as.as_buffer->data,
+                   val.as.as_buffer->length,
+                   val.as.as_buffer->capacity);
             break;
         case VAL_BUILTIN_FN:
             printf("<builtin function>");
@@ -452,10 +487,17 @@ static Value convert_to_type(Value value, TypeKind target_type) {
             }
             fprintf(stderr, "Runtime error: Cannot convert to ptr\n");
             exit(1);
-            
+
+        case TYPE_BUFFER:
+            if (value.type == VAL_BUFFER) {
+                return value;
+            }
+            fprintf(stderr, "Runtime error: Cannot convert to buffer\n");
+            exit(1);
+
         case TYPE_NULL:
             return val_null();
-            
+
         case TYPE_INFER:
             return value;  // No conversion needed
     }
@@ -734,82 +776,112 @@ Value eval_expr(Expr *expr, Environment *env) {
 
         case EXPR_GET_PROPERTY: {
             Value object = eval_expr(expr->as.get_property.object, env);
-            
-            if (object.type != VAL_STRING) {
-                fprintf(stderr, "Runtime error: Only strings have properties\n");
+            const char *property = expr->as.get_property.property;
+
+            if (object.type == VAL_STRING) {
+                if (strcmp(property, "length") == 0) {
+                    return val_int(object.as.as_string->length);
+                }
+                fprintf(stderr, "Runtime error: Unknown property '%s' for string\n", property);
+                exit(1);
+            } else if (object.type == VAL_BUFFER) {
+                if (strcmp(property, "length") == 0) {
+                    return val_int(object.as.as_buffer->length);
+                } else if (strcmp(property, "capacity") == 0) {
+                    return val_int(object.as.as_buffer->capacity);
+                }
+                fprintf(stderr, "Runtime error: Unknown property '%s' for buffer\n", property);
+                exit(1);
+            } else {
+                fprintf(stderr, "Runtime error: Only strings and buffers have properties\n");
                 exit(1);
             }
-            
-            const char *property = expr->as.get_property.property;
-            
-            if (strcmp(property, "length") == 0) {
-                return val_int(object.as.as_string->length);
-            }
-            
-            fprintf(stderr, "Runtime error: Unknown property '%s'\n", property);
-            exit(1);
         }
         
         case EXPR_INDEX: {
             Value object = eval_expr(expr->as.index.object, env);
             Value index_val = eval_expr(expr->as.index.index, env);
-            
-            if (object.type != VAL_STRING) {
-                fprintf(stderr, "Runtime error: Only strings can be indexed\n");
-                exit(1);
-            }
-            
+
             if (!is_integer(index_val)) {
                 fprintf(stderr, "Runtime error: Index must be an integer\n");
                 exit(1);
             }
-            
+
             int32_t index = value_to_int(index_val);
-            String *str = object.as.as_string;
-            
-            if (index < 0 || index >= str->length) {
-                fprintf(stderr, "Runtime error: String index %d out of bounds (length %d)\n", 
-                        index, str->length);
+
+            if (object.type == VAL_STRING) {
+                String *str = object.as.as_string;
+
+                if (index < 0 || index >= str->length) {
+                    fprintf(stderr, "Runtime error: String index %d out of bounds (length %d)\n",
+                            index, str->length);
+                    exit(1);
+                }
+
+                // Return the byte as an integer (u8/char)
+                return val_u8((unsigned char)str->data[index]);
+            } else if (object.type == VAL_BUFFER) {
+                Buffer *buf = object.as.as_buffer;
+
+                if (index < 0 || index >= buf->length) {
+                    fprintf(stderr, "Runtime error: Buffer index %d out of bounds (length %d)\n",
+                            index, buf->length);
+                    exit(1);
+                }
+
+                // Return the byte as an integer (u8)
+                return val_u8(((unsigned char *)buf->data)[index]);
+            } else {
+                fprintf(stderr, "Runtime error: Only strings and buffers can be indexed\n");
                 exit(1);
             }
-            
-            // Return the byte as an integer (u8/char)
-            return val_int((unsigned char)str->data[index]);
         }
         
         case EXPR_INDEX_ASSIGN: {
             Value object = eval_expr(expr->as.index_assign.object, env);
             Value index_val = eval_expr(expr->as.index_assign.index, env);
             Value value = eval_expr(expr->as.index_assign.value, env);
-            
-            if (object.type != VAL_STRING) {
-                fprintf(stderr, "Runtime error: Only strings can be indexed\n");
-                exit(1);
-            }
-            
+
             if (!is_integer(index_val)) {
                 fprintf(stderr, "Runtime error: Index must be an integer\n");
                 exit(1);
             }
-            
+
             if (!is_integer(value)) {
-                fprintf(stderr, "Runtime error: String index value must be an integer (byte)\n");
+                fprintf(stderr, "Runtime error: Index value must be an integer (byte)\n");
                 exit(1);
             }
-            
+
             int32_t index = value_to_int(index_val);
-            String *str = object.as.as_string;
-            
-            if (index < 0 || index >= str->length) {
-                fprintf(stderr, "Runtime error: String index %d out of bounds (length %d)\n", 
-                        index, str->length);
+
+            if (object.type == VAL_STRING) {
+                String *str = object.as.as_string;
+
+                if (index < 0 || index >= str->length) {
+                    fprintf(stderr, "Runtime error: String index %d out of bounds (length %d)\n",
+                            index, str->length);
+                    exit(1);
+                }
+
+                // Strings are mutable - set the byte
+                str->data[index] = (char)value_to_int(value);
+                return value;
+            } else if (object.type == VAL_BUFFER) {
+                Buffer *buf = object.as.as_buffer;
+
+                if (index < 0 || index >= buf->length) {
+                    fprintf(stderr, "Runtime error: Buffer index %d out of bounds (length %d)\n",
+                            index, buf->length);
+                    exit(1);
+                }
+
+                // Buffers are mutable - set the byte
+                ((unsigned char *)buf->data)[index] = (unsigned char)value_to_int(value);
+                return value;
+            } else {
+                fprintf(stderr, "Runtime error: Only strings and buffers can be indexed\n");
                 exit(1);
             }
-            
-            // Strings are mutable - set the byte
-            str->data[index] = (char)value_to_int(value);
-            
-            return value;
         }
     }
     
@@ -914,17 +986,20 @@ static Value builtin_alloc(Value *args, int num_args) {
 
 static Value builtin_free(Value *args, int num_args) {
     if (num_args != 1) {
-        fprintf(stderr, "Runtime error: free() expects 1 argument (pointer)\n");
+        fprintf(stderr, "Runtime error: free() expects 1 argument (pointer or buffer)\n");
         exit(1);
     }
-    
-    if (args[0].type != VAL_PTR) {
-        fprintf(stderr, "Runtime error: free() requires a pointer\n");
+
+    if (args[0].type == VAL_PTR) {
+        free(args[0].as.as_ptr);
+        return val_null();
+    } else if (args[0].type == VAL_BUFFER) {
+        buffer_free(args[0].as.as_buffer);
+        return val_null();
+    } else {
+        fprintf(stderr, "Runtime error: free() requires a pointer or buffer\n");
         exit(1);
     }
-    
-    free(args[0].as.as_ptr);
-    return val_null();
 }
 
 static Value builtin_memset(Value *args, int num_args) {
@@ -983,13 +1058,28 @@ static Value builtin_sizeof(Value *args, int num_args) {
         fprintf(stderr, "Runtime error: sizeof() expects 1 argument (type)\n");
         exit(1);
     }
-    
+
     // For now, assume the argument is a special type identifier
     // We'll need to extend this later to handle type values
     // For simplicity, we'll just return sizes for common types
-    
+
     fprintf(stderr, "Runtime error: sizeof() not fully implemented yet\n");
     exit(1);
+}
+
+static Value builtin_buffer(Value *args, int num_args) {
+    if (num_args != 1) {
+        fprintf(stderr, "Runtime error: buffer() expects 1 argument (size in bytes)\n");
+        exit(1);
+    }
+
+    if (!is_integer(args[0])) {
+        fprintf(stderr, "Runtime error: buffer() size must be an integer\n");
+        exit(1);
+    }
+
+    int32_t size = value_to_int(args[0]);
+    return val_buffer(size);
 }
 
 // Structure to hold builtin function info
@@ -1005,6 +1095,7 @@ static BuiltinInfo builtins[] = {
     {"memset", builtin_memset},
     {"memcpy", builtin_memcpy},
     {"sizeof", builtin_sizeof},
+    {"buffer", builtin_buffer},
     {NULL, NULL}  // Sentinel
 };
 

@@ -32,6 +32,7 @@ typedef enum {
     TOK_TYPE_BOOL,
     TOK_TYPE_STRING,
     TOK_TYPE_PTR,
+    TOK_TYPE_BUFFER,
 
     // Operators
     TOK_PLUS,

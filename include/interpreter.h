@@ -18,6 +18,7 @@ typedef enum {
     VAL_BOOL,
     VAL_STRING,
     VAL_PTR,
+    VAL_BUFFER,
     VAL_BUILTIN_FN,
     VAL_NULL,
 } ValueType;
@@ -31,6 +32,13 @@ typedef struct {
     int length;
     int capacity;
 } String;
+
+// Buffer struct (safe pointer wrapper)
+typedef struct {
+    void *data;
+    int length;
+    int capacity;
+} Buffer;
 
 // Runtime value
 typedef struct Value {
@@ -47,6 +55,7 @@ typedef struct Value {
         int as_bool;
         String *as_string;
         void *as_ptr;
+        Buffer *as_buffer;
         BuiltinFn as_builtin_fn;
     } as;
 } Value;
@@ -85,6 +94,7 @@ Value val_bool(int value);
 Value val_string(const char *str);
 Value val_string_take(char *str, int length, int capacity);
 Value val_ptr(void *ptr);
+Value val_buffer(int size);
 Value val_builtin_fn(BuiltinFn fn);
 Value val_null(void);
 
@@ -95,6 +105,9 @@ void print_value(Value val);
 void string_free(String *str);
 String* string_concat(String *a, String *b);
 String* string_copy(String *str);
+
+// Buffer operations
+void buffer_free(Buffer *buf);
 
 void register_builtins(Environment *env);
 

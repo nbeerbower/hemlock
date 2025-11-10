@@ -1,0 +1,4 @@
+let b = buffer(100);
+print(b.length);
+print(b.capacity);
+free(b);

@@ -1,0 +1,3 @@
+let b = buffer(100);
+print(b);
+free(b);

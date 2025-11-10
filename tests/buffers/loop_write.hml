@@ -1,0 +1,14 @@
+let b = buffer(5);
+let i = 0;
+while (i < b.length) {
+    b[i] = i + 10;
+    i = i + 1;
+}
+
+i = 0;
+while (i < b.length) {
+    print(b[i]);
+    i = i + 1;
+}
+
+free(b);
