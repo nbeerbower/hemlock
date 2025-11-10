@@ -1,0 +1,6 @@
+let a: u32 = 0;
+let b: u32 = 2147483647;
+let c: u32 = 1000000;
+print(a);
+print(b);
+print(c);

@@ -1,0 +1,6 @@
+let a = -5;
+let b = -(-10);
+let c = -(3 + 2);
+print(a);
+print(b);
+print(c);

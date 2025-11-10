@@ -1,0 +1,6 @@
+let a: u16 = 0;
+let b: u16 = 65535;
+let c: u16 = 1000;
+print(a);
+print(b);
+print(c);

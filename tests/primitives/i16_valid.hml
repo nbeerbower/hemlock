@@ -1,0 +1,6 @@
+let a: i16 = -32768;
+let b: i16 = 32767;
+let c: i16 = 100;
+print(a);
+print(b);
+print(c);

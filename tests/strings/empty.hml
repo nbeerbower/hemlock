@@ -1,0 +1,3 @@
+let s = "";
+print(s);
+print(s.length);

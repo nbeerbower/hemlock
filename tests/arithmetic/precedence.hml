@@ -1,0 +1,6 @@
+let a = 2 + 3 * 4;
+let b = (2 + 3) * 4;
+let c = 10 - 2 * 3;
+print(a);
+print(b);
+print(c);

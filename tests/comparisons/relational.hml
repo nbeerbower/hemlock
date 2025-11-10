@@ -1,0 +1,12 @@
+let a = 5 < 10;
+let b = 10 < 5;
+let c = 5 <= 5;
+let d = 5 > 3;
+let e = 3 > 5;
+let f = 5 >= 5;
+print(a);
+print(b);
+print(c);
+print(d);
+print(e);
+print(f);

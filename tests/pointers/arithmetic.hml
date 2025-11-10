@@ -1,0 +1,7 @@
+let p = alloc(10);
+let p2 = p + 5;
+let p3 = p2 - 3;
+print(p);
+print(p2);
+print(p3);
+free(p);
