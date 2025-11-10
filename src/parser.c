@@ -31,6 +31,28 @@ static void error_at_current(Parser *p, const char *message) {
     error_at(p, &p->current, message);
 }
 
+// Forward declaration
+static void advance(Parser *p);
+
+static void synchronize(Parser *p) {
+    p->panic_mode = 0;
+
+    while (p->current.type != TOK_EOF) {
+        if (p->previous.type == TOK_SEMICOLON) return;
+
+        switch (p->current.type) {
+            case TOK_LET:
+            case TOK_IF:
+            case TOK_WHILE:
+                return;
+            default:
+                ; // Do nothing
+        }
+
+        advance(p);
+    }
+}
+
 // ========== TOKEN MANAGEMENT ==========
 
 static void advance(Parser *p) {
@@ -105,12 +127,16 @@ static Expr* primary(Parser *p) {
         if (match(p, TOK_LPAREN)) {
             Expr **args = NULL;
             int num_args = 0;
-            
+
             if (!check(p, TOK_RPAREN)) {
                 args = malloc(sizeof(Expr*) * 8);
                 args[num_args++] = expression(p);
+
+                while (match(p, TOK_COMMA)) {
+                    args[num_args++] = expression(p);
+                }
             }
-            
+
             consume(p, TOK_RPAREN, "Expect ')' after arguments");
             
             Expr *call = expr_call(name, args, num_args);
@@ -310,6 +336,7 @@ static Type* parse_type(Parser *p) {
         case TOK_TYPE_NUMBER: kind = TYPE_F64; break;  // alias
         case TOK_TYPE_BOOL: kind = TYPE_BOOL; break;
         case TOK_TYPE_STRING: kind = TYPE_STRING; break;
+        case TOK_TYPE_PTR: kind = TYPE_PTR; break;
         default:
             error_at_current(p, "Expect type name");
             return type_new(TYPE_INFER);
@@ -421,10 +448,13 @@ void parser_init(Parser *parser, Lexer *lexer) {
 Stmt** parse_program(Parser *parser, int *stmt_count) {
     Stmt **statements = malloc(sizeof(Stmt*) * 256);  // max 256 statements
     *stmt_count = 0;
-    
+
     while (!match(parser, TOK_EOF)) {
+        if (parser->panic_mode) {
+            synchronize(parser);
+        }
         statements[(*stmt_count)++] = statement(parser);
     }
-    
+
     return statements;
 }

@@ -17,9 +17,13 @@ typedef enum {
     VAL_F64,
     VAL_BOOL,
     VAL_STRING,
+    VAL_PTR,
+    VAL_BUILTIN_FN,
     VAL_NULL,
 } ValueType;
 
+typedef struct Value Value;
+typedef Value (*BuiltinFn)(Value *args, int num_args);
 
 // String struct
 typedef struct {
@@ -29,7 +33,7 @@ typedef struct {
 } String;
 
 // Runtime value
-typedef struct {
+typedef struct Value {
     ValueType type;
     union {
         int8_t as_i8;
@@ -42,6 +46,8 @@ typedef struct {
         double as_f64;
         int as_bool;
         String *as_string;
+        void *as_ptr;
+        BuiltinFn as_builtin_fn;
     } as;
 } Value;
 
@@ -78,6 +84,8 @@ Value val_f64(double value);
 Value val_bool(int value);
 Value val_string(const char *str);
 Value val_string_take(char *str, int length, int capacity);
+Value val_ptr(void *ptr);
+Value val_builtin_fn(BuiltinFn fn);
 Value val_null(void);
 
 // Value operations
@@ -87,5 +95,7 @@ void print_value(Value val);
 void string_free(String *str);
 String* string_concat(String *a, String *b);
 String* string_copy(String *str);
+
+void register_builtins(Environment *env);
 
 #endif // HEMLOCK_INTERPRETER_H

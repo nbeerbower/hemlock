@@ -59,6 +59,7 @@ static void run_source(const char *source) {
     
     // Interpret
     Environment *env = env_new(NULL);
+    register_builtins(env);
     eval_program(statements, stmt_count, env);
     
     // Cleanup
@@ -82,6 +83,7 @@ static void run_file(const char *path) {
 static void run_repl(void) {
     char line[1024];
     Environment *env = env_new(NULL);
+    register_builtins(env);
     
     printf("Hemlock v0.1 REPL\n");
     printf("Type 'exit' to quit\n\n");
@@ -152,7 +154,7 @@ int main(int argc, char **argv) {
     if (argc == 2) {
         // One argument - run file
         run_file(argv[1]);
-        return 0;
+        exit(0);  // Explicitly exit with success code after file execution
     }
     
     // Too many arguments

@@ -273,6 +273,13 @@ Value val_bool(int value) {
     return v;
 }
 
+Value val_ptr(void *ptr) {
+    Value v;
+    v.type = VAL_PTR;
+    v.as.as_ptr = ptr;
+    return v;
+}
+
 Value val_null(void) {
     Value v;
     v.type = VAL_NULL;
@@ -310,6 +317,12 @@ void print_value(Value val) {
             break;
         case VAL_STRING:
             printf("%s", val.as.as_string->data);
+            break;
+        case VAL_PTR:
+            printf("%p", val.as.as_ptr);
+            break;
+        case VAL_BUILTIN_FN:
+            printf("<builtin function>");
             break;
         case VAL_NULL:
             printf("null");
@@ -431,6 +444,13 @@ static Value convert_to_type(Value value, TypeKind target_type) {
                 return value;
             }
             fprintf(stderr, "Runtime error: Cannot convert to string\n");
+            exit(1);
+
+        case TYPE_PTR:
+            if (value.type == VAL_PTR) {
+                return value;
+            }
+            fprintf(stderr, "Runtime error: Cannot convert to ptr\n");
             exit(1);
             
         case TYPE_NULL:
@@ -581,6 +601,27 @@ Value eval_expr(Expr *expr, Environment *env) {
                 String *result = string_concat(left.as.as_string, right.as.as_string);
                 return (Value){ .type = VAL_STRING, .as.as_string = result };
             }
+
+            // Pointer arithmetic
+            if (left.type == VAL_PTR && is_integer(right)) {
+                if (expr->as.binary.op == OP_ADD) {
+                    void *ptr = left.as.as_ptr;
+                    int32_t offset = value_to_int(right);
+                    return val_ptr((char *)ptr + offset);
+                } else if (expr->as.binary.op == OP_SUB) {
+                    void *ptr = left.as.as_ptr;
+                    int32_t offset = value_to_int(right);
+                    return val_ptr((char *)ptr - offset);
+                }
+            }
+
+            if (is_integer(left) && right.type == VAL_PTR) {
+                if (expr->as.binary.op == OP_ADD) {
+                    int32_t offset = value_to_int(left);
+                    void *ptr = right.as.as_ptr;
+                    return val_ptr((char *)ptr + offset);
+                }
+            }
             
             // Numeric operations
             if (!is_numeric(left) || !is_numeric(right)) {
@@ -653,20 +694,42 @@ Value eval_expr(Expr *expr, Environment *env) {
         }
             
         case EXPR_CALL: {
-            if (strcmp(expr->as.call.name, "print") == 0) {
-                if (expr->as.call.num_args != 1) {
-                    fprintf(stderr, "Runtime error: print() expects 1 argument\n");
-                    exit(1);
+            // Look up the function
+            Value func = env_get(env, expr->as.call.name);
+            
+            // Evaluate arguments
+            Value *args = NULL;
+            if (expr->as.call.num_args > 0) {
+                args = malloc(sizeof(Value) * expr->as.call.num_args);
+                for (int i = 0; i < expr->as.call.num_args; i++) {
+                    args[i] = eval_expr(expr->as.call.args[i], env);
                 }
-                
-                Value arg = eval_expr(expr->as.call.args[0], env);
-                print_value(arg);
-                printf("\n");
-                return val_null();
             }
             
-            fprintf(stderr, "Runtime error: Unknown function '%s'\n", expr->as.call.name);
-            exit(1);
+            Value result;
+            
+            if (func.type == VAL_BUILTIN_FN) {
+                // Call builtin function
+                BuiltinFn fn = func.as.as_builtin_fn;
+                result = fn(args, expr->as.call.num_args);
+            } else {
+                // Check for special case: print (we haven't removed this yet)
+                if (strcmp(expr->as.call.name, "print") == 0) {
+                    if (expr->as.call.num_args != 1) {
+                        fprintf(stderr, "Runtime error: print() expects 1 argument\n");
+                        exit(1);
+                    }
+                    print_value(args[0]);
+                    printf("\n");
+                    result = val_null();
+                } else {
+                    fprintf(stderr, "Runtime error: Unknown function '%s'\n", expr->as.call.name);
+                    exit(1);
+                }
+            }
+            
+            if (args) free(args);
+            return result;
         }
 
         case EXPR_GET_PROPERTY: {
@@ -806,5 +869,154 @@ void eval_stmt(Stmt *stmt, Environment *env) {
 void eval_program(Stmt **stmts, int count, Environment *env) {
     for (int i = 0; i < count; i++) {
         eval_stmt(stmts[i], env);
+    }
+}
+
+// ========== BUILTIN FUNCTIONS ==========
+
+static Value builtin_print(Value *args, int num_args) {
+    if (num_args != 1) {
+        fprintf(stderr, "Runtime error: print() expects 1 argument\n");
+        exit(1);
+    }
+
+    print_value(args[0]);
+    printf("\n");
+    return val_null();
+}
+
+static Value builtin_alloc(Value *args, int num_args) {
+    if (num_args != 1) {
+        fprintf(stderr, "Runtime error: alloc() expects 1 argument (size in bytes)\n");
+        exit(1);
+    }
+    
+    if (!is_integer(args[0])) {
+        fprintf(stderr, "Runtime error: alloc() size must be an integer\n");
+        exit(1);
+    }
+    
+    int32_t size = value_to_int(args[0]);
+    
+    if (size <= 0) {
+        fprintf(stderr, "Runtime error: alloc() size must be positive\n");
+        exit(1);
+    }
+    
+    void *ptr = malloc(size);
+    if (ptr == NULL) {
+        fprintf(stderr, "Runtime error: alloc() failed to allocate memory\n");
+        exit(1);
+    }
+    
+    return val_ptr(ptr);
+}
+
+static Value builtin_free(Value *args, int num_args) {
+    if (num_args != 1) {
+        fprintf(stderr, "Runtime error: free() expects 1 argument (pointer)\n");
+        exit(1);
+    }
+    
+    if (args[0].type != VAL_PTR) {
+        fprintf(stderr, "Runtime error: free() requires a pointer\n");
+        exit(1);
+    }
+    
+    free(args[0].as.as_ptr);
+    return val_null();
+}
+
+static Value builtin_memset(Value *args, int num_args) {
+    if (num_args != 3) {
+        fprintf(stderr, "Runtime error: memset() expects 3 arguments (ptr, byte, size)\n");
+        exit(1);
+    }
+    
+    if (args[0].type != VAL_PTR) {
+        fprintf(stderr, "Runtime error: memset() requires pointer as first argument\n");
+        exit(1);
+    }
+    
+    if (!is_integer(args[1]) || !is_integer(args[2])) {
+        fprintf(stderr, "Runtime error: memset() byte and size must be integers\n");
+        exit(1);
+    }
+    
+    void *ptr = args[0].as.as_ptr;
+    int byte = value_to_int(args[1]);
+    int size = value_to_int(args[2]);
+    
+    memset(ptr, byte, size);
+    return val_null();
+}
+
+static Value builtin_memcpy(Value *args, int num_args) {
+    if (num_args != 3) {
+        fprintf(stderr, "Runtime error: memcpy() expects 3 arguments (dest, src, size)\n");
+        exit(1);
+    }
+    
+    if (args[0].type != VAL_PTR || args[1].type != VAL_PTR) {
+        fprintf(stderr, "Runtime error: memcpy() requires pointers for dest and src\n");
+        exit(1);
+    }
+    
+    if (!is_integer(args[2])) {
+        fprintf(stderr, "Runtime error: memcpy() size must be an integer\n");
+        exit(1);
+    }
+    
+    void *dest = args[0].as.as_ptr;
+    void *src = args[1].as.as_ptr;
+    int size = value_to_int(args[2]);
+    
+    memcpy(dest, src, size);
+    return val_null();
+}
+
+static Value builtin_sizeof(Value *args, int num_args) {
+    (void)args;
+    (void)num_args;
+
+    if (num_args != 1) {
+        fprintf(stderr, "Runtime error: sizeof() expects 1 argument (type)\n");
+        exit(1);
+    }
+    
+    // For now, assume the argument is a special type identifier
+    // We'll need to extend this later to handle type values
+    // For simplicity, we'll just return sizes for common types
+    
+    fprintf(stderr, "Runtime error: sizeof() not fully implemented yet\n");
+    exit(1);
+}
+
+// Structure to hold builtin function info
+typedef struct {
+    const char *name;
+    BuiltinFn fn;
+} BuiltinInfo;
+
+static BuiltinInfo builtins[] = {
+    {"print", builtin_print},
+    {"alloc", builtin_alloc},
+    {"free", builtin_free},
+    {"memset", builtin_memset},
+    {"memcpy", builtin_memcpy},
+    {"sizeof", builtin_sizeof},
+    {NULL, NULL}  // Sentinel
+};
+
+Value val_builtin_fn(BuiltinFn fn) {
+    Value v;
+    v.type = VAL_BUILTIN_FN;
+    v.as.as_builtin_fn = fn;
+    return v;
+}
+
+void register_builtins(Environment *env) {
+    for (int i = 0; builtins[i].name != NULL; i++) {
+        env_set(env, builtins[i].name, val_builtin_fn(builtins[i].fn));
     }
 }

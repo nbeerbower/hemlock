@@ -175,6 +175,9 @@ static TokenType identifier_type(Lexer *lex) {
         case 'n':
             if (len == 6) return check_keyword(lex->start, 6, "number", TOK_TYPE_NUMBER);
             break;
+        case 'p':
+            if (len == 3) return check_keyword(lex->start, 3, "ptr", TOK_TYPE_PTR);
+            break;
         case 's':
             if (len == 6) return check_keyword(lex->start, 6, "string", TOK_TYPE_STRING);
             break;
@@ -237,6 +240,7 @@ Token lexer_next(Lexer *lex) {
         case '/': return make_token(lex, TOK_SLASH);
         case ';': return make_token(lex, TOK_SEMICOLON);
         case ':': return make_token(lex, TOK_COLON);
+        case ',': return make_token(lex, TOK_COMMA);
         case '(': return make_token(lex, TOK_LPAREN);
         case ')': return make_token(lex, TOK_RPAREN);
         case '{': return make_token(lex, TOK_LBRACE);

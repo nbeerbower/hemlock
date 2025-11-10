@@ -1,0 +1,3 @@
+let p = alloc(100);
+print(p);
+free(p);

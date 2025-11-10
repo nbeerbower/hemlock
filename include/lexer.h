@@ -31,6 +31,7 @@ typedef enum {
     TOK_TYPE_CHAR,     // alias for u8
     TOK_TYPE_BOOL,
     TOK_TYPE_STRING,
+    TOK_TYPE_PTR,
 
     // Operators
     TOK_PLUS,
@@ -51,6 +52,7 @@ typedef enum {
     // Punctuation
     TOK_SEMICOLON,
     TOK_COLON,
+    TOK_COMMA,
     TOK_LPAREN,
     TOK_RPAREN,
     TOK_LBRACE,

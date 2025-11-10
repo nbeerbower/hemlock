@@ -1,0 +1,4 @@
+let p = alloc(4);
+memset(p, 65, 4);
+print(p);
+free(p);

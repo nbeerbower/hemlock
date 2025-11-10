@@ -1,0 +1,7 @@
+let source = alloc(4);
+let dest = alloc(4);
+memset(source, 72, 4);
+memcpy(dest, source, 4);
+print(dest);
+free(source);
+free(dest);
