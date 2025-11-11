@@ -1,0 +1,27 @@
+// Test: Combining await with spawn/join
+// Tests that await can be used with spawned tasks
+
+async fn factorial(n: i32): i32 {
+    if (n <= 1) {
+        return 1;
+    }
+    return n * await factorial(n - 1);
+}
+
+async fn main() {
+    // Spawn factorial computations
+    let t1 = spawn(factorial, 5);
+    let t2 = spawn(factorial, 6);
+    let t3 = spawn(factorial, 7);
+
+    // Join and get results
+    let f5 = join(t1);
+    let f6 = join(t2);
+    let f7 = join(t3);
+
+    print(f5);  // 120
+    print(f6);  // 720
+    print(f7);  // 5040
+}
+
+main();

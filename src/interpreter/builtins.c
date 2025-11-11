@@ -895,6 +895,163 @@ static Value builtin_assert(Value *args, int num_args, ExecutionContext *ctx) {
     return val_null();
 }
 
+// ========== ASYNC/CONCURRENCY BUILTINS ==========
+
+// Global task ID counter
+static int next_task_id = 1;
+
+static Value builtin_spawn(Value *args, int num_args, ExecutionContext *ctx) {
+    if (num_args < 1) {
+        fprintf(stderr, "Runtime error: spawn() expects at least 1 argument (async function call)\n");
+        exit(1);
+    }
+
+    // For MVP: spawn expects a function value, not a call
+    // We'll execute it synchronously and return a completed task
+    Value func_val = args[0];
+
+    if (func_val.type != VAL_FUNCTION) {
+        fprintf(stderr, "Runtime error: spawn() expects an async function\n");
+        exit(1);
+    }
+
+    Function *fn = func_val.as.as_function;
+
+    if (!fn->is_async) {
+        fprintf(stderr, "Runtime error: spawn() requires an async function\n");
+        exit(1);
+    }
+
+    // Create task with remaining args as function arguments
+    Value *task_args = NULL;
+    int task_num_args = num_args - 1;
+
+    if (task_num_args > 0) {
+        task_args = malloc(sizeof(Value) * task_num_args);
+        for (int i = 0; i < task_num_args; i++) {
+            task_args[i] = args[i + 1];
+        }
+    }
+
+    // Create task (we'll execute it immediately for MVP)
+    Task *task = task_new(next_task_id++, fn, task_args, task_num_args, fn->closure_env);
+    task->state = TASK_RUNNING;
+
+    // Execute the function synchronously (MVP: no true concurrency yet)
+    // Create new environment for function execution
+    Environment *func_env = env_new(fn->closure_env);
+
+    // Bind parameters
+    for (int i = 0; i < fn->num_params && i < task_num_args; i++) {
+        Value arg = task_args[i];
+        // Type check if parameter has type annotation
+        if (fn->param_types[i]) {
+            arg = convert_to_type(arg, fn->param_types[i], func_env, task->ctx);
+        }
+        env_define(func_env, fn->param_names[i], arg, 0, task->ctx);
+    }
+
+    // Execute function body
+    eval_stmt(fn->body, func_env, task->ctx);
+
+    // Get return value
+    Value result = val_null();
+    if (task->ctx->return_state.is_returning) {
+        result = task->ctx->return_state.return_value;
+        task->ctx->return_state.is_returning = 0;
+    }
+
+    // Store result in task
+    task->result = malloc(sizeof(Value));
+    *task->result = result;
+    task->state = TASK_COMPLETED;
+
+    // Clean up function environment
+    env_free(func_env);
+
+    return val_task(task);
+}
+
+static Value builtin_join(Value *args, int num_args, ExecutionContext *ctx) {
+    (void)ctx;
+    if (num_args != 1) {
+        fprintf(stderr, "Runtime error: join() expects 1 argument (task handle)\n");
+        exit(1);
+    }
+
+    Value task_val = args[0];
+
+    if (task_val.type != VAL_TASK) {
+        fprintf(stderr, "Runtime error: join() expects a task handle\n");
+        exit(1);
+    }
+
+    Task *task = task_val.as.as_task;
+
+    if (task->joined) {
+        fprintf(stderr, "Runtime error: task handle already joined\n");
+        exit(1);
+    }
+
+    // Mark as joined
+    task->joined = 1;
+
+    // For MVP: task is already completed (synchronous execution)
+    if (task->state != TASK_COMPLETED) {
+        fprintf(stderr, "Runtime error: task not completed (internal error)\n");
+        exit(1);
+    }
+
+    // Check if task threw an exception
+    if (task->ctx->exception_state.is_throwing) {
+        // Re-throw the exception in the current context
+        ctx->exception_state = task->ctx->exception_state;
+        return val_null();
+    }
+
+    // Return the result
+    if (task->result) {
+        return *task->result;
+    }
+
+    return val_null();
+}
+
+static Value builtin_detach(Value *args, int num_args, ExecutionContext *ctx) {
+    // detach() is like spawn() but doesn't return a handle
+    // We'll reuse spawn's logic but discard the task handle
+    Value task = builtin_spawn(args, num_args, ctx);
+
+    // Free the task immediately (fire and forget)
+    if (task.type == VAL_TASK) {
+        task_free(task.as.as_task);
+    }
+
+    return val_null();
+}
+
+static Value builtin_channel(Value *args, int num_args, ExecutionContext *ctx) {
+    (void)ctx;
+
+    int capacity = 0;  // unbuffered by default
+
+    if (num_args > 0) {
+        if (args[0].type != VAL_I32 && args[0].type != VAL_U32) {
+            fprintf(stderr, "Runtime error: channel() capacity must be an integer\n");
+            exit(1);
+        }
+        capacity = value_to_int(args[0]);
+
+        if (capacity < 0) {
+            fprintf(stderr, "Runtime error: channel() capacity cannot be negative\n");
+            exit(1);
+        }
+    }
+
+    Channel *ch = channel_new(capacity);
+    return val_channel(ch);
+}
+
 // Structure to hold builtin function info
 typedef struct {
     const char *name;
@@ -924,6 +1081,10 @@ static BuiltinInfo builtins[] = {
     {"eprint", builtin_eprint},
     {"open", builtin_open},
     {"assert", builtin_assert},
+    {"spawn", builtin_spawn},
+    {"join", builtin_join},
+    {"detach", builtin_detach},
+    {"channel", builtin_channel},
     {NULL, NULL}  // Sentinel
 };
 

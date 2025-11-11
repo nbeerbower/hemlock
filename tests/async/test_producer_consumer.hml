@@ -1,0 +1,37 @@
+// Test: Producer-consumer pattern with channels
+// Tests a simulated producer-consumer using channels
+
+async fn producer(ch, count: i32) {
+    let i = 0;
+    while (i < count) {
+        ch.send(i * 10);
+        i = i + 1;
+    }
+    ch.close();
+    return null;
+}
+
+async fn consumer(ch, count: i32): i32 {
+    let sum = 0;
+    let i = 0;
+    let val = 0;
+    while (i < count) {
+        val = ch.recv();
+        sum = sum + val;
+        i = i + 1;
+    }
+    return sum;
+}
+
+// Create channel
+let ch = channel(10);
+
+// Run producer and consumer
+let p = spawn(producer, ch, 5);
+let c = spawn(consumer, ch, 5);
+
+// Wait for them to complete
+join(p);
+let total = join(c);
+
+print(total);  // 0 + 10 + 20 + 30 + 40 = 100

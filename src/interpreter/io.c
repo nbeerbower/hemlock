@@ -1252,3 +1252,84 @@ Value builtin_open(Value *args, int num_args, ExecutionContext *ctx) {
 
     return val_file(file);
 }
+
+// ========== CHANNEL METHODS ==========
+
+Value call_channel_method(Channel *ch, const char *method, Value *args, int num_args) {
+    // send(value) - send a message to the channel
+    if (strcmp(method, "send") == 0) {
+        if (num_args != 1) {
+            fprintf(stderr, "Runtime error: send() expects 1 argument\n");
+            exit(1);
+        }
+
+        if (ch->closed) {
+            fprintf(stderr, "Runtime error: cannot send to closed channel\n");
+            exit(1);
+        }
+
+        Value msg = args[0];
+
+        if (ch->capacity == 0) {
+            // Unbuffered channel - synchronous handoff
+            // For MVP: we can't block, so this is an error
+            fprintf(stderr, "Runtime error: unbuffered channels not yet supported (use buffered channel)\n");
+            exit(1);
+        } else {
+            // Buffered channel
+            if (ch->count >= ch->capacity) {
+                fprintf(stderr, "Runtime error: channel buffer full (blocking not yet supported)\n");
+                exit(1);
+            }
+
+            // Add message to buffer
+            ch->buffer[ch->tail] = msg;
+            ch->tail = (ch->tail + 1) % ch->capacity;
+            ch->count++;
+        }
+
+        return val_null();
+    }
+
+    // recv() - receive a message from the channel
+    if (strcmp(method, "recv") == 0) {
+        if (num_args != 0) {
+            fprintf(stderr, "Runtime error: recv() expects 0 arguments\n");
+            exit(1);
+        }
+
+        if (ch->count == 0) {
+            // No messages available
+            if (ch->closed) {
+                // Closed and empty - return null
+                return val_null();
+            } else {
+                // Not closed but empty - would block
+                // For MVP: error
+                fprintf(stderr, "Runtime error: channel empty (blocking not yet supported)\n");
+                exit(1);
+            }
+        }
+
+        // Get message from buffer
+        Value msg = ch->buffer[ch->head];
+        ch->head = (ch->head + 1) % ch->capacity;
+        ch->count--;
+
+        return msg;
+    }
+
+    // close() - close the channel
+    if (strcmp(method, "close") == 0) {
+        if (num_args != 0) {
+            fprintf(stderr, "Runtime error: close() expects 0 arguments\n");
+            exit(1);
+        }
+
+        ch->closed = 1;
+        return val_null();
+    }
+
+    fprintf(stderr, "Runtime error: Unknown channel method '%s'\n", method);
+    exit(1);
+}
