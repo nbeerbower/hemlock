@@ -258,10 +258,30 @@ Token lexer_next(Lexer *lex) {
     if (c == '"') return string(lex);
     
     switch (c) {
-        case '+': return make_token(lex, TOK_PLUS);
-        case '-': return make_token(lex, TOK_MINUS);
-        case '*': return make_token(lex, TOK_STAR);
-        case '/': return make_token(lex, TOK_SLASH);
+        case '+':
+            if (peek(lex) == '=') {
+                advance(lex);
+                return make_token(lex, TOK_PLUS_EQUAL);
+            }
+            return make_token(lex, TOK_PLUS);
+        case '-':
+            if (peek(lex) == '=') {
+                advance(lex);
+                return make_token(lex, TOK_MINUS_EQUAL);
+            }
+            return make_token(lex, TOK_MINUS);
+        case '*':
+            if (peek(lex) == '=') {
+                advance(lex);
+                return make_token(lex, TOK_STAR_EQUAL);
+            }
+            return make_token(lex, TOK_STAR);
+        case '/':
+            if (peek(lex) == '=') {
+                advance(lex);
+                return make_token(lex, TOK_SLASH_EQUAL);
+            }
+            return make_token(lex, TOK_SLASH);
         case ';': return make_token(lex, TOK_SEMICOLON);
         case ':': return make_token(lex, TOK_COLON);
         case ',': return make_token(lex, TOK_COMMA);

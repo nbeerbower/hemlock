@@ -1,0 +1,48 @@
+// Test += operator
+let x = 10;
+print(x);
+x += 5;
+print(x);
+x += 10;
+print(x);
+
+// Test -= operator
+let y = 100;
+print(y);
+y -= 30;
+print(y);
+y -= 20;
+print(y);
+
+// Test *= operator
+let z = 5;
+print(z);
+z *= 3;
+print(z);
+z *= 2;
+print(z);
+
+// Test /= operator
+let w = 100;
+print(w);
+w /= 4;
+print(w);
+w /= 5;
+print(w);
+
+// Test with expressions
+let a = 10;
+a += 2 + 3;
+print(a);
+
+let b = 50;
+b -= 5 * 2;
+print(b);
+
+// Test with different types
+let f = 10.5;
+print(f);
+f += 2.5;
+print(f);
+f *= 2.0;
+print(f);

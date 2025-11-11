@@ -395,6 +395,67 @@ static Expr* ternary(Parser *p) {
 static Expr* assignment(Parser *p) {
     Expr *expr = ternary(p);
 
+    // Check for compound assignment operators (+=, -=, *=, /=)
+    BinaryOp compound_op;
+    int is_compound = 0;
+
+    if (match(p, TOK_PLUS_EQUAL)) {
+        compound_op = OP_ADD;
+        is_compound = 1;
+    } else if (match(p, TOK_MINUS_EQUAL)) {
+        compound_op = OP_SUB;
+        is_compound = 1;
+    } else if (match(p, TOK_STAR_EQUAL)) {
+        compound_op = OP_MUL;
+        is_compound = 1;
+    } else if (match(p, TOK_SLASH_EQUAL)) {
+        compound_op = OP_DIV;
+        is_compound = 1;
+    }
+
+    if (is_compound) {
+        // Desugar compound assignment: x += 5 becomes x = x + 5
+        Expr *rhs = assignment(p);
+
+        if (expr->type == EXPR_IDENT) {
+            // Variable compound assignment: x += 5
+            char *name = strdup(expr->as.ident);
+            Expr *lhs_copy = expr_ident(name);
+            Expr *binary = expr_binary(lhs_copy, compound_op, rhs);
+            expr_free(expr);
+            return expr_assign(name, binary);
+        } else if (expr->type == EXPR_INDEX) {
+            // Index compound assignment: arr[i] += 5
+            // We need to create a new index expression for the RHS
+            // But we need to be careful not to evaluate the index twice
+            // For now, we'll create a simple desugaring (may evaluate index twice)
+            Expr *object = expr->as.index.object;
+            Expr *index = expr->as.index.index;
+
+            // Create copies for the RHS
+            // Note: This is a simplified implementation that may evaluate
+            // the object and index expressions twice. A proper implementation
+            // would use temporary variables.
+            Expr *object_copy = object;  // We'll need proper cloning here
+            Expr *index_copy = index;    // We'll need proper cloning here
+
+            // For now, only support if we can't clone properly
+            // Let's just handle the simple variable case for now
+            error(p, "Compound assignment for array/object access not yet supported");
+            expr_free(expr);
+            return expr_null();
+        } else if (expr->type == EXPR_GET_PROPERTY) {
+            // Property compound assignment: obj.field += 5
+            error(p, "Compound assignment for property access not yet supported");
+            expr_free(expr);
+            return expr_null();
+        } else {
+            error(p, "Invalid compound assignment target");
+            expr_free(expr);
+            return expr_null();
+        }
+    }
+
     if (match(p, TOK_EQUAL)) {
         // Check what kind of assignment target we have
         if (expr->type == EXPR_IDENT) {
