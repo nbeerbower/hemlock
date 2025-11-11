@@ -281,26 +281,185 @@ print(add5(3));  // 8
 
 ---
 
-## Structs/Objects (TODO)
+## Objects
 
-Target design:
+Hemlock implements JavaScript-style objects with heap allocation, dynamic fields, methods, and duck typing.
+
+### Object Literals
 ```hemlock
-struct Person {
+// Anonymous object
+let person = { name: "Alice", age: 30, city: "NYC" };
+print(person.name);  // "Alice"
+
+// Empty object
+let obj = {};
+
+// Nested objects
+let user = {
+    info: { name: "Bob", age: 25 },
+    active: true
+};
+print(user.info.name);  // "Bob"
+```
+
+### Field Access and Assignment
+```hemlock
+// Access
+let x = person.name;
+
+// Modify existing field
+person.age = 31;
+
+// Add new field dynamically
+person.email = "alice@example.com";
+```
+
+### Methods and `self` Keyword
+```hemlock
+let counter = {
+    count: 0,
+    increment: fn() {
+        self.count = self.count + 1;
+    },
+    get: fn() {
+        return self.count;
+    }
+};
+
+counter.increment();
+counter.increment();
+print(counter.get());  // 2
+```
+
+**How `self` works:**
+- When a function is called as a method (e.g., `obj.method()`), `self` is automatically bound to the object
+- `self` is read-only in the current implementation
+- Method calls are detected at runtime by checking if the function expression is a property access
+
+### Type Definitions with `define`
+```hemlock
+define Person {
     name: string,
     age: i32,
     active: bool,
 }
 
-let p = Person { name: "Alice", age: 30, active: true };
-print(p.name);
-p.age = 31;
+// Create object and assign to typed variable
+let p = { name: "Alice", age: 30, active: true };
+let typed_p: Person = p;  // Duck typing validates structure
+
+print(typeof(typed_p));  // "Person"
 ```
 
-**Design decisions:**
-- Structs are value types (no reference semantics yet)
-- Field types are optional but recommended
-- JSON serialization/deserialization built-in
-- Methods come after functions are implemented
+### Duck Typing
+Objects are validated against `define` statements using **structural compatibility** (duck typing):
+
+```hemlock
+define Person {
+    name: string,
+    age: i32,
+}
+
+// OK: Has all required fields
+let p1: Person = { name: "Alice", age: 30 };
+
+// OK: Extra fields are allowed
+let p2: Person = { name: "Bob", age: 25, city: "NYC", active: true };
+
+// ERROR: Missing required field 'age'
+let p3: Person = { name: "Carol" };
+
+// ERROR: Wrong type for 'age'
+let p4: Person = { name: "Dave", age: "thirty" };
+```
+
+**Type checking happens:**
+- At assignment time (when assigning to a typed variable)
+- Validates all required fields are present
+- Validates field types match
+- Extra fields are allowed and preserved
+- Sets the object's type name for `typeof()`
+
+### Optional Fields
+```hemlock
+define Person {
+    name: string,
+    age: i32,
+    active?: true,       // Optional with default value
+    nickname?: string,   // Optional, defaults to null
+}
+
+// Object with only required fields
+let p = { name: "Alice", age: 30 };
+let typed_p: Person = p;
+
+print(typed_p.active);    // true (default applied)
+print(typed_p.nickname);  // null (no default)
+
+// Can override optional fields
+let p2: Person = { name: "Bob", age: 25, active: false };
+print(p2.active);  // false (overridden)
+```
+
+**Optional field syntax:**
+- `field?: default_value` - Optional field with default
+- `field?: type` - Optional field with type annotation, defaults to null
+- Optional fields are added to objects during duck typing if missing
+
+### JSON Serialization
+```hemlock
+// serialize() - Convert to JSON string
+let obj = { x: 10, y: 20, name: "test" };
+let json = serialize(obj);
+print(json);  // {"x":10,"y":20,"name":"test"}
+
+// Nested objects
+let nested = { inner: { a: 1, b: 2 }, outer: 3 };
+print(serialize(nested));  // {"inner":{"a":1,"b":2},"outer":3}
+
+// deserialize() - Parse JSON string
+let json_str = serialize(obj);
+let restored = deserialize(json_str);
+print(restored.name);  // "test"
+```
+
+**Cycle Detection:**
+```hemlock
+let obj = { x: 10 };
+obj.me = obj;  // Create circular reference
+serialize(obj);  // ERROR: serialize() detected circular reference
+```
+
+**Supported types in JSON:**
+- Numbers (i8-i32, u8-u32, f32, f64)
+- Booleans
+- Strings (with escape sequences)
+- Null
+- Objects (nested)
+- Not supported: functions, pointers, buffers
+
+### Built-in Functions
+- `typeof(value)` - Returns type name string
+  - Anonymous objects: `"object"`
+  - Typed objects: custom type name (e.g., `"Person"`)
+- `serialize(object)` - Convert object to JSON string (with cycle detection)
+- `deserialize(json_string)` - Parse JSON string to object
+
+### Implementation Details
+- Objects are heap-allocated
+- Shallow copy semantics (assignment copies the reference)
+- Fields stored as dynamic arrays (name/value pairs)
+- Methods are just functions stored in object fields
+- Duck typing validates at assignment time
+- Type names are stored in objects for `typeof()`
+
+**Current Limitations:**
+- No deep copy built-in
+- No reference counting (objects are never freed automatically)
+- No pass-by-value for objects
+- No object spread syntax
+- No computed property names
+- `self` is read-only (cannot reassign in methods)
 
 ---
 
@@ -388,6 +547,8 @@ tests/
 ├── memory/           # Pointer/buffer tests
 ├── strings/          # String operation tests
 ├── control/          # Control flow tests
+├── functions/        # Function and closure tests
+├── objects/          # Object, method, and serialization tests
 └── run_tests.sh      # Test runner
 ```
 
@@ -512,10 +673,14 @@ When adding features to Hemlock:
 
 ## Version History
 
-- **v0.1** - Primitives, basic memory, strings, control flow, functions, closures, recursion (current)
-- **v0.2** - Structs, methods, JSON (planned)
-- **v0.3** - Async/await, channels, structured concurrency (planned)
-- **v0.4** - FFI, C interop, compiler backend (planned)
+- **v0.1** - Primitives, memory management, strings, control flow, functions, closures, recursion, objects (current)
+  - Type system: i8-i32, u8-u32, f32/f64, bool, string, null, ptr, buffer
+  - Memory: alloc, free, memset, memcpy, realloc, talloc, sizeof
+  - Objects: literals, methods, duck typing, optional fields, serialize/deserialize
+  - 96 passing tests
+- **v0.2** - Async/await, channels, structured concurrency (planned)
+- **v0.3** - FFI, C interop, arrays (planned)
+- **v0.4** - Compiler backend, optimization (planned)
 
 ---
 

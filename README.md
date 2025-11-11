@@ -16,8 +16,9 @@ Hemlock is a systems scripting language that combines the power of C with the er
 ## Features
 
 - **Familiar syntax** - C-like with modern improvements
-- **Rich type system** - i8/i16/i32, u8/u16/u32, f32/f64, bool, string, ptr, buffer
+- **Rich type system** - i8/i16/i32, u8/u16/u32, f32/f64, bool, string, ptr, buffer, null
 - **First-class functions** - Closures, recursion, higher-order functions
+- **Objects** - JavaScript-style objects with methods, duck typing, and JSON serialization
 - **Two pointer types** - Raw `ptr` for experts, safe `buffer` with bounds checking
 - **Memory API** - alloc, free, memset, memcpy, realloc, talloc, sizeof
 - **Mutable strings** - First-class UTF-8 strings with indexing and concatenation
@@ -81,6 +82,39 @@ let add5 = makeAdder(5);
 print(add5(3));  // 8
 ```
 
+### Objects
+```hemlock
+// Anonymous objects
+let person = { name: "Alice", age: 30 };
+print(person.name);
+
+// Methods with self keyword
+let counter = {
+    count: 0,
+    increment: fn() {
+        self.count = self.count + 1;
+    }
+};
+counter.increment();
+print(counter.count);  // 1
+
+// Type definitions with duck typing
+define Person {
+    name: string,
+    age: i32,
+    active?: true,  // Optional field with default
+}
+
+let p = { name: "Bob", age: 25 };
+let typed_p: Person = p;  // Duck typing validates structure
+print(typeof(typed_p));   // "Person"
+
+// JSON serialization
+let json = serialize(person);
+print(json);  // {"name":"Alice","age":30}
+let restored = deserialize(json);
+```
+
 ## Building
 
 ```bash
@@ -103,12 +137,12 @@ make test
 
 Hemlock is currently in early development (v0.1). The following features are implemented:
 
-- ✅ Primitives and type system
-- ✅ Memory management (ptr, buffer, alloc, free)
-- ✅ String operations
+- ✅ Primitives and type system (i8-i32, u8-u32, f32/f64, bool, string, null)
+- ✅ Memory management (ptr, buffer, alloc, free, talloc, realloc, memset, memcpy)
+- ✅ String operations (mutable, indexing, concatenation, length)
 - ✅ Control flow (if/else, while)
 - ✅ Functions and closures (first-class, recursion, lexical scoping)
-- 🚧 Structs and methods
+- ✅ Objects (literals, methods, duck typing, optional fields, JSON serialization)
 - 🚧 Async/await and structured concurrency
 
 ## Why Hemlock?
