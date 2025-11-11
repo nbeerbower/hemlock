@@ -273,6 +273,9 @@ Stmt* stmt_throw(Expr *value);
 Type* type_new(TypeKind kind);
 void type_free(Type *type);
 
+// Cloning
+Expr* expr_clone(const Expr *expr);
+
 // Cleanup
 void expr_free(Expr *expr);
 void stmt_free(Stmt *stmt);

@@ -426,29 +426,49 @@ static Expr* assignment(Parser *p) {
             return expr_assign(name, binary);
         } else if (expr->type == EXPR_INDEX) {
             // Index compound assignment: arr[i] += 5
-            // We need to create a new index expression for the RHS
-            // But we need to be careful not to evaluate the index twice
-            // For now, we'll create a simple desugaring (may evaluate index twice)
+            // Desugar to: arr[i] = arr[i] + 5
+            // We clone the object and index expressions to avoid evaluating twice
             Expr *object = expr->as.index.object;
             Expr *index = expr->as.index.index;
 
-            // Create copies for the RHS
-            // Note: This is a simplified implementation that may evaluate
-            // the object and index expressions twice. A proper implementation
-            // would use temporary variables.
-            Expr *object_copy = object;  // We'll need proper cloning here
-            Expr *index_copy = index;    // We'll need proper cloning here
+            // Clone for the RHS
+            Expr *object_clone = expr_clone(object);
+            Expr *index_clone = expr_clone(index);
 
-            // For now, only support if we can't clone properly
-            // Let's just handle the simple variable case for now
-            error(p, "Compound assignment for array/object access not yet supported");
+            // Create the read expression: arr[i]
+            Expr *read_expr = expr_index(object_clone, index_clone);
+
+            // Create the binary operation: arr[i] + 5
+            Expr *binary = expr_binary(read_expr, compound_op, rhs);
+
+            // Steal the object and index from the EXPR_INDEX for the assignment
+            expr->as.index.object = NULL;
+            expr->as.index.index = NULL;
             expr_free(expr);
-            return expr_null();
+
+            // Create the assignment: arr[i] = arr[i] + 5
+            return expr_index_assign(object, index, binary);
         } else if (expr->type == EXPR_GET_PROPERTY) {
             // Property compound assignment: obj.field += 5
-            error(p, "Compound assignment for property access not yet supported");
+            // Desugar to: obj.field = obj.field + 5
+            Expr *object = expr->as.get_property.object;
+            char *property = strdup(expr->as.get_property.property);
+
+            // Clone the object for the RHS
+            Expr *object_clone = expr_clone(object);
+
+            // Create the read expression: obj.field
+            Expr *read_expr = expr_get_property(object_clone, property);
+
+            // Create the binary operation: obj.field + 5
+            Expr *binary = expr_binary(read_expr, compound_op, rhs);
+
+            // Steal the object from the EXPR_GET_PROPERTY for the assignment
+            expr->as.get_property.object = NULL;
             expr_free(expr);
-            return expr_null();
+
+            // Create the assignment: obj.field = obj.field + 5
+            return expr_set_property(object, property, binary);
         } else {
             error(p, "Invalid compound assignment target");
             expr_free(expr);

@@ -1,0 +1,68 @@
+// Test compound assignment on arrays
+let arr = [10, 20, 30, 40, 50];
+print(arr[0]);
+arr[0] += 5;
+print(arr[0]);
+
+print(arr[2]);
+arr[2] *= 2;
+print(arr[2]);
+
+print(arr[4]);
+arr[4] -= 10;
+print(arr[4]);
+
+// Test compound assignment on nested arrays
+let nested = [[1, 2], [3, 4], [5, 6]];
+print(nested[1][0]);
+nested[1][0] += 10;
+print(nested[1][0]);
+
+// Test compound assignment on objects
+let obj = { x: 10, y: 20, z: 30 };
+print(obj.x);
+obj.x += 5;
+print(obj.x);
+
+print(obj.y);
+obj.y *= 3;
+print(obj.y);
+
+print(obj.z);
+obj.z /= 2;
+print(obj.z);
+
+// Test compound assignment on nested objects
+let person = {
+    name: "Alice",
+    stats: { health: 100, mana: 50 }
+};
+print(person.stats.health);
+person.stats.health -= 25;
+print(person.stats.health);
+
+print(person.stats.mana);
+person.stats.mana += 10;
+print(person.stats.mana);
+
+// Test with variable indices
+let i = 1;
+let nums = [5, 10, 15];
+print(nums[i]);
+nums[i] += 20;
+print(nums[i]);
+
+// Test with expressions
+let data = [100, 200, 300];
+data[1 + 1] -= 50;
+print(data[2]);
+
+// Test chained property access
+let config = {
+    settings: {
+        volume: 75
+    }
+};
+print(config.settings.volume);
+config.settings.volume += 25;
+print(config.settings.volume);

@@ -303,6 +303,129 @@ Stmt* stmt_throw(Expr *value) {
     return stmt;
 }
 
+// ========== CLONING ==========
+
+Expr* expr_clone(const Expr *expr) {
+    if (!expr) return NULL;
+
+    switch (expr->type) {
+        case EXPR_NUMBER:
+            if (expr->as.number.is_float) {
+                return expr_number_float(expr->as.number.float_value);
+            } else {
+                return expr_number_int(expr->as.number.int_value);
+            }
+
+        case EXPR_BOOL:
+            return expr_bool(expr->as.boolean);
+
+        case EXPR_STRING:
+            return expr_string(expr->as.string);
+
+        case EXPR_IDENT:
+            return expr_ident(expr->as.ident);
+
+        case EXPR_NULL:
+            return expr_null();
+
+        case EXPR_BINARY:
+            return expr_binary(
+                expr_clone(expr->as.binary.left),
+                expr->as.binary.op,
+                expr_clone(expr->as.binary.right)
+            );
+
+        case EXPR_UNARY:
+            return expr_unary(
+                expr->as.unary.op,
+                expr_clone(expr->as.unary.operand)
+            );
+
+        case EXPR_TERNARY:
+            return expr_ternary(
+                expr_clone(expr->as.ternary.condition),
+                expr_clone(expr->as.ternary.true_expr),
+                expr_clone(expr->as.ternary.false_expr)
+            );
+
+        case EXPR_CALL: {
+            Expr **args_copy = malloc(sizeof(Expr*) * expr->as.call.num_args);
+            for (int i = 0; i < expr->as.call.num_args; i++) {
+                args_copy[i] = expr_clone(expr->as.call.args[i]);
+            }
+            return expr_call(
+                expr_clone(expr->as.call.func),
+                args_copy,
+                expr->as.call.num_args
+            );
+        }
+
+        case EXPR_ASSIGN:
+            return expr_assign(
+                expr->as.assign.name,
+                expr_clone(expr->as.assign.value)
+            );
+
+        case EXPR_GET_PROPERTY:
+            return expr_get_property(
+                expr_clone(expr->as.get_property.object),
+                expr->as.get_property.property
+            );
+
+        case EXPR_SET_PROPERTY:
+            return expr_set_property(
+                expr_clone(expr->as.set_property.object),
+                expr->as.set_property.property,
+                expr_clone(expr->as.set_property.value)
+            );
+
+        case EXPR_INDEX:
+            return expr_index(
+                expr_clone(expr->as.index.object),
+                expr_clone(expr->as.index.index)
+            );
+
+        case EXPR_INDEX_ASSIGN:
+            return expr_index_assign(
+                expr_clone(expr->as.index_assign.object),
+                expr_clone(expr->as.index_assign.index),
+                expr_clone(expr->as.index_assign.value)
+            );
+
+        case EXPR_FUNCTION:
+            // Note: We don't clone functions for now - this is complex
+            // and not needed for compound assignments
+            return NULL;
+
+        case EXPR_ARRAY_LITERAL: {
+            Expr **elements_copy = malloc(sizeof(Expr*) * expr->as.array_literal.num_elements);
+            for (int i = 0; i < expr->as.array_literal.num_elements; i++) {
+                elements_copy[i] = expr_clone(expr->as.array_literal.elements[i]);
+            }
+            return expr_array_literal(
+                elements_copy,
+                expr->as.array_literal.num_elements
+            );
+        }
+
+        case EXPR_OBJECT_LITERAL: {
+            char **field_names_copy = malloc(sizeof(char*) * expr->as.object_literal.num_fields);
+            Expr **field_values_copy = malloc(sizeof(Expr*) * expr->as.object_literal.num_fields);
+            for (int i = 0; i < expr->as.object_literal.num_fields; i++) {
+                field_names_copy[i] = strdup(expr->as.object_literal.field_names[i]);
+                field_values_copy[i] = expr_clone(expr->as.object_literal.field_values[i]);
+            }
+            return expr_object_literal(
+                field_names_copy,
+                field_values_copy,
+                expr->as.object_literal.num_fields
+            );
+        }
+    }
+
+    return NULL;
+}
+
 // ========== CLEANUP ==========
 
 void expr_free(Expr *expr) {
