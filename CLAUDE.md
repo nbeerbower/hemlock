@@ -1080,33 +1080,135 @@ while (i < args.length) {
 
 ---
 
-## Async/Concurrency (TODO)
+## Async/Concurrency
 
-Target design:
+Hemlock provides **structured concurrency** with async/await syntax, task spawning, and channels for communication. The implementation uses POSIX threads (pthreads) for true multi-threaded parallelism.
+
+### Async Functions
+
+Functions can be declared as `async` to indicate they're designed for concurrent execution:
+
 ```hemlock
-async fn fetch_data(url: string): string {
-    // ... fetch implementation
-    return data;
-}
-
-fn main() {
-    let h1 = spawn fetch_data("http://example.com");
-    let h2 = spawn fetch_data("http://example.org");
-    
-    let r1 = join(h1);
-    let r2 = join(h2);
-    
-    print(r1);
-    print(r2);
+async fn compute(n: i32): i32 {
+    let sum = 0;
+    let i = 0;
+    while (i < n) {
+        sum = sum + i;
+        i = i + 1;
+    }
+    return sum;
 }
 ```
 
-**Design decisions:**
-- Structured concurrency only (no raw threads)
-- `spawn` creates tasks, `join` waits for completion
-- `detach` for fire-and-forget tasks
-- Channels for communication between tasks
-- `select` for multiplexing channels
+**Key points:**
+- `async fn` declares an asynchronous function
+- Async functions can be spawned as concurrent tasks
+- Async functions can be called directly (runs synchronously)
+- `await` keyword can be used inside async functions
+
+### Task Spawning
+
+Use `spawn()` to run async functions concurrently on separate threads:
+
+```hemlock
+async fn factorial(n: i32): i32 {
+    if (n <= 1) { return 1; }
+    return n * factorial(n - 1);
+}
+
+// Spawn multiple tasks
+let t1 = spawn(factorial, 5);
+let t2 = spawn(factorial, 6);
+let t3 = spawn(factorial, 7);
+
+// Wait for results
+let f5 = join(t1);  // 120
+let f6 = join(t2);  // 720
+let f7 = join(t3);  // 5040
+```
+
+**Built-in functions:**
+- `spawn(async_fn, arg1, arg2, ...)` - Create a new task, returns task handle
+- `join(task)` - Wait for task completion, returns result
+- `detach(task)` - Fire-and-forget execution (no join allowed)
+
+### Channels
+
+Channels provide thread-safe communication between tasks:
+
+```hemlock
+async fn producer(ch, count: i32) {
+    let i = 0;
+    while (i < count) {
+        ch.send(i * 10);
+        i = i + 1;
+    }
+    ch.close();
+    return null;
+}
+
+async fn consumer(ch, count: i32): i32 {
+    let sum = 0;
+    let i = 0;
+    while (i < count) {
+        let val = ch.recv();
+        sum = sum + val;
+        i = i + 1;
+    }
+    return sum;
+}
+
+// Create channel with buffer size
+let ch = channel(10);
+
+// Spawn producer and consumer
+let p = spawn(producer, ch, 5);
+let c = spawn(consumer, ch, 5);
+
+// Wait for completion
+join(p);
+let total = join(c);  // 100 (0+10+20+30+40)
+```
+
+**Channel methods:**
+- `channel(capacity)` - Create buffered channel
+- `ch.send(value)` - Send value (blocks if full)
+- `ch.recv()` - Receive value (blocks if empty)
+- `ch.close()` - Close channel (recv on closed channel returns null)
+
+### Exception Propagation
+
+Exceptions thrown in spawned tasks are propagated when joined:
+
+```hemlock
+async fn risky_operation(should_fail: i32): i32 {
+    if (should_fail == 1) {
+        throw "Task failed!";
+    }
+    return 42;
+}
+
+let t = spawn(risky_operation, 1);
+try {
+    let result = join(t);
+} catch (e) {
+    print("Caught: " + e);  // "Caught: Task failed!"
+}
+```
+
+### Implementation Details
+
+- **Thread model:** Each spawned task runs on a separate pthread
+- **Blocking semantics:** Channel send/recv block using pthread condition variables
+- **Memory safety:** Channels use mutexes for thread-safe access
+- **Cleanup:** Joined tasks are automatically cleaned up; detached tasks clean up when done
+- **True parallelism:** Tasks run on multiple CPU cores simultaneously
+
+**Current limitations:**
+- No `select` for multiplexing multiple channels (planned)
+- No work-stealing scheduler (uses 1 thread per task)
+- No async I/O integration yet
+- Channel capacity is fixed at creation time
 
 ---
 
@@ -1332,21 +1434,21 @@ When adding features to Hemlock:
 
 ## Version History
 
-- **v0.1** - Primitives, memory management, strings, control flow, functions, closures, recursion, objects, arrays, error handling, file I/O, command-line arguments (current)
-  - Type system: i8-i32, u8-u32, f32/f64, bool, string, null, ptr, buffer, array, object, file
+- **v0.1** - Primitives, memory management, strings, control flow, functions, closures, recursion, objects, arrays, error handling, file I/O, command-line arguments, async/await, structured concurrency (current)
+  - Type system: i8-i32, u8-u32, f32/f64, bool, string, null, ptr, buffer, array, object, file, task, channel
   - Memory: alloc, free, memset, memcpy, realloc, talloc, sizeof
   - Objects: literals, methods, duck typing, optional fields, serialize/deserialize
   - **Strings:** 15 methods including substr, slice, find, contains, split, trim, to_upper, to_lower, starts_with, ends_with, replace, replace_all, repeat, char_at, to_bytes
   - **Arrays:** 15 methods including push, pop, shift, unshift, insert, remove, find, contains, slice, join, concat, reverse, first, last, clear
-  - Control flow: if/else, while, for, for-in, break, continue
+  - Control flow: if/else, while, for, for-in, break, continue, switch
   - Error handling: try/catch/finally/throw
   - File I/O: open, read, write, close, seek, tell, file_exists
   - Command-line arguments: built-in `args` array
+  - **Async/Concurrency:** async/await syntax, spawn/join/detach, channels with send/recv/close, pthread-based true parallelism, exception propagation
   - **Architecture:** Modular interpreter (environment, values, types, builtins, io, runtime)
-  - 170+ tests (all string and array method tests passing)
-- **v0.2** - Async/await, channels, structured concurrency (planned)
-- **v0.3** - FFI, C interop (planned)
-- **v0.4** - Compiler backend, optimization (planned)
+  - 180+ tests (all tests passing including 10 async/concurrency tests)
+- **v0.2** - FFI, C interop (planned)
+- **v0.3** - Compiler backend, optimization (planned)
 
 ---
 
