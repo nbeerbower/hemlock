@@ -1,0 +1,4 @@
+// Test: File exists
+write_file("exists.txt", "test");
+print(file_exists("exists.txt"));
+print(file_exists("nonexistent.txt"));

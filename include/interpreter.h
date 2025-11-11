@@ -3,6 +3,7 @@
 
 #include "ast.h"
 #include <stdint.h>
+#include <stdio.h>
 
 // Value types that can exist at runtime
 typedef enum {
@@ -20,6 +21,7 @@ typedef enum {
     VAL_PTR,
     VAL_BUFFER,
     VAL_OBJECT,         // JavaScript-style object
+    VAL_FILE,           // File handle
     VAL_TYPE,           // Represents a type (for sizeof, talloc, etc.)
     VAL_BUILTIN_FN,
     VAL_FUNCTION,       // User-defined function
@@ -45,6 +47,14 @@ typedef struct {
     int length;
     int capacity;
 } Buffer;
+
+// File handle struct
+typedef struct {
+    FILE *fp;           // C file pointer
+    char *path;         // File path (for error messages)
+    char *mode;         // Mode string ("r", "w", etc.)
+    int closed;         // 1 if closed, 0 if open
+} FileHandle;
 
 // Object struct (JavaScript-style object)
 typedef struct {
@@ -84,6 +94,7 @@ typedef struct Value {
         String *as_string;
         void *as_ptr;
         Buffer *as_buffer;
+        FileHandle *as_file;
         Object *as_object;
         TypeKind as_type;
         BuiltinFn as_builtin_fn;
@@ -126,6 +137,7 @@ Value val_string(const char *str);
 Value val_string_take(char *str, int length, int capacity);
 Value val_ptr(void *ptr);
 Value val_buffer(int size);
+Value val_file(FileHandle *file);
 Value val_type(TypeKind kind);
 Value val_builtin_fn(BuiltinFn fn);
 Value val_function(Function *fn);
@@ -142,6 +154,9 @@ String* string_copy(String *str);
 
 // Buffer operations
 void buffer_free(Buffer *buf);
+
+// File operations
+void file_free(FileHandle *file);
 
 // Object operations
 void object_free(Object *obj);

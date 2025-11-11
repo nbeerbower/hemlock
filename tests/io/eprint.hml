@@ -1,0 +1,5 @@
+// Test: eprint (prints to stderr)
+eprint("This goes to stderr");
+eprint(42);
+eprint(true);
+eprint(null);

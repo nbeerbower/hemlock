@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <errno.h>
 
 // ========== RETURN STATE ==========
 
@@ -61,6 +62,7 @@ static ObjectType* lookup_object_type(const char *name) {
 // Forward declarations for helper functions
 static int is_integer(Value val);
 static int is_float(Value val);
+static Value call_file_method(FileHandle *file, const char *method, Value *args, int num_args);
 
 // Check if an object matches a type definition (duck typing)
 static Value check_object_type(Value value, ObjectType *object_type, Environment *env) {
@@ -381,6 +383,26 @@ Value val_buffer(int size) {
     return v;
 }
 
+Value val_file(FileHandle *file) {
+    Value v;
+    v.type = VAL_FILE;
+    v.as.as_file = file;
+    return v;
+}
+
+// ========== FILE OPERATIONS ==========
+
+void file_free(FileHandle *file) {
+    if (file) {
+        if (file->fp && !file->closed) {
+            fclose(file->fp);
+        }
+        if (file->path) free(file->path);
+        if (file->mode) free(file->mode);
+        free(file);
+    }
+}
+
 // ========== OBJECT OPERATIONS ==========
 
 void object_free(Object *obj) {
@@ -554,6 +576,15 @@ void print_value(Value val) {
                    val.as.as_buffer->length,
                    val.as.as_buffer->capacity);
             break;
+        case VAL_FILE: {
+            FileHandle *file = val.as.as_file;
+            if (file->closed) {
+                printf("<file (closed)>");
+            } else {
+                printf("<file '%s' mode='%s'>", file->path, file->mode);
+            }
+            break;
+        }
         case VAL_OBJECT:
             if (val.as.as_object->type_name) {
                 printf("<object:%s>", val.as.as_object->type_name);
@@ -989,6 +1020,24 @@ Value eval_expr(Expr *expr, Environment *env) {
             if (expr->as.call.func->type == EXPR_GET_PROPERTY) {
                 is_method_call = 1;
                 method_self = eval_expr(expr->as.call.func->as.get_property.object, env);
+
+                // Special handling for file methods
+                if (method_self.type == VAL_FILE) {
+                    const char *method = expr->as.call.func->as.get_property.property;
+
+                    // Evaluate arguments
+                    Value *args = NULL;
+                    if (expr->as.call.num_args > 0) {
+                        args = malloc(sizeof(Value) * expr->as.call.num_args);
+                        for (int i = 0; i < expr->as.call.num_args; i++) {
+                            args[i] = eval_expr(expr->as.call.args[i], env);
+                        }
+                    }
+
+                    Value result = call_file_method(method_self.as.as_file, method, args, expr->as.call.num_args);
+                    if (args) free(args);
+                    return result;
+                }
             }
 
             // Evaluate the function expression
@@ -1089,6 +1138,15 @@ Value eval_expr(Expr *expr, Environment *env) {
                     return val_int(object.as.as_buffer->capacity);
                 }
                 fprintf(stderr, "Runtime error: Unknown property '%s' for buffer\n", property);
+                exit(1);
+            } else if (object.type == VAL_FILE) {
+                FileHandle *file = object.as.as_file;
+                if (strcmp(property, "mode") == 0) {
+                    return val_string(file->mode);
+                } else if (strcmp(property, "closed") == 0) {
+                    return val_bool(file->closed);
+                }
+                fprintf(stderr, "Runtime error: Unknown property '%s' for file\n", property);
                 exit(1);
             } else if (object.type == VAL_OBJECT) {
                 // Look up field in object
@@ -2065,6 +2123,9 @@ static Value builtin_typeof(Value *args, int num_args) {
         case VAL_BUFFER:
             type_name = "buffer";
             break;
+        case VAL_FILE:
+            type_name = "file";
+            break;
         case VAL_NULL:
             type_name = "null";
             break;
@@ -2093,6 +2154,426 @@ static Value builtin_typeof(Value *args, int num_args) {
     return val_string(type_name);
 }
 
+// ========== FILE METHOD HANDLING ==========
+
+static Value call_file_method(FileHandle *file, const char *method, Value *args, int num_args) {
+    if (file->closed) {
+        fprintf(stderr, "Runtime error: Cannot call method on closed file\n");
+        exit(1);
+    }
+
+    if (strcmp(method, "read_text") == 0) {
+        // Read up to N bytes as string
+        if (num_args != 1 || !is_integer(args[0])) {
+            fprintf(stderr, "Runtime error: read_text() expects 1 integer argument (size)\n");
+            exit(1);
+        }
+
+        int size = value_to_int(args[0]);
+        char *buffer = malloc(size + 1);
+        size_t read = fread(buffer, 1, size, file->fp);
+        buffer[read] = '\0';
+
+        String *str = malloc(sizeof(String));
+        str->data = buffer;
+        str->length = read;
+        str->capacity = size + 1;
+
+        return (Value){ .type = VAL_STRING, .as.as_string = str };
+    }
+
+    if (strcmp(method, "read_bytes") == 0) {
+        // Read up to N bytes as buffer
+        if (num_args != 1 || !is_integer(args[0])) {
+            fprintf(stderr, "Runtime error: read_bytes() expects 1 integer argument (size)\n");
+            exit(1);
+        }
+
+        int size = value_to_int(args[0]);
+        void *data = malloc(size);
+        size_t read = fread(data, 1, size, file->fp);
+
+        Buffer *buf = malloc(sizeof(Buffer));
+        buf->data = data;
+        buf->length = read;
+        buf->capacity = size;
+
+        return (Value){ .type = VAL_BUFFER, .as.as_buffer = buf };
+    }
+
+    if (strcmp(method, "write") == 0) {
+        // Write string or buffer
+        if (num_args != 1) {
+            fprintf(stderr, "Runtime error: write() expects 1 argument (data)\n");
+            exit(1);
+        }
+
+        size_t written = 0;
+        if (args[0].type == VAL_STRING) {
+            String *str = args[0].as.as_string;
+            written = fwrite(str->data, 1, str->length, file->fp);
+        } else if (args[0].type == VAL_BUFFER) {
+            Buffer *buf = args[0].as.as_buffer;
+            written = fwrite(buf->data, 1, buf->length, file->fp);
+        } else {
+            fprintf(stderr, "Runtime error: write() expects string or buffer\n");
+            exit(1);
+        }
+
+        return val_i32((int32_t)written);
+    }
+
+    if (strcmp(method, "seek") == 0) {
+        if (num_args != 1 || !is_integer(args[0])) {
+            fprintf(stderr, "Runtime error: seek() expects 1 integer argument (offset)\n");
+            exit(1);
+        }
+
+        int offset = value_to_int(args[0]);
+        fseek(file->fp, offset, SEEK_SET);
+        return val_null();
+    }
+
+    if (strcmp(method, "tell") == 0) {
+        if (num_args != 0) {
+            fprintf(stderr, "Runtime error: tell() expects no arguments\n");
+            exit(1);
+        }
+
+        long pos = ftell(file->fp);
+        return val_i32((int32_t)pos);
+    }
+
+    if (strcmp(method, "close") == 0) {
+        if (num_args != 0) {
+            fprintf(stderr, "Runtime error: close() expects no arguments\n");
+            exit(1);
+        }
+
+        if (file->fp) {
+            fclose(file->fp);
+            file->fp = NULL;
+        }
+        file->closed = 1;
+        return val_null();
+    }
+
+    fprintf(stderr, "Runtime error: File has no method '%s'\n", method);
+    exit(1);
+}
+
+// ========== I/O BUILTIN FUNCTIONS ==========
+
+static Value builtin_read_file(Value *args, int num_args) {
+    if (num_args != 1 || args[0].type != VAL_STRING) {
+        fprintf(stderr, "Runtime error: read_file() expects 1 string argument (path)\n");
+        exit(1);
+    }
+
+    const char *path = args[0].as.as_string->data;
+
+    FILE *fp = fopen(path, "rb");
+    if (!fp) {
+        fprintf(stderr, "Runtime error: Failed to open '%s': %s\n",
+                path, strerror(errno));
+        exit(1);
+    }
+
+    // Get file size
+    fseek(fp, 0, SEEK_END);
+    long size = ftell(fp);
+    rewind(fp);
+
+    // Read entire file
+    char *buffer = malloc(size + 1);
+    size_t read = fread(buffer, 1, size, fp);
+    buffer[read] = '\0';
+    fclose(fp);
+
+    String *str = malloc(sizeof(String));
+    str->data = buffer;
+    str->length = read;
+    str->capacity = size + 1;
+
+    return (Value){ .type = VAL_STRING, .as.as_string = str };
+}
+
+static Value builtin_write_file(Value *args, int num_args) {
+    if (num_args != 2) {
+        fprintf(stderr, "Runtime error: write_file() expects 2 arguments (path, content)\n");
+        exit(1);
+    }
+
+    if (args[0].type != VAL_STRING) {
+        fprintf(stderr, "Runtime error: write_file() path must be a string\n");
+        exit(1);
+    }
+
+    const char *path = args[0].as.as_string->data;
+
+    FILE *fp = fopen(path, "wb");
+    if (!fp) {
+        fprintf(stderr, "Runtime error: Failed to open '%s': %s\n",
+                path, strerror(errno));
+        exit(1);
+    }
+
+    // Write string or buffer
+    if (args[1].type == VAL_STRING) {
+        String *str = args[1].as.as_string;
+        fwrite(str->data, 1, str->length, fp);
+    } else if (args[1].type == VAL_BUFFER) {
+        Buffer *buf = args[1].as.as_buffer;
+        fwrite(buf->data, 1, buf->length, fp);
+    } else {
+        fclose(fp);
+        fprintf(stderr, "Runtime error: write_file() content must be string or buffer\n");
+        exit(1);
+    }
+
+    fclose(fp);
+    return val_null();
+}
+
+static Value builtin_append_file(Value *args, int num_args) {
+    if (num_args != 2) {
+        fprintf(stderr, "Runtime error: append_file() expects 2 arguments (path, content)\n");
+        exit(1);
+    }
+
+    if (args[0].type != VAL_STRING) {
+        fprintf(stderr, "Runtime error: append_file() path must be a string\n");
+        exit(1);
+    }
+
+    const char *path = args[0].as.as_string->data;
+
+    FILE *fp = fopen(path, "ab");
+    if (!fp) {
+        fprintf(stderr, "Runtime error: Failed to open '%s': %s\n",
+                path, strerror(errno));
+        exit(1);
+    }
+
+    // Write string or buffer
+    if (args[1].type == VAL_STRING) {
+        String *str = args[1].as.as_string;
+        fwrite(str->data, 1, str->length, fp);
+    } else if (args[1].type == VAL_BUFFER) {
+        Buffer *buf = args[1].as.as_buffer;
+        fwrite(buf->data, 1, buf->length, fp);
+    } else {
+        fclose(fp);
+        fprintf(stderr, "Runtime error: append_file() content must be string or buffer\n");
+        exit(1);
+    }
+
+    fclose(fp);
+    return val_null();
+}
+
+static Value builtin_read_bytes(Value *args, int num_args) {
+    if (num_args != 1 || args[0].type != VAL_STRING) {
+        fprintf(stderr, "Runtime error: read_bytes() expects 1 string argument (path)\n");
+        exit(1);
+    }
+
+    const char *path = args[0].as.as_string->data;
+
+    FILE *fp = fopen(path, "rb");
+    if (!fp) {
+        fprintf(stderr, "Runtime error: Failed to open '%s': %s\n",
+                path, strerror(errno));
+        exit(1);
+    }
+
+    // Get file size
+    fseek(fp, 0, SEEK_END);
+    long size = ftell(fp);
+    rewind(fp);
+
+    // Read entire file into buffer
+    void *data = malloc(size);
+    size_t read = fread(data, 1, size, fp);
+    fclose(fp);
+
+    Buffer *buf = malloc(sizeof(Buffer));
+    buf->data = data;
+    buf->length = read;
+    buf->capacity = size;
+
+    return (Value){ .type = VAL_BUFFER, .as.as_buffer = buf };
+}
+
+static Value builtin_write_bytes(Value *args, int num_args) {
+    if (num_args != 2) {
+        fprintf(stderr, "Runtime error: write_bytes() expects 2 arguments (path, data)\n");
+        exit(1);
+    }
+
+    if (args[0].type != VAL_STRING) {
+        fprintf(stderr, "Runtime error: write_bytes() path must be a string\n");
+        exit(1);
+    }
+
+    if (args[1].type != VAL_BUFFER) {
+        fprintf(stderr, "Runtime error: write_bytes() data must be a buffer\n");
+        exit(1);
+    }
+
+    const char *path = args[0].as.as_string->data;
+    Buffer *buf = args[1].as.as_buffer;
+
+    FILE *fp = fopen(path, "wb");
+    if (!fp) {
+        fprintf(stderr, "Runtime error: Failed to open '%s': %s\n",
+                path, strerror(errno));
+        exit(1);
+    }
+
+    fwrite(buf->data, 1, buf->length, fp);
+    fclose(fp);
+    return val_null();
+}
+
+static Value builtin_file_exists(Value *args, int num_args) {
+    if (num_args != 1 || args[0].type != VAL_STRING) {
+        fprintf(stderr, "Runtime error: file_exists() expects 1 string argument\n");
+        exit(1);
+    }
+
+    const char *path = args[0].as.as_string->data;
+
+    FILE *fp = fopen(path, "r");
+    if (fp) {
+        fclose(fp);
+        return val_bool(1);
+    }
+    return val_bool(0);
+}
+
+static Value builtin_read_line(Value *args, int num_args) {
+    (void)args;
+    if (num_args != 0) {
+        fprintf(stderr, "Runtime error: read_line() expects no arguments\n");
+        exit(1);
+    }
+
+    char *line = NULL;
+    size_t len = 0;
+    ssize_t read = getline(&line, &len, stdin);
+
+    if (read == -1) {
+        free(line);
+        return val_null();  // EOF
+    }
+
+    // Strip newline
+    if (read > 0 && line[read - 1] == '\n') {
+        line[read - 1] = '\0';
+        read--;
+    }
+    if (read > 0 && line[read - 1] == '\r') {
+        line[read - 1] = '\0';
+        read--;
+    }
+
+    String *str = malloc(sizeof(String));
+    str->data = line;
+    str->length = read;
+    str->capacity = len;
+
+    return (Value){ .type = VAL_STRING, .as.as_string = str };
+}
+
+static Value builtin_eprint(Value *args, int num_args) {
+    if (num_args != 1) {
+        fprintf(stderr, "Runtime error: eprint() expects 1 argument\n");
+        exit(1);
+    }
+
+    // Print to stderr
+    switch (args[0].type) {
+        case VAL_I8:
+            fprintf(stderr, "%d", args[0].as.as_i8);
+            break;
+        case VAL_I16:
+            fprintf(stderr, "%d", args[0].as.as_i16);
+            break;
+        case VAL_I32:
+            fprintf(stderr, "%d", args[0].as.as_i32);
+            break;
+        case VAL_U8:
+            fprintf(stderr, "%u", args[0].as.as_u8);
+            break;
+        case VAL_U16:
+            fprintf(stderr, "%u", args[0].as.as_u16);
+            break;
+        case VAL_U32:
+            fprintf(stderr, "%u", args[0].as.as_u32);
+            break;
+        case VAL_F32:
+            fprintf(stderr, "%g", args[0].as.as_f32);
+            break;
+        case VAL_F64:
+            fprintf(stderr, "%g", args[0].as.as_f64);
+            break;
+        case VAL_BOOL:
+            fprintf(stderr, "%s", args[0].as.as_bool ? "true" : "false");
+            break;
+        case VAL_STRING:
+            fprintf(stderr, "%s", args[0].as.as_string->data);
+            break;
+        case VAL_NULL:
+            fprintf(stderr, "null");
+            break;
+        default:
+            // For complex types, use simpler representation
+            fprintf(stderr, "<value>");
+            break;
+    }
+    fprintf(stderr, "\n");
+    return val_null();
+}
+
+static Value builtin_open(Value *args, int num_args) {
+    if (num_args < 1 || num_args > 2) {
+        fprintf(stderr, "Runtime error: open() expects 1-2 arguments (path, [mode])\n");
+        exit(1);
+    }
+
+    if (args[0].type != VAL_STRING) {
+        fprintf(stderr, "Runtime error: open() path must be a string\n");
+        exit(1);
+    }
+
+    const char *path = args[0].as.as_string->data;
+    const char *mode = "r";  // Default mode
+
+    if (num_args == 2) {
+        if (args[1].type != VAL_STRING) {
+            fprintf(stderr, "Runtime error: open() mode must be a string\n");
+            exit(1);
+        }
+        mode = args[1].as.as_string->data;
+    }
+
+    FILE *fp = fopen(path, mode);
+    if (!fp) {
+        fprintf(stderr, "Runtime error: Failed to open '%s' with mode '%s': %s\n",
+                path, mode, strerror(errno));
+        exit(1);
+    }
+
+    FileHandle *file = malloc(sizeof(FileHandle));
+    file->fp = fp;
+    file->path = strdup(path);
+    file->mode = strdup(mode);
+    file->closed = 0;
+
+    return val_file(file);
+}
+
 // Structure to hold builtin function info
 typedef struct {
     const char *name;
@@ -2112,6 +2593,15 @@ static BuiltinInfo builtins[] = {
     {"typeof", builtin_typeof},
     {"serialize", builtin_serialize},
     {"deserialize", builtin_deserialize},
+    {"read_file", builtin_read_file},
+    {"write_file", builtin_write_file},
+    {"append_file", builtin_append_file},
+    {"read_bytes", builtin_read_bytes},
+    {"write_bytes", builtin_write_bytes},
+    {"file_exists", builtin_file_exists},
+    {"read_line", builtin_read_line},
+    {"eprint", builtin_eprint},
+    {"open", builtin_open},
     {NULL, NULL}  // Sentinel
 };
 
