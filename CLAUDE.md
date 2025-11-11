@@ -463,6 +463,86 @@ serialize(obj);  // ERROR: serialize() detected circular reference
 
 ---
 
+## Command-Line Arguments
+
+Hemlock programs can access command-line arguments via a built-in **`args` array** that is automatically populated at program startup.
+
+### The `args` Array
+
+```hemlock
+// args[0] is always the script filename
+// args[1] through args[n-1] are the actual arguments
+print(args[0]);        // "script.hml"
+print(args.length);    // Total number of arguments (including script name)
+```
+
+**Example usage:**
+```bash
+./hemlock script.hml hello world "test 123"
+```
+
+```hemlock
+// In script.hml
+print("Script name: " + args[0]);     // "script.hml"
+print("Total args: " + typeof(args.length));  // "4"
+print("First arg: " + args[1]);       // "hello"
+print("Second arg: " + args[2]);      // "world"
+print("Third arg: " + args[3]);       // "test 123"
+```
+
+### Iteration Pattern
+
+```hemlock
+// Skip args[0] (script name) and process actual arguments
+let i = 1;
+while (i < args.length) {
+    print("Argument " + typeof(i) + ": " + args[i]);
+    i = i + 1;
+}
+```
+
+### Properties
+- **Always present:** `args` is a global array available in all Hemlock programs
+- **Script name included:** `args[0]` always contains the script path/name
+- **Type:** `args` is an array of strings
+- **Minimum length:** Always at least 1 (the script name)
+- **REPL behavior:** In the REPL, `args.length` is 0 (empty array)
+
+### Implementation Details
+- `args` is registered as a built-in global variable during environment initialization
+- Arguments are passed from `main()` through to `register_builtins()`
+- Each argument is stored as a string value in the array
+- Arguments with spaces are preserved if quoted in the shell
+
+### Common Use Cases
+
+**Simple argument processing:**
+```hemlock
+if (args.length < 2) {
+    print("Usage: " + args[0] + " <filename>");
+} else {
+    let filename = args[1];
+    // ... process file
+}
+```
+
+**Named arguments (simple pattern):**
+```hemlock
+let i = 1;
+while (i < args.length) {
+    if (args[i] == "--verbose") {
+        let verbose = true;
+    }
+    if (args[i] == "--output") {
+        i = i + 1;
+        let output_file = args[i];
+    }
+    i = i + 1;
+}
+```
+
+---
+
 ## Async/Concurrency (TODO)
 
 Target design:
@@ -549,6 +629,10 @@ tests/
 ├── control/          # Control flow tests
 ├── functions/        # Function and closure tests
 ├── objects/          # Object, method, and serialization tests
+├── arrays/           # Array operations tests
+├── loops/            # For, while, break, continue tests
+├── io/               # File I/O tests
+├── args/             # Command-line argument tests
 └── run_tests.sh      # Test runner
 ```
 
@@ -673,13 +757,17 @@ When adding features to Hemlock:
 
 ## Version History
 
-- **v0.1** - Primitives, memory management, strings, control flow, functions, closures, recursion, objects (current)
-  - Type system: i8-i32, u8-u32, f32/f64, bool, string, null, ptr, buffer
+- **v0.1** - Primitives, memory management, strings, control flow, functions, closures, recursion, objects, arrays, file I/O, command-line arguments (current)
+  - Type system: i8-i32, u8-u32, f32/f64, bool, string, null, ptr, buffer, array, object, file
   - Memory: alloc, free, memset, memcpy, realloc, talloc, sizeof
   - Objects: literals, methods, duck typing, optional fields, serialize/deserialize
-  - 96 passing tests
+  - Arrays: dynamic arrays with push/pop, indexing, length
+  - Control flow: if/else, while, for, for-in, break, continue
+  - File I/O: open, read, write, close, seek, tell, file_exists
+  - Command-line arguments: built-in `args` array
+  - 127 passing tests (119 + 8 expected error tests)
 - **v0.2** - Async/await, channels, structured concurrency (planned)
-- **v0.3** - FFI, C interop, arrays (planned)
+- **v0.3** - FFI, C interop (planned)
 - **v0.4** - Compiler backend, optimization (planned)
 
 ---

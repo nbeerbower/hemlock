@@ -22,6 +22,7 @@ Hemlock is a systems scripting language that combines the power of C with the er
 - **Two pointer types** - Raw `ptr` for experts, safe `buffer` with bounds checking
 - **Memory API** - alloc, free, memset, memcpy, realloc, talloc, sizeof
 - **Mutable strings** - First-class UTF-8 strings with indexing and concatenation
+- **Command-line arguments** - Access program arguments via built-in `args` array
 - **Structured concurrency** - async/await, spawn/join/detach (coming soon)
 
 ## Quick Examples
@@ -115,6 +116,29 @@ print(json);  // {"name":"Alice","age":30}
 let restored = deserialize(json);
 ```
 
+### Command-Line Arguments
+```hemlock
+// Access arguments via the built-in 'args' array
+// args[0] is the script name
+// args[1+] are the actual arguments
+
+print("Script: " + args[0]);
+print("Total arguments: " + typeof(args.length));
+
+if (args.length > 1) {
+    let i = 1;
+    while (i < args.length) {
+        print(args[i]);
+        i = i + 1;
+    }
+}
+```
+
+Run with:
+```bash
+./hemlock script.hml arg1 arg2 "argument with spaces"
+```
+
 ## Building
 
 ```bash
@@ -130,7 +154,14 @@ make test
 ## Running Programs
 
 ```bash
+# Run a program
 ./hemlock program.hml
+
+# Run with command-line arguments
+./hemlock program.hml arg1 arg2 arg3
+
+# Start REPL
+./hemlock
 ```
 
 ## Project Status
@@ -140,9 +171,12 @@ Hemlock is currently in early development (v0.1). The following features are imp
 - ✅ Primitives and type system (i8-i32, u8-u32, f32/f64, bool, string, null)
 - ✅ Memory management (ptr, buffer, alloc, free, talloc, realloc, memset, memcpy)
 - ✅ String operations (mutable, indexing, concatenation, length)
-- ✅ Control flow (if/else, while)
+- ✅ Control flow (if/else, while, for, break, continue)
 - ✅ Functions and closures (first-class, recursion, lexical scoping)
 - ✅ Objects (literals, methods, duck typing, optional fields, JSON serialization)
+- ✅ Arrays (dynamic arrays with push/pop operations)
+- ✅ File I/O (open, read, write, close, seek, tell)
+- ✅ Command-line arguments (built-in `args` array)
 - 🚧 Async/await and structured concurrency
 
 ## Why Hemlock?
