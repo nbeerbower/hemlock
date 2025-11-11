@@ -509,7 +509,7 @@ hemlock/
 │   ├── parser.c
 │   ├── interpreter.c
 │   └── main.c
-├── tests/            # Test suite, ran by run_tests.sh in the root directory
+├── tests/            # Test suite, ran by tests/run_tests.sh
 └── examples/         # Example programs
 ```
 

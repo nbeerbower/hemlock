@@ -4,10 +4,12 @@ This directory contains the test suite for the Hemlock interpreter.
 
 ## Running Tests
 
-To run all tests:
+To run all tests from the project root:
 
 ```bash
-./run_tests.sh
+bash tests/run_tests.sh
+# or use the Makefile target
+make test
 ```
 
 The test runner will:
@@ -47,7 +49,7 @@ To add a new test:
 1. Create a `.hml` file in the appropriate category directory
 2. For tests that should pass: use any descriptive name
 3. For tests that should fail: include `overflow`, `negative`, `invalid`, or `error` in the filename
-4. Run `./run_tests.sh` to verify your test
+4. Run `make test` (or `bash tests/run_tests.sh`) from the project root to verify your test
 
 ## Current Test Results
 

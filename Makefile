@@ -25,6 +25,6 @@ run: $(TARGET)
 	./$(TARGET)
 
 test: $(TARGET)
-	@bash run_tests.sh
+	@bash tests/run_tests.sh
 
 .PHONY: all clean run test

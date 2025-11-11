@@ -23,6 +23,7 @@ typedef enum {
     EXPR_INDEX,
     EXPR_INDEX_ASSIGN,
     EXPR_FUNCTION,
+    EXPR_ARRAY_LITERAL,
     EXPR_OBJECT_LITERAL,
 } ExprType;
 
@@ -102,6 +103,10 @@ struct Expr {
             Stmt *body;
         } function;
         struct {
+            Expr **elements;
+            int num_elements;
+        } array_literal;
+        struct {
             char **field_names;
             Expr **field_values;
             int num_fields;
@@ -142,6 +147,10 @@ typedef enum {
     STMT_EXPR,
     STMT_IF,
     STMT_WHILE,
+    STMT_FOR,
+    STMT_FOR_IN,
+    STMT_BREAK,
+    STMT_CONTINUE,
     STMT_BLOCK,
     STMT_RETURN,
     STMT_DEFINE_OBJECT,
@@ -166,6 +175,19 @@ struct Stmt {
             Expr *condition;
             Stmt *body;
         } while_stmt;
+        struct {
+            Stmt *initializer;  // let i = 0
+            Expr *condition;    // i < 10
+            Expr *increment;    // i = i + 1
+            Stmt *body;
+        } for_loop;
+        struct {
+            char *key_var;      // variable name (or NULL for value-only iteration)
+            char *value_var;    // variable name
+            Expr *iterable;     // array or object to iterate
+            Stmt *body;
+        } for_in;
+        // break and continue have no fields
         struct {
             Stmt **statements;
             int count;
@@ -203,6 +225,7 @@ Expr* expr_set_property(Expr *object, const char *property, Expr *value);
 Expr* expr_index(Expr *object, Expr *index);
 Expr* expr_index_assign(Expr *object, Expr *index, Expr *value);
 Expr* expr_function(char **param_names, Type **param_types, int num_params, Type *return_type, Stmt *body);
+Expr* expr_array_literal(Expr **elements, int num_elements);
 Expr* expr_object_literal(char **field_names, Expr **field_values, int num_fields);
 
 // Statement constructors
@@ -210,6 +233,10 @@ Stmt* stmt_let(const char *name, Expr *value);
 Stmt* stmt_let_typed(const char *name, Type *type_annotation, Expr *value);
 Stmt* stmt_if(Expr *condition, Stmt *then_branch, Stmt *else_branch);
 Stmt* stmt_while(Expr *condition, Stmt *body);
+Stmt* stmt_for(Stmt *initializer, Expr *condition, Expr *increment, Stmt *body);
+Stmt* stmt_for_in(char *key_var, char *value_var, Expr *iterable, Stmt *body);
+Stmt* stmt_break(void);
+Stmt* stmt_continue(void);
 Stmt* stmt_block(Stmt **statements, int count);
 Stmt* stmt_expr(Expr *expr);
 Stmt* stmt_return(Expr *value);

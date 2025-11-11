@@ -166,6 +166,22 @@ static Expr* primary(Parser *p) {
         return expr_object_literal(field_names, field_values, num_fields);
     }
 
+    // Array literal: [elem1, elem2, ...]
+    if (match(p, TOK_LBRACKET)) {
+        Expr **elements = malloc(sizeof(Expr*) * 256);
+        int num_elements = 0;
+
+        if (!check(p, TOK_RBRACKET)) {
+            do {
+                elements[num_elements++] = expression(p);
+            } while (match(p, TOK_COMMA));
+        }
+
+        consume(p, TOK_RBRACKET, "Expect ']' after array elements");
+
+        return expr_array_literal(elements, num_elements);
+    }
+
     // Function expression: fn(...) { ... }
     if (match(p, TOK_FN)) {
         consume(p, TOK_LPAREN, "Expect '(' after 'fn'");
@@ -518,11 +534,109 @@ static Stmt* while_statement(Parser *p) {
     consume(p, TOK_LPAREN, "Expect '(' after 'while'");
     Expr *condition = expression(p);
     consume(p, TOK_RPAREN, "Expect ')' after condition");
-    
+
     consume(p, TOK_LBRACE, "Expect '{' after while condition");
     Stmt *body = block_statement(p);
-    
+
     return stmt_while(condition, body);
+}
+
+static Stmt* for_statement(Parser *p) {
+    consume(p, TOK_LPAREN, "Expect '(' after 'for'");
+
+    // Check if this is a for-in loop by looking ahead
+    int is_for_in = 0;
+    char *first_var = NULL;
+    char *second_var = NULL;
+
+    if (match(p, TOK_LET)) {
+        consume(p, TOK_IDENT, "Expect variable name");
+        first_var = token_text(&p->previous);
+
+        if (match(p, TOK_COMMA)) {
+            // for (let key, value in ...)
+            consume(p, TOK_IDENT, "Expect second variable name");
+            second_var = token_text(&p->previous);
+            consume(p, TOK_IN, "Expect 'in' in for-in loop");
+            is_for_in = 1;
+        } else if (match(p, TOK_IN)) {
+            // for (let value in ...)
+            is_for_in = 1;
+        }
+
+        if (is_for_in) {
+            // Parse for-in loop
+            Expr *iterable = expression(p);
+            consume(p, TOK_RPAREN, "Expect ')' after for-in");
+            consume(p, TOK_LBRACE, "Expect '{' after for-in");
+            Stmt *body = block_statement(p);
+
+            if (second_var) {
+                // Two variables: for (let key, value in ...)
+                return stmt_for_in(first_var, second_var, iterable, body);
+            } else {
+                // One variable: for (let value in ...)
+                return stmt_for_in(NULL, first_var, iterable, body);
+            }
+        }
+
+        // Not for-in, continue parsing as C-style for loop
+        // We already parsed "let identifier", need to finish the let statement
+        Type *type = NULL;
+        if (match(p, TOK_COLON)) {
+            type = parse_type(p);
+        }
+        consume(p, TOK_EQUAL, "Expect '=' in for loop initializer");
+        Expr *init_value = expression(p);
+        consume(p, TOK_SEMICOLON, "Expect ';' after for loop initializer");
+
+        Stmt *initializer = stmt_let_typed(first_var, type, init_value);
+        free(first_var);
+
+        // Parse condition
+        Expr *condition = NULL;
+        if (!check(p, TOK_SEMICOLON)) {
+            condition = expression(p);
+        }
+        consume(p, TOK_SEMICOLON, "Expect ';' after condition");
+
+        // Parse increment
+        Expr *increment = NULL;
+        if (!check(p, TOK_RPAREN)) {
+            increment = expression(p);
+        }
+        consume(p, TOK_RPAREN, "Expect ')' after for clauses");
+
+        consume(p, TOK_LBRACE, "Expect '{' after for");
+        Stmt *body = block_statement(p);
+
+        return stmt_for(initializer, condition, increment, body);
+    }
+
+    // C-style for loop without let (e.g., for (; i < 10; i = i + 1))
+    Stmt *initializer = NULL;
+    if (!check(p, TOK_SEMICOLON)) {
+        Expr *init_expr = expression(p);
+        initializer = stmt_expr(init_expr);
+    }
+    consume(p, TOK_SEMICOLON, "Expect ';' after initializer");
+
+    Expr *condition = NULL;
+    if (!check(p, TOK_SEMICOLON)) {
+        condition = expression(p);
+    }
+    consume(p, TOK_SEMICOLON, "Expect ';' after condition");
+
+    Expr *increment = NULL;
+    if (!check(p, TOK_RPAREN)) {
+        increment = expression(p);
+    }
+    consume(p, TOK_RPAREN, "Expect ')' after for clauses");
+
+    consume(p, TOK_LBRACE, "Expect '{' after for");
+    Stmt *body = block_statement(p);
+
+    return stmt_for(initializer, condition, increment, body);
 }
 
 static Stmt* expression_statement(Parser *p) {
@@ -691,6 +805,20 @@ static Stmt* statement(Parser *p) {
 
     if (match(p, TOK_WHILE)) {
         return while_statement(p);
+    }
+
+    if (match(p, TOK_FOR)) {
+        return for_statement(p);
+    }
+
+    if (match(p, TOK_BREAK)) {
+        consume(p, TOK_SEMICOLON, "Expect ';' after 'break'");
+        return stmt_break();
+    }
+
+    if (match(p, TOK_CONTINUE)) {
+        consume(p, TOK_SEMICOLON, "Expect ';' after 'continue'");
+        return stmt_continue();
     }
 
     if (match(p, TOK_RETURN)) {

@@ -4,6 +4,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <errno.h>
+#include <sys/types.h>
 
 // ========== RETURN STATE ==========
 
@@ -13,6 +14,15 @@ typedef struct {
 } ReturnState;
 
 static ReturnState return_state = {0};
+
+// ========== LOOP STATE ==========
+
+typedef struct {
+    int is_breaking;
+    int is_continuing;
+} LoopState;
+
+static LoopState loop_state = {0};
 
 // ========== OBJECT TYPE REGISTRY ==========
 
@@ -63,6 +73,7 @@ static ObjectType* lookup_object_type(const char *name) {
 static int is_integer(Value val);
 static int is_float(Value val);
 static Value call_file_method(FileHandle *file, const char *method, Value *args, int num_args);
+static Value call_array_method(Array *arr, const char *method, Value *args, int num_args);
 
 // Check if an object matches a type definition (duck typing)
 static Value check_object_type(Value value, ObjectType *object_type, Environment *env) {
@@ -390,6 +401,72 @@ Value val_file(FileHandle *file) {
     return v;
 }
 
+// ========== ARRAY OPERATIONS ==========
+
+Array* array_new(void) {
+    Array *arr = malloc(sizeof(Array));
+    arr->capacity = 8;
+    arr->length = 0;
+    arr->elements = malloc(sizeof(Value) * arr->capacity);
+    return arr;
+}
+
+void array_free(Array *arr) {
+    if (arr) {
+        free(arr->elements);
+        free(arr);
+    }
+}
+
+static void array_grow(Array *arr) {
+    arr->capacity *= 2;
+    arr->elements = realloc(arr->elements, sizeof(Value) * arr->capacity);
+}
+
+void array_push(Array *arr, Value val) {
+    if (arr->length >= arr->capacity) {
+        array_grow(arr);
+    }
+    arr->elements[arr->length++] = val;
+}
+
+Value array_pop(Array *arr) {
+    if (arr->length == 0) {
+        return val_null();
+    }
+    return arr->elements[--arr->length];
+}
+
+Value array_get(Array *arr, int index) {
+    if (index < 0 || index >= arr->length) {
+        fprintf(stderr, "Runtime error: Array index %d out of bounds (length %d)\n",
+                index, arr->length);
+        exit(1);
+    }
+    return arr->elements[index];
+}
+
+void array_set(Array *arr, int index, Value val) {
+    if (index < 0) {
+        fprintf(stderr, "Runtime error: Negative array index not supported\n");
+        exit(1);
+    }
+
+    // Extend array if needed, filling with nulls
+    while (index >= arr->length) {
+        array_push(arr, val_null());
+    }
+
+    arr->elements[index] = val;
+}
+
+Value val_array(Array *arr) {
+    Value v;
+    v.type = VAL_ARRAY;
+    v.as.as_array = arr;
+    return v;
+}
+
 // ========== FILE OPERATIONS ==========
 
 void file_free(FileHandle *file) {
@@ -576,6 +653,16 @@ void print_value(Value val) {
                    val.as.as_buffer->length,
                    val.as.as_buffer->capacity);
             break;
+        case VAL_ARRAY: {
+            Array *arr = val.as.as_array;
+            printf("[");
+            for (int i = 0; i < arr->length; i++) {
+                if (i > 0) printf(", ");
+                print_value(arr->elements[i]);
+            }
+            printf("]");
+            break;
+        }
         case VAL_FILE: {
             FileHandle *file = val.as.as_file;
             if (file->closed) {
@@ -1038,6 +1125,24 @@ Value eval_expr(Expr *expr, Environment *env) {
                     if (args) free(args);
                     return result;
                 }
+
+                // Special handling for array methods
+                if (method_self.type == VAL_ARRAY) {
+                    const char *method = expr->as.call.func->as.get_property.property;
+
+                    // Evaluate arguments
+                    Value *args = NULL;
+                    if (expr->as.call.num_args > 0) {
+                        args = malloc(sizeof(Value) * expr->as.call.num_args);
+                        for (int i = 0; i < expr->as.call.num_args; i++) {
+                            args[i] = eval_expr(expr->as.call.args[i], env);
+                        }
+                    }
+
+                    Value result = call_array_method(method_self.as.as_array, method, args, expr->as.call.num_args);
+                    if (args) free(args);
+                    return result;
+                }
             }
 
             // Evaluate the function expression
@@ -1148,6 +1253,13 @@ Value eval_expr(Expr *expr, Environment *env) {
                 }
                 fprintf(stderr, "Runtime error: Unknown property '%s' for file\n", property);
                 exit(1);
+            } else if (object.type == VAL_ARRAY) {
+                // Array properties
+                if (strcmp(property, "length") == 0) {
+                    return val_i32(object.as.as_array->length);
+                }
+                fprintf(stderr, "Runtime error: Array has no property '%s'\n", property);
+                exit(1);
             } else if (object.type == VAL_OBJECT) {
                 // Look up field in object
                 Object *obj = object.as.as_object;
@@ -1159,7 +1271,7 @@ Value eval_expr(Expr *expr, Environment *env) {
                 fprintf(stderr, "Runtime error: Object has no field '%s'\n", property);
                 exit(1);
             } else {
-                fprintf(stderr, "Runtime error: Only strings, buffers, and objects have properties\n");
+                fprintf(stderr, "Runtime error: Only strings, buffers, arrays, and objects have properties\n");
                 exit(1);
             }
         }
@@ -1197,8 +1309,11 @@ Value eval_expr(Expr *expr, Environment *env) {
 
                 // Return the byte as an integer (u8)
                 return val_u8(((unsigned char *)buf->data)[index]);
+            } else if (object.type == VAL_ARRAY) {
+                // Array indexing
+                return array_get(object.as.as_array, index);
             } else {
-                fprintf(stderr, "Runtime error: Only strings and buffers can be indexed\n");
+                fprintf(stderr, "Runtime error: Only strings, buffers, and arrays can be indexed\n");
                 exit(1);
             }
         }
@@ -1213,12 +1328,19 @@ Value eval_expr(Expr *expr, Environment *env) {
                 exit(1);
             }
 
-            if (!is_integer(value)) {
-                fprintf(stderr, "Runtime error: Index value must be an integer (byte)\n");
-                exit(1);
+            int32_t index = value_to_int(index_val);
+
+            if (object.type == VAL_ARRAY) {
+                // Array assignment - value can be any type
+                array_set(object.as.as_array, index, value);
+                return value;
             }
 
-            int32_t index = value_to_int(index_val);
+            // For strings and buffers, value must be an integer (byte)
+            if (!is_integer(value)) {
+                fprintf(stderr, "Runtime error: Index value must be an integer (byte) for strings/buffers\n");
+                exit(1);
+            }
 
             if (object.type == VAL_STRING) {
                 String *str = object.as.as_string;
@@ -1245,7 +1367,7 @@ Value eval_expr(Expr *expr, Environment *env) {
                 ((unsigned char *)buf->data)[index] = (unsigned char)value_to_int(value);
                 return value;
             } else {
-                fprintf(stderr, "Runtime error: Only strings and buffers can be indexed\n");
+                fprintf(stderr, "Runtime error: Only strings, buffers, and arrays support index assignment\n");
                 exit(1);
             }
         }
@@ -1286,6 +1408,18 @@ Value eval_expr(Expr *expr, Environment *env) {
             fn->closure_env = env;
 
             return val_function(fn);
+        }
+
+        case EXPR_ARRAY_LITERAL: {
+            // Create array and evaluate elements
+            Array *arr = array_new();
+
+            for (int i = 0; i < expr->as.array_literal.num_elements; i++) {
+                Value element = eval_expr(expr->as.array_literal.elements[i], env);
+                array_push(arr, element);
+            }
+
+            return val_array(arr);
         }
 
         case EXPR_OBJECT_LITERAL: {
@@ -1380,19 +1514,146 @@ void eval_stmt(Stmt *stmt, Environment *env) {
 
                 eval_stmt(stmt->as.while_stmt.body, env);
 
-                // Check if a return happened
+                // Check for break/continue/return
+                if (loop_state.is_breaking) {
+                    loop_state.is_breaking = 0;
+                    break;
+                }
+                if (loop_state.is_continuing) {
+                    loop_state.is_continuing = 0;
+                    continue;
+                }
                 if (return_state.is_returning) {
                     break;
                 }
             }
             break;
         }
-            
+
+        case STMT_FOR: {
+            // Create new environment for loop scope
+            Environment *loop_env = env_new(env);
+
+            // Execute initializer
+            if (stmt->as.for_loop.initializer) {
+                eval_stmt(stmt->as.for_loop.initializer, loop_env);
+            }
+
+            // Loop
+            for (;;) {
+                // Check condition
+                if (stmt->as.for_loop.condition) {
+                    Value cond = eval_expr(stmt->as.for_loop.condition, loop_env);
+                    if (!value_is_truthy(cond)) {
+                        break;
+                    }
+                }
+
+                // Execute body
+                eval_stmt(stmt->as.for_loop.body, loop_env);
+
+                // Check for break/continue/return
+                if (loop_state.is_breaking) {
+                    loop_state.is_breaking = 0;
+                    break;
+                }
+                if (loop_state.is_continuing) {
+                    loop_state.is_continuing = 0;
+                    // Fall through to increment
+                }
+                if (return_state.is_returning) {
+                    break;
+                }
+
+                // Execute increment
+                if (stmt->as.for_loop.increment) {
+                    eval_expr(stmt->as.for_loop.increment, loop_env);
+                }
+            }
+
+            env_free(loop_env);
+            break;
+        }
+
+        case STMT_FOR_IN: {
+            Value iterable = eval_expr(stmt->as.for_in.iterable, env);
+
+            Environment *loop_env = env_new(env);
+
+            if (iterable.type == VAL_ARRAY) {
+                Array *arr = iterable.as.as_array;
+
+                for (int i = 0; i < arr->length; i++) {
+                    // Bind variables
+                    if (stmt->as.for_in.key_var) {
+                        env_set(loop_env, stmt->as.for_in.key_var, val_i32(i));
+                    }
+                    env_set(loop_env, stmt->as.for_in.value_var, arr->elements[i]);
+
+                    // Execute body
+                    eval_stmt(stmt->as.for_in.body, loop_env);
+
+                    // Check break/continue/return
+                    if (loop_state.is_breaking) {
+                        loop_state.is_breaking = 0;
+                        break;
+                    }
+                    if (loop_state.is_continuing) {
+                        loop_state.is_continuing = 0;
+                        continue;
+                    }
+                    if (return_state.is_returning) {
+                        break;
+                    }
+                }
+            } else if (iterable.type == VAL_OBJECT) {
+                Object *obj = iterable.as.as_object;
+
+                for (int i = 0; i < obj->num_fields; i++) {
+                    // Bind variables
+                    if (stmt->as.for_in.key_var) {
+                        env_set(loop_env, stmt->as.for_in.key_var, val_string(obj->field_names[i]));
+                    }
+                    env_set(loop_env, stmt->as.for_in.value_var, obj->field_values[i]);
+
+                    // Execute body
+                    eval_stmt(stmt->as.for_in.body, loop_env);
+
+                    // Check break/continue/return
+                    if (loop_state.is_breaking) {
+                        loop_state.is_breaking = 0;
+                        break;
+                    }
+                    if (loop_state.is_continuing) {
+                        loop_state.is_continuing = 0;
+                        continue;
+                    }
+                    if (return_state.is_returning) {
+                        break;
+                    }
+                }
+            } else {
+                fprintf(stderr, "Runtime error: for-in requires array or object\n");
+                exit(1);
+            }
+
+            env_free(loop_env);
+            break;
+        }
+
+        case STMT_BREAK:
+            loop_state.is_breaking = 1;
+            break;
+
+        case STMT_CONTINUE:
+            loop_state.is_continuing = 1;
+            break;
+
         case STMT_BLOCK: {
             for (int i = 0; i < stmt->as.block.count; i++) {
                 eval_stmt(stmt->as.block.statements[i], env);
-                // Check if a return happened
-                if (return_state.is_returning) {
+                // Check if a return/break/continue happened
+                if (return_state.is_returning || loop_state.is_breaking || loop_state.is_continuing) {
                     break;
                 }
             }
@@ -1840,6 +2101,50 @@ static char* serialize_value(Value val, VisitedSet *visited) {
 
             return json;
         }
+        case VAL_ARRAY: {
+            Array *arr = val.as.as_array;
+
+            // Check for cycles (cast array pointer to object pointer for visited set)
+            if (visited_contains(visited, (Object*)arr)) {
+                fprintf(stderr, "Runtime error: serialize() detected circular reference\n");
+                exit(1);
+            }
+
+            // Mark as visited
+            visited_add(visited, (Object*)arr);
+
+            // Build JSON array
+            size_t capacity = 256;
+            size_t len = 0;
+            char *json = malloc(capacity);
+            json[len++] = '[';
+
+            for (int i = 0; i < arr->length; i++) {
+                // Serialize element
+                char *elem_str = serialize_value(arr->elements[i], visited);
+
+                // Calculate space needed
+                size_t needed = len + strlen(elem_str) + 2;
+                if (needed > capacity) {
+                    capacity *= 2;
+                    json = realloc(json, capacity);
+                }
+
+                // Add element to JSON
+                len += snprintf(json + len, capacity - len, "%s", elem_str);
+
+                if (i < arr->length - 1) {
+                    json[len++] = ',';
+                }
+
+                free(elem_str);
+            }
+
+            json[len++] = ']';
+            json[len] = '\0';
+
+            return json;
+        }
         default:
             fprintf(stderr, "Runtime error: Cannot serialize value of this type\n");
             exit(1);
@@ -1878,6 +2183,7 @@ static void json_skip_whitespace(JSONParser *p) {
 }
 
 static Value json_parse_value(JSONParser *p);
+static Value json_parse_array(JSONParser *p);
 
 static Value json_parse_string(JSONParser *p) {
     if (p->input[p->pos] != '"') {
@@ -2035,6 +2341,50 @@ static Value json_parse_object(JSONParser *p) {
     return val_object(obj);
 }
 
+static Value json_parse_array(JSONParser *p) {
+    if (p->input[p->pos] != '[') {
+        fprintf(stderr, "Runtime error: Expected '[' in JSON\n");
+        exit(1);
+    }
+    p->pos++;  // skip opening bracket
+
+    Array *arr = array_new();
+
+    json_skip_whitespace(p);
+
+    // Handle empty array
+    if (p->input[p->pos] == ']') {
+        p->pos++;
+        return val_array(arr);
+    }
+
+    while (p->input[p->pos] != ']' && p->input[p->pos] != '\0') {
+        json_skip_whitespace(p);
+
+        // Parse element value
+        Value element = json_parse_value(p);
+        array_push(arr, element);
+
+        json_skip_whitespace(p);
+
+        // Check for comma
+        if (p->input[p->pos] == ',') {
+            p->pos++;
+        } else if (p->input[p->pos] != ']') {
+            fprintf(stderr, "Runtime error: Expected ',' or ']' in JSON array\n");
+            exit(1);
+        }
+    }
+
+    if (p->input[p->pos] != ']') {
+        fprintf(stderr, "Runtime error: Unterminated array in JSON\n");
+        exit(1);
+    }
+    p->pos++;  // skip closing bracket
+
+    return val_array(arr);
+}
+
 static Value json_parse_value(JSONParser *p) {
     json_skip_whitespace(p);
 
@@ -2045,6 +2395,8 @@ static Value json_parse_value(JSONParser *p) {
         return json_parse_string(p);
     } else if (c == '{') {
         return json_parse_object(p);
+    } else if (c == '[') {
+        return json_parse_array(p);
     } else if (c == '-' || (c >= '0' && c <= '9')) {
         return json_parse_number(p);
     } else if (strncmp(p->input + p->pos, "true", 4) == 0) {
@@ -2122,6 +2474,9 @@ static Value builtin_typeof(Value *args, int num_args) {
             break;
         case VAL_BUFFER:
             type_name = "buffer";
+            break;
+        case VAL_ARRAY:
+            type_name = "array";
             break;
         case VAL_FILE:
             type_name = "file";
@@ -2259,6 +2614,28 @@ static Value call_file_method(FileHandle *file, const char *method, Value *args,
     }
 
     fprintf(stderr, "Runtime error: File has no method '%s'\n", method);
+    exit(1);
+}
+
+static Value call_array_method(Array *arr, const char *method, Value *args, int num_args) {
+    if (strcmp(method, "push") == 0) {
+        if (num_args != 1) {
+            fprintf(stderr, "Runtime error: push() expects 1 argument\n");
+            exit(1);
+        }
+        array_push(arr, args[0]);
+        return val_null();
+    }
+
+    if (strcmp(method, "pop") == 0) {
+        if (num_args != 0) {
+            fprintf(stderr, "Runtime error: pop() expects no arguments\n");
+            exit(1);
+        }
+        return array_pop(arr);
+    }
+
+    fprintf(stderr, "Runtime error: Array has no method '%s'\n", method);
     exit(1);
 }
 

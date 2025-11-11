@@ -130,6 +130,14 @@ Expr* expr_function(char **param_names, Type **param_types, int num_params, Type
     return expr;
 }
 
+Expr* expr_array_literal(Expr **elements, int num_elements) {
+    Expr *expr = malloc(sizeof(Expr));
+    expr->type = EXPR_ARRAY_LITERAL;
+    expr->as.array_literal.elements = elements;
+    expr->as.array_literal.num_elements = num_elements;
+    return expr;
+}
+
 Expr* expr_object_literal(char **field_names, Expr **field_values, int num_fields) {
     Expr *expr = malloc(sizeof(Expr));
     expr->type = EXPR_OBJECT_LITERAL;
@@ -186,6 +194,38 @@ Stmt* stmt_while(Expr *condition, Stmt *body) {
     stmt->type = STMT_WHILE;
     stmt->as.while_stmt.condition = condition;
     stmt->as.while_stmt.body = body;
+    return stmt;
+}
+
+Stmt* stmt_for(Stmt *initializer, Expr *condition, Expr *increment, Stmt *body) {
+    Stmt *stmt = malloc(sizeof(Stmt));
+    stmt->type = STMT_FOR;
+    stmt->as.for_loop.initializer = initializer;
+    stmt->as.for_loop.condition = condition;
+    stmt->as.for_loop.increment = increment;
+    stmt->as.for_loop.body = body;
+    return stmt;
+}
+
+Stmt* stmt_for_in(char *key_var, char *value_var, Expr *iterable, Stmt *body) {
+    Stmt *stmt = malloc(sizeof(Stmt));
+    stmt->type = STMT_FOR_IN;
+    stmt->as.for_in.key_var = key_var;
+    stmt->as.for_in.value_var = value_var;
+    stmt->as.for_in.iterable = iterable;
+    stmt->as.for_in.body = body;
+    return stmt;
+}
+
+Stmt* stmt_break(void) {
+    Stmt *stmt = malloc(sizeof(Stmt));
+    stmt->type = STMT_BREAK;
+    return stmt;
+}
+
+Stmt* stmt_continue(void) {
+    Stmt *stmt = malloc(sizeof(Stmt));
+    stmt->type = STMT_CONTINUE;
     return stmt;
 }
 
@@ -289,6 +329,13 @@ void expr_free(Expr *expr) {
             // Free body
             stmt_free(expr->as.function.body);
             break;
+        case EXPR_ARRAY_LITERAL:
+            // Free array elements
+            for (int i = 0; i < expr->as.array_literal.num_elements; i++) {
+                expr_free(expr->as.array_literal.elements[i]);
+            }
+            free(expr->as.array_literal.elements);
+            break;
         case EXPR_OBJECT_LITERAL:
             // Free field names and values
             for (int i = 0; i < expr->as.object_literal.num_fields; i++) {
@@ -328,6 +375,22 @@ void stmt_free(Stmt *stmt) {
         case STMT_WHILE:
             expr_free(stmt->as.while_stmt.condition);
             stmt_free(stmt->as.while_stmt.body);
+            break;
+        case STMT_FOR:
+            stmt_free(stmt->as.for_loop.initializer);
+            expr_free(stmt->as.for_loop.condition);
+            expr_free(stmt->as.for_loop.increment);
+            stmt_free(stmt->as.for_loop.body);
+            break;
+        case STMT_FOR_IN:
+            free(stmt->as.for_in.key_var);
+            free(stmt->as.for_in.value_var);
+            expr_free(stmt->as.for_in.iterable);
+            stmt_free(stmt->as.for_in.body);
+            break;
+        case STMT_BREAK:
+        case STMT_CONTINUE:
+            // No fields to free
             break;
         case STMT_BLOCK:
             for (int i = 0; i < stmt->as.block.count; i++) {

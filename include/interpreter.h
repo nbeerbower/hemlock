@@ -20,6 +20,7 @@ typedef enum {
     VAL_STRING,
     VAL_PTR,
     VAL_BUFFER,
+    VAL_ARRAY,          // Dynamic array
     VAL_OBJECT,         // JavaScript-style object
     VAL_FILE,           // File handle
     VAL_TYPE,           // Represents a type (for sizeof, talloc, etc.)
@@ -47,6 +48,13 @@ typedef struct {
     int length;
     int capacity;
 } Buffer;
+
+// Array struct (dynamic array)
+typedef struct {
+    Value *elements;
+    int length;
+    int capacity;
+} Array;
 
 // File handle struct
 typedef struct {
@@ -94,6 +102,7 @@ typedef struct Value {
         String *as_string;
         void *as_ptr;
         Buffer *as_buffer;
+        Array *as_array;
         FileHandle *as_file;
         Object *as_object;
         TypeKind as_type;
@@ -137,6 +146,7 @@ Value val_string(const char *str);
 Value val_string_take(char *str, int length, int capacity);
 Value val_ptr(void *ptr);
 Value val_buffer(int size);
+Value val_array(Array *arr);
 Value val_file(FileHandle *file);
 Value val_type(TypeKind kind);
 Value val_builtin_fn(BuiltinFn fn);
@@ -154,6 +164,14 @@ String* string_copy(String *str);
 
 // Buffer operations
 void buffer_free(Buffer *buf);
+
+// Array operations
+void array_free(Array *arr);
+Array* array_new(void);
+void array_push(Array *arr, Value val);
+Value array_pop(Array *arr);
+Value array_get(Array *arr, int index);
+void array_set(Array *arr, int index, Value val);
 
 // File operations
 void file_free(FileHandle *file);

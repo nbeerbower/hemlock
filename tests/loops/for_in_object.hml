@@ -1,0 +1,6 @@
+// Test for-in loop with object
+let person = { name: "Alice", age: 30 };
+for (let key, value in person) {
+    print(key);
+    print(value);
+}

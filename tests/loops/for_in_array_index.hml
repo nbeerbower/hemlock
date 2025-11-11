@@ -1,0 +1,6 @@
+// Test for-in loop with array (index and value)
+let arr = [10, 20, 30];
+for (let i, val in arr) {
+    print(i);
+    print(val);
+}

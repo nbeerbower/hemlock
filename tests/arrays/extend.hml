@@ -1,0 +1,5 @@
+// Test array extension with out-of-bounds write
+let arr = [1, 2, 3];
+arr[5] = 99;
+print(arr);
+print(arr.length);

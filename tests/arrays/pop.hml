@@ -1,0 +1,6 @@
+// Test array pop method
+let arr = [1, 2, 3, 4, 5];
+let last = arr.pop();
+print(last);
+print(arr);
+print(arr.length);
