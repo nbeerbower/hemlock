@@ -1,0 +1,9 @@
+// Test: Basic async function declaration and call
+// This tests that async fn syntax is parsed and executed correctly
+
+async fn greet(name: string): string {
+    return "Hello, " + name;
+}
+
+let result = greet("World");
+print(result);

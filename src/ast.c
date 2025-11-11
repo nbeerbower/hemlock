@@ -128,9 +128,10 @@ Expr* expr_index_assign(Expr *object, Expr *index, Expr *value) {
     return expr;
 }
 
-Expr* expr_function(char **param_names, Type **param_types, int num_params, Type *return_type, Stmt *body) {
+Expr* expr_function(int is_async, char **param_names, Type **param_types, int num_params, Type *return_type, Stmt *body) {
     Expr *expr = malloc(sizeof(Expr));
     expr->type = EXPR_FUNCTION;
+    expr->as.function.is_async = is_async;
     expr->as.function.param_names = param_names;
     expr->as.function.param_types = param_types;
     expr->as.function.num_params = num_params;
@@ -181,6 +182,13 @@ Expr* expr_postfix_dec(Expr *operand) {
     Expr *expr = malloc(sizeof(Expr));
     expr->type = EXPR_POSTFIX_DEC;
     expr->as.postfix_dec.operand = operand;
+    return expr;
+}
+
+Expr* expr_await(Expr *awaited_expr) {
+    Expr *expr = malloc(sizeof(Expr));
+    expr->type = EXPR_AWAIT;
+    expr->as.await_expr.awaited_expr = awaited_expr;
     return expr;
 }
 
@@ -471,6 +479,9 @@ Expr* expr_clone(const Expr *expr) {
 
         case EXPR_POSTFIX_DEC:
             return expr_postfix_dec(expr_clone(expr->as.postfix_dec.operand));
+
+        case EXPR_AWAIT:
+            return expr_await(expr_clone(expr->as.await_expr.awaited_expr));
     }
 
     return NULL;
@@ -573,6 +584,9 @@ void expr_free(Expr *expr) {
             break;
         case EXPR_POSTFIX_DEC:
             expr_free(expr->as.postfix_dec.operand);
+            break;
+        case EXPR_AWAIT:
+            expr_free(expr->as.await_expr.awaited_expr);
             break;
         case EXPR_NUMBER:
         case EXPR_BOOL:

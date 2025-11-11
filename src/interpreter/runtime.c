@@ -609,6 +609,9 @@ Value eval_expr(Expr *expr, Environment *env, ExecutionContext *ctx) {
             // Create function object and capture current environment
             Function *fn = malloc(sizeof(Function));
 
+            // Copy is_async flag
+            fn->is_async = expr->as.function.is_async;
+
             // Copy parameter names
             fn->param_names = malloc(sizeof(char*) * expr->as.function.num_params);
             for (int i = 0; i < expr->as.function.num_params; i++) {
@@ -913,6 +916,16 @@ Value eval_expr(Expr *expr, Environment *env, ExecutionContext *ctx) {
                 fprintf(stderr, "Runtime error: Invalid operand for --\n");
                 exit(1);
             }
+        }
+
+        case EXPR_AWAIT: {
+            // For MVP: await just evaluates the expression synchronously
+            // TODO: Implement proper async/await scheduling
+            Value awaited = eval_expr(expr->as.await_expr.awaited_expr, env, ctx);
+
+            // If it's a task, we should join it
+            // For now, just return the value as-is
+            return awaited;
         }
     }
 
