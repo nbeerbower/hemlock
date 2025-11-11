@@ -1,0 +1,9 @@
+// Object type with optional fields
+define User {
+    name: string,
+    email?: string,
+    age?: i32,
+}
+
+// Just test that parsing works
+print(42);

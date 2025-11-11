@@ -1,0 +1,8 @@
+// Returning objects from functions
+fn makePoint(x, y) {
+    return { x: x, y: y };
+}
+
+let p = makePoint(10, 20);
+print(p.x);
+print(p.y);

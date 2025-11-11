@@ -1,0 +1,3 @@
+// Accessing non-existent field should error
+let obj = { x: 10 };
+print(obj.y);

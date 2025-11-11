@@ -19,6 +19,7 @@ typedef enum {
     VAL_STRING,
     VAL_PTR,
     VAL_BUFFER,
+    VAL_OBJECT,         // JavaScript-style object
     VAL_TYPE,           // Represents a type (for sizeof, talloc, etc.)
     VAL_BUILTIN_FN,
     VAL_FUNCTION,       // User-defined function
@@ -44,6 +45,15 @@ typedef struct {
     int length;
     int capacity;
 } Buffer;
+
+// Object struct (JavaScript-style object)
+typedef struct {
+    char *type_name;  // NULL for anonymous
+    char **field_names;
+    Value *field_values;
+    int num_fields;
+    int capacity;
+} Object;
 
 // Function struct (user-defined function)
 typedef struct {
@@ -74,6 +84,7 @@ typedef struct Value {
         String *as_string;
         void *as_ptr;
         Buffer *as_buffer;
+        Object *as_object;
         TypeKind as_type;
         BuiltinFn as_builtin_fn;
         Function *as_function;
@@ -118,6 +129,7 @@ Value val_buffer(int size);
 Value val_type(TypeKind kind);
 Value val_builtin_fn(BuiltinFn fn);
 Value val_function(Function *fn);
+Value val_object(Object *obj);
 Value val_null(void);
 
 // Value operations
@@ -130,6 +142,10 @@ String* string_copy(String *str);
 
 // Buffer operations
 void buffer_free(Buffer *buf);
+
+// Object operations
+void object_free(Object *obj);
+Object* object_new(char *type_name, int initial_capacity);
 
 void register_builtins(Environment *env);
 

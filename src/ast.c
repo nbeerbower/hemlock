@@ -62,10 +62,10 @@ Expr* expr_unary(UnaryOp op, Expr *operand) {
     return expr;
 }
 
-Expr* expr_call(const char *name, Expr **args, int num_args) {
+Expr* expr_call(Expr *func, Expr **args, int num_args) {
     Expr *expr = malloc(sizeof(Expr));
     expr->type = EXPR_CALL;
-    expr->as.call.name = strdup(name);
+    expr->as.call.func = func;
     expr->as.call.args = args;
     expr->as.call.num_args = num_args;
     return expr;
@@ -84,6 +84,15 @@ Expr* expr_get_property(Expr *object, const char *property) {
     expr->type = EXPR_GET_PROPERTY;
     expr->as.get_property.object = object;
     expr->as.get_property.property = strdup(property);
+    return expr;
+}
+
+Expr* expr_set_property(Expr *object, const char *property, Expr *value) {
+    Expr *expr = malloc(sizeof(Expr));
+    expr->type = EXPR_SET_PROPERTY;
+    expr->as.set_property.object = object;
+    expr->as.set_property.property = strdup(property);
+    expr->as.set_property.value = value;
     return expr;
 }
 
@@ -112,6 +121,15 @@ Expr* expr_function(char **param_names, Type **param_types, int num_params, Type
     expr->as.function.num_params = num_params;
     expr->as.function.return_type = return_type;
     expr->as.function.body = body;
+    return expr;
+}
+
+Expr* expr_object_literal(char **field_names, Expr **field_values, int num_fields) {
+    Expr *expr = malloc(sizeof(Expr));
+    expr->type = EXPR_OBJECT_LITERAL;
+    expr->as.object_literal.field_names = field_names;
+    expr->as.object_literal.field_values = field_values;
+    expr->as.object_literal.num_fields = num_fields;
     return expr;
 }
 
@@ -181,6 +199,19 @@ Stmt* stmt_return(Expr *value) {
     return stmt;
 }
 
+Stmt* stmt_define_object(const char *name, char **field_names, Type **field_types,
+                         int *field_optional, Expr **field_defaults, int num_fields) {
+    Stmt *stmt = malloc(sizeof(Stmt));
+    stmt->type = STMT_DEFINE_OBJECT;
+    stmt->as.define_object.name = strdup(name);
+    stmt->as.define_object.field_names = field_names;
+    stmt->as.define_object.field_types = field_types;
+    stmt->as.define_object.field_optional = field_optional;
+    stmt->as.define_object.field_defaults = field_defaults;
+    stmt->as.define_object.num_fields = num_fields;
+    return stmt;
+}
+
 // ========== CLEANUP ==========
 
 void expr_free(Expr *expr) {
@@ -201,7 +232,7 @@ void expr_free(Expr *expr) {
             expr_free(expr->as.unary.operand);
             break;
         case EXPR_CALL:
-            free(expr->as.call.name);
+            expr_free(expr->as.call.func);
             for (int i = 0; i < expr->as.call.num_args; i++) {
                 expr_free(expr->as.call.args[i]);
             }
@@ -214,6 +245,11 @@ void expr_free(Expr *expr) {
         case EXPR_GET_PROPERTY:
             expr_free(expr->as.get_property.object);
             free(expr->as.get_property.property);
+            break;
+        case EXPR_SET_PROPERTY:
+            expr_free(expr->as.set_property.object);
+            free(expr->as.set_property.property);
+            expr_free(expr->as.set_property.value);
             break;
         case EXPR_INDEX:
             expr_free(expr->as.index.object);
@@ -240,6 +276,15 @@ void expr_free(Expr *expr) {
             }
             // Free body
             stmt_free(expr->as.function.body);
+            break;
+        case EXPR_OBJECT_LITERAL:
+            // Free field names and values
+            for (int i = 0; i < expr->as.object_literal.num_fields; i++) {
+                free(expr->as.object_literal.field_names[i]);
+                expr_free(expr->as.object_literal.field_values[i]);
+            }
+            free(expr->as.object_literal.field_names);
+            free(expr->as.object_literal.field_values);
             break;
         case EXPR_NUMBER:
         case EXPR_BOOL:
@@ -279,6 +324,22 @@ void stmt_free(Stmt *stmt) {
             break;
         case STMT_RETURN:
             expr_free(stmt->as.return_stmt.value);
+            break;
+        case STMT_DEFINE_OBJECT:
+            free(stmt->as.define_object.name);
+            for (int i = 0; i < stmt->as.define_object.num_fields; i++) {
+                free(stmt->as.define_object.field_names[i]);
+                if (stmt->as.define_object.field_types[i]) {
+                    type_free(stmt->as.define_object.field_types[i]);
+                }
+                if (stmt->as.define_object.field_defaults[i]) {
+                    expr_free(stmt->as.define_object.field_defaults[i]);
+                }
+            }
+            free(stmt->as.define_object.field_names);
+            free(stmt->as.define_object.field_types);
+            free(stmt->as.define_object.field_optional);
+            free(stmt->as.define_object.field_defaults);
             break;
     }
 

@@ -1,0 +1,9 @@
+// Object type with dynamic (untyped) fields
+define Flexible {
+    id: i32,
+    data,
+    metadata,
+}
+
+// Just test that parsing works
+print(42);

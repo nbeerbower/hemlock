@@ -18,6 +18,9 @@ typedef enum {
     TOK_FN,
     TOK_RETURN,
     TOK_REF,
+    TOK_DEFINE,
+    TOK_OBJECT,
+    TOK_SELF,
 
     // Type keywords
     TOK_TYPE_I8,
@@ -64,6 +67,7 @@ typedef enum {
     TOK_DOT,
     TOK_LBRACKET,
     TOK_RBRACKET,
+    TOK_QUESTION,
     
     // Special
     TOK_EOF,

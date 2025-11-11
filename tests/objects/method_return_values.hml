@@ -1,0 +1,18 @@
+// Methods with different return types
+let obj = {
+    num: 42,
+    str: "hello",
+    getNum: fn() {
+        return self.num;
+    },
+    getStr: fn() {
+        return self.str;
+    },
+    getBool: fn() {
+        return true;
+    },
+};
+
+print(obj.getNum());
+print(obj.getStr());
+print(obj.getBool());

@@ -147,6 +147,9 @@ static TokenType identifier_type(Lexer *lex) {
         case 'c':
             if (len == 4) return check_keyword(lex->start, 4, "char", TOK_TYPE_CHAR);
             break;
+        case 'd':
+            if (len == 6) return check_keyword(lex->start, 6, "define", TOK_DEFINE);
+            break;
         case 'e':
             if (len == 4) return check_keyword(lex->start, 4, "else", TOK_ELSE);
             break;
@@ -176,6 +179,9 @@ static TokenType identifier_type(Lexer *lex) {
         case 'n':
             if (len == 6) return check_keyword(lex->start, 6, "number", TOK_TYPE_NUMBER);
             break;
+        case 'o':
+            if (len == 6) return check_keyword(lex->start, 6, "object", TOK_OBJECT);
+            break;
         case 'r':
             if (len == 3) return check_keyword(lex->start, 3, "ref", TOK_REF);
             if (len == 6) return check_keyword(lex->start, 6, "return", TOK_RETURN);
@@ -184,6 +190,7 @@ static TokenType identifier_type(Lexer *lex) {
             if (len == 3) return check_keyword(lex->start, 3, "ptr", TOK_TYPE_PTR);
             break;
         case 's':
+            if (len == 4) return check_keyword(lex->start, 4, "self", TOK_SELF);
             if (len == 6) return check_keyword(lex->start, 6, "string", TOK_TYPE_STRING);
             break;
         case 't':
@@ -253,7 +260,8 @@ Token lexer_next(Lexer *lex) {
         case '.': return make_token(lex, TOK_DOT);
         case '[': return make_token(lex, TOK_LBRACKET);
         case ']': return make_token(lex, TOK_RBRACKET);
-        
+        case '?': return make_token(lex, TOK_QUESTION);
+
         case '=':
             if (peek(lex) == '=') {
                 advance(lex);

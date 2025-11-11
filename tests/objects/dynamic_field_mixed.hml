@@ -1,0 +1,9 @@
+// Mixing existing and dynamic fields
+let obj = { a: 1, b: 2 };
+obj.c = 3;
+obj.a = 10;
+obj.d = 4;
+print(obj.a);
+print(obj.b);
+print(obj.c);
+print(obj.d);

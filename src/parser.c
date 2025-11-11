@@ -124,37 +124,42 @@ static Expr* primary(Parser *p) {
     
     if (match(p, TOK_IDENT)) {
         char *name = token_text(&p->previous);
-        
-        // Check for function call
-        if (match(p, TOK_LPAREN)) {
-            Expr **args = NULL;
-            int num_args = 0;
-
-            if (!check(p, TOK_RPAREN)) {
-                args = malloc(sizeof(Expr*) * 8);
-                args[num_args++] = expression(p);
-
-                while (match(p, TOK_COMMA)) {
-                    args[num_args++] = expression(p);
-                }
-            }
-
-            consume(p, TOK_RPAREN, "Expect ')' after arguments");
-            
-            Expr *call = expr_call(name, args, num_args);
-            free(name);
-            return call;
-        }
-        
         Expr *ident = expr_ident(name);
         free(name);
         return ident;
     }
-    
+
+    if (match(p, TOK_SELF)) {
+        return expr_ident("self");
+    }
+
     if (match(p, TOK_LPAREN)) {
         Expr *expr = expression(p);
         consume(p, TOK_RPAREN, "Expect ')' after expression");
         return expr;
+    }
+
+    // Object literal: { field: value, ... }
+    if (match(p, TOK_LBRACE)) {
+        char **field_names = malloc(sizeof(char*) * 32);
+        Expr **field_values = malloc(sizeof(Expr*) * 32);
+        int num_fields = 0;
+
+        while (!check(p, TOK_RBRACE) && !check(p, TOK_EOF)) {
+            consume(p, TOK_IDENT, "Expect field name");
+            field_names[num_fields] = token_text(&p->previous);
+
+            consume(p, TOK_COLON, "Expect ':' after field name");
+            field_values[num_fields] = expression(p);
+
+            num_fields++;
+
+            if (!match(p, TOK_COMMA)) break;
+        }
+
+        consume(p, TOK_RBRACE, "Expect '}' after object fields");
+
+        return expr_object_literal(field_names, field_values, num_fields);
     }
 
     // Function expression: fn(...) { ... }
@@ -217,8 +222,8 @@ static Expr* primary(Parser *p) {
 
 static Expr* postfix(Parser *p) {
     Expr *expr = primary(p);
-    
-    // Handle chained property access and indexing
+
+    // Handle chained property access, indexing, and method calls
     for (;;) {
         if (match(p, TOK_DOT)) {
             // Property access: obj.property
@@ -231,11 +236,27 @@ static Expr* postfix(Parser *p) {
             Expr *index = expression(p);
             consume(p, TOK_RBRACKET, "Expect ']' after index");
             expr = expr_index(expr, index);
+        } else if (match(p, TOK_LPAREN)) {
+            // Function call: func(...) or obj.method(...)
+            Expr **args = NULL;
+            int num_args = 0;
+
+            if (!check(p, TOK_RPAREN)) {
+                args = malloc(sizeof(Expr*) * 8);
+                args[num_args++] = expression(p);
+
+                while (match(p, TOK_COMMA)) {
+                    args[num_args++] = expression(p);
+                }
+            }
+
+            consume(p, TOK_RPAREN, "Expect ')' after arguments");
+            expr = expr_call(expr, args, num_args);
         } else {
             break;
         }
     }
-    
+
     return expr;
 }
 
@@ -339,7 +360,7 @@ static Expr* logical_or(Parser *p) {
 
 static Expr* assignment(Parser *p) {
     Expr *expr = logical_or(p);
-    
+
     if (match(p, TOK_EQUAL)) {
         // Check what kind of assignment target we have
         if (expr->type == EXPR_IDENT) {
@@ -353,20 +374,31 @@ static Expr* assignment(Parser *p) {
             Expr *object = expr->as.index.object;
             Expr *index = expr->as.index.index;
             Expr *value = assignment(p);
-            
+
             // Steal the object and index from the EXPR_INDEX
             // (so we don't double-free them)
             expr->as.index.object = NULL;
             expr->as.index.index = NULL;
             expr_free(expr);
-            
+
             return expr_index_assign(object, index, value);
+        } else if (expr->type == EXPR_GET_PROPERTY) {
+            // Property assignment: obj.field = value
+            Expr *object = expr->as.get_property.object;
+            char *property = strdup(expr->as.get_property.property);
+            Expr *value = assignment(p);
+
+            // Steal the object from the EXPR_GET_PROPERTY
+            expr->as.get_property.object = NULL;
+            expr_free(expr);
+
+            return expr_set_property(object, property, value);
         } else {
             error(p, "Invalid assignment target");
             return expr;
         }
     }
-    
+
     return expr;
 }
 
@@ -376,7 +408,15 @@ static Expr* expression(Parser *p) {
 
 static Type* parse_type(Parser *p) {
     TypeKind kind;
-    
+
+    // Check for custom object type name (identifier)
+    if (p->current.type == TOK_IDENT || p->current.type == TOK_OBJECT) {
+        // For now, treat custom types and 'object' keyword as TYPE_INFER
+        // We'll handle runtime type checking in the interpreter
+        advance(p);
+        return type_new(TYPE_INFER);
+    }
+
     switch (p->current.type) {
         case TOK_TYPE_I8: kind = TYPE_I8; break;
         case TOK_TYPE_I16: kind = TYPE_I16; break;
@@ -398,7 +438,7 @@ static Type* parse_type(Parser *p) {
             error_at_current(p, "Expect type name");
             return type_new(TYPE_INFER);
     }
-    
+
     advance(p);
     return type_new(kind);
 }
@@ -491,6 +531,58 @@ static Stmt* return_statement(Parser *p) {
 static Stmt* statement(Parser *p) {
     if (match(p, TOK_LET)) {
         return let_statement(p);
+    }
+
+    // Object type definition: define TypeName { ... }
+    if (match(p, TOK_DEFINE)) {
+        consume(p, TOK_IDENT, "Expect object type name");
+        char *name = token_text(&p->previous);
+
+        consume(p, TOK_LBRACE, "Expect '{' after type name");
+
+        // Parse fields
+        char **field_names = malloc(sizeof(char*) * 32);
+        Type **field_types = malloc(sizeof(Type*) * 32);
+        int *field_optional = malloc(sizeof(int) * 32);
+        Expr **field_defaults = malloc(sizeof(Expr*) * 32);
+        int num_fields = 0;
+
+        while (!check(p, TOK_RBRACE) && !check(p, TOK_EOF)) {
+            consume(p, TOK_IDENT, "Expect field name");
+            field_names[num_fields] = token_text(&p->previous);
+
+            // Check for optional marker
+            if (match(p, TOK_QUESTION)) {
+                field_optional[num_fields] = 1;
+            } else {
+                field_optional[num_fields] = 0;
+            }
+
+            // Check for type annotation
+            if (match(p, TOK_COLON)) {
+                field_types[num_fields] = parse_type(p);
+            } else {
+                field_types[num_fields] = NULL;  // dynamic field
+            }
+
+            // Check for default value
+            if (match(p, TOK_EQUAL)) {
+                field_defaults[num_fields] = expression(p);
+            } else {
+                field_defaults[num_fields] = NULL;
+            }
+
+            num_fields++;
+
+            if (!match(p, TOK_COMMA)) break;
+        }
+
+        consume(p, TOK_RBRACE, "Expect '}' after fields");
+
+        Stmt *stmt = stmt_define_object(name, field_names, field_types,
+                                       field_optional, field_defaults, num_fields);
+        free(name);
+        return stmt;
     }
 
     // Named function: fn name(...) { ... }

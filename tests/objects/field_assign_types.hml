@@ -1,0 +1,15 @@
+// Assigning different types to fields
+let obj = { value: 10 };
+print(obj.value);
+
+obj.value = 42;
+print(obj.value);
+
+obj.value = 3.14;
+print(obj.value);
+
+obj.value = true;
+print(obj.value);
+
+obj.value = "hello";
+print(obj.value);

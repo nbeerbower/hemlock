@@ -1,0 +1,9 @@
+// Basic method call with self
+let obj = {
+    value: 42,
+    getValue: fn() {
+        return self.value;
+    },
+};
+
+print(obj.getValue());

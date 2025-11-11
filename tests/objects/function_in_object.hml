@@ -1,0 +1,12 @@
+// Functions stored in objects
+let math = {
+    add: fn(a, b) {
+        return a + b;
+    },
+    multiply: fn(a, b) {
+        return a * b;
+    },
+};
+
+print(math.add(5, 3));
+print(math.multiply(4, 7));

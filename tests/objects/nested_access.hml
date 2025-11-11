@@ -1,0 +1,12 @@
+// Accessing nested object fields
+let person = {
+    name: "Alice",
+    address: {
+        city: "NYC",
+        zip: 10001,
+    },
+};
+
+print(person.name);
+print(person.address.city);
+print(person.address.zip);

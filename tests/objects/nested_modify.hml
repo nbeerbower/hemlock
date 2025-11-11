@@ -1,0 +1,16 @@
+// Modifying nested object fields
+let obj = {
+    outer: 1,
+    nested: {
+        inner: 2,
+    },
+};
+
+print(obj.outer);
+print(obj.nested.inner);
+
+obj.outer = 10;
+obj.nested.inner = 20;
+
+print(obj.outer);
+print(obj.nested.inner);

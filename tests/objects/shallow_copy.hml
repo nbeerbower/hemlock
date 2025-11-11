@@ -1,0 +1,11 @@
+// Shallow copy test
+let a = { x: 10, nested: { y: 20 } };
+let b = a;
+
+// Modify top-level field
+b.x = 99;
+print(a.x);  // Should still be 10 (copied)
+
+// Modify nested field
+b.nested.y = 999;
+print(a.nested.y);  // Should be 999 (shared)

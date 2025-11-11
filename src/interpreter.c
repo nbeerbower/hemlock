@@ -13,6 +13,51 @@ typedef struct {
 
 static ReturnState return_state = {0};
 
+// ========== OBJECT TYPE REGISTRY ==========
+
+typedef struct {
+    char *name;
+    char **field_names;
+    Type **field_types;
+    int *field_optional;
+    Expr **field_defaults;
+    int num_fields;
+} ObjectType;
+
+typedef struct {
+    ObjectType **types;
+    int count;
+    int capacity;
+} ObjectTypeRegistry;
+
+static ObjectTypeRegistry object_types = {0};
+
+static void init_object_types() {
+    if (object_types.types == NULL) {
+        object_types.capacity = 16;
+        object_types.types = malloc(sizeof(ObjectType*) * object_types.capacity);
+        object_types.count = 0;
+    }
+}
+
+static void register_object_type(ObjectType *type) {
+    init_object_types();
+    if (object_types.count >= object_types.capacity) {
+        object_types.capacity *= 2;
+        object_types.types = realloc(object_types.types, sizeof(ObjectType*) * object_types.capacity);
+    }
+    object_types.types[object_types.count++] = type;
+}
+
+static ObjectType* lookup_object_type(const char *name) {
+    for (int i = 0; i < object_types.count; i++) {
+        if (strcmp(object_types.types[i]->name, name) == 0) {
+            return object_types.types[i];
+        }
+    }
+    return NULL;
+}
+
 // ========== HELPERS ==========
 
 // Helper: Check if a value is any integer type
@@ -238,6 +283,38 @@ Value val_buffer(int size) {
     return v;
 }
 
+// ========== OBJECT OPERATIONS ==========
+
+void object_free(Object *obj) {
+    if (obj) {
+        if (obj->type_name) free(obj->type_name);
+        for (int i = 0; i < obj->num_fields; i++) {
+            free(obj->field_names[i]);
+            // Note: field values are NOT freed (memory leak in v0.1)
+        }
+        free(obj->field_names);
+        free(obj->field_values);
+        free(obj);
+    }
+}
+
+Object* object_new(char *type_name, int initial_capacity) {
+    Object *obj = malloc(sizeof(Object));
+    obj->type_name = type_name ? strdup(type_name) : NULL;
+    obj->field_names = malloc(sizeof(char*) * initial_capacity);
+    obj->field_values = malloc(sizeof(Value) * initial_capacity);
+    obj->num_fields = 0;
+    obj->capacity = initial_capacity;
+    return obj;
+}
+
+Value val_object(Object *obj) {
+    Value v;
+    v.type = VAL_OBJECT;
+    v.as.as_object = obj;
+    return v;
+}
+
 // ========== VALUE OPERATIONS ==========
 
 Value val_i8(int8_t value) {
@@ -378,6 +455,13 @@ void print_value(Value val) {
                    val.as.as_buffer->data,
                    val.as.as_buffer->length,
                    val.as.as_buffer->capacity);
+            break;
+        case VAL_OBJECT:
+            if (val.as.as_object->type_name) {
+                printf("<object:%s>", val.as.as_object->type_name);
+            } else {
+                printf("<object>");
+            }
             break;
         case VAL_TYPE:
             printf("<type>");
@@ -765,8 +849,17 @@ Value eval_expr(Expr *expr, Environment *env) {
         }
             
         case EXPR_CALL: {
-            // Look up the function
-            Value func = env_get(env, expr->as.call.name);
+            // Check if this is a method call (obj.method(...))
+            int is_method_call = 0;
+            Value method_self;
+
+            if (expr->as.call.func->type == EXPR_GET_PROPERTY) {
+                is_method_call = 1;
+                method_self = eval_expr(expr->as.call.func->as.get_property.object, env);
+            }
+
+            // Evaluate the function expression
+            Value func = eval_expr(expr->as.call.func, env);
 
             // Evaluate arguments
             Value *args = NULL;
@@ -796,6 +889,11 @@ Value eval_expr(Expr *expr, Environment *env) {
 
                 // Create call environment with closure_env as parent
                 Environment *call_env = env_new(fn->closure_env);
+
+                // Inject 'self' if this is a method call
+                if (is_method_call) {
+                    env_set(call_env, "self", method_self);
+                }
 
                 // Bind parameters
                 for (int i = 0; i < fn->num_params; i++) {
@@ -833,19 +931,8 @@ Value eval_expr(Expr *expr, Environment *env) {
                 // This is a known memory leak in v0.1, to be fixed with refcounting in v0.2
                 // env_free(call_env);
             } else {
-                // Check for special case: print (we haven't removed this yet)
-                if (strcmp(expr->as.call.name, "print") == 0) {
-                    if (expr->as.call.num_args != 1) {
-                        fprintf(stderr, "Runtime error: print() expects 1 argument\n");
-                        exit(1);
-                    }
-                    print_value(args[0]);
-                    printf("\n");
-                    result = val_null();
-                } else {
-                    fprintf(stderr, "Runtime error: '%s' is not a function\n", expr->as.call.name);
-                    exit(1);
-                }
+                fprintf(stderr, "Runtime error: Value is not a function\n");
+                exit(1);
             }
 
             if (args) free(args);
@@ -870,8 +957,18 @@ Value eval_expr(Expr *expr, Environment *env) {
                 }
                 fprintf(stderr, "Runtime error: Unknown property '%s' for buffer\n", property);
                 exit(1);
+            } else if (object.type == VAL_OBJECT) {
+                // Look up field in object
+                Object *obj = object.as.as_object;
+                for (int i = 0; i < obj->num_fields; i++) {
+                    if (strcmp(obj->field_names[i], property) == 0) {
+                        return obj->field_values[i];
+                    }
+                }
+                fprintf(stderr, "Runtime error: Object has no field '%s'\n", property);
+                exit(1);
             } else {
-                fprintf(stderr, "Runtime error: Only strings and buffers have properties\n");
+                fprintf(stderr, "Runtime error: Only strings, buffers, and objects have properties\n");
                 exit(1);
             }
         }
@@ -999,6 +1096,55 @@ Value eval_expr(Expr *expr, Environment *env) {
 
             return val_function(fn);
         }
+
+        case EXPR_OBJECT_LITERAL: {
+            // Create anonymous object
+            Object *obj = object_new(NULL, expr->as.object_literal.num_fields);
+
+            // Evaluate and store fields
+            for (int i = 0; i < expr->as.object_literal.num_fields; i++) {
+                obj->field_names[i] = strdup(expr->as.object_literal.field_names[i]);
+                obj->field_values[i] = eval_expr(expr->as.object_literal.field_values[i], env);
+                obj->num_fields++;
+            }
+
+            return val_object(obj);
+        }
+
+        case EXPR_SET_PROPERTY: {
+            Value object = eval_expr(expr->as.set_property.object, env);
+            const char *property = expr->as.set_property.property;
+            Value value = eval_expr(expr->as.set_property.value, env);
+
+            if (object.type != VAL_OBJECT) {
+                fprintf(stderr, "Runtime error: Only objects can have properties set\n");
+                exit(1);
+            }
+
+            Object *obj = object.as.as_object;
+
+            // Look for existing field
+            for (int i = 0; i < obj->num_fields; i++) {
+                if (strcmp(obj->field_names[i], property) == 0) {
+                    obj->field_values[i] = value;
+                    return value;
+                }
+            }
+
+            // Field doesn't exist - add it dynamically!
+            if (obj->num_fields >= obj->capacity) {
+                // Grow arrays
+                obj->capacity *= 2;
+                obj->field_names = realloc(obj->field_names, sizeof(char*) * obj->capacity);
+                obj->field_values = realloc(obj->field_values, sizeof(Value) * obj->capacity);
+            }
+
+            obj->field_names[obj->num_fields] = strdup(property);
+            obj->field_values[obj->num_fields] = value;
+            obj->num_fields++;
+
+            return value;
+        }
     }
 
     return val_null();
@@ -1070,6 +1216,30 @@ void eval_stmt(Stmt *stmt, Environment *env) {
                 return_state.return_value = val_null();
             }
             return_state.is_returning = 1;
+            break;
+        }
+
+        case STMT_DEFINE_OBJECT: {
+            // Create object type definition
+            ObjectType *type = malloc(sizeof(ObjectType));
+            type->name = strdup(stmt->as.define_object.name);
+            type->num_fields = stmt->as.define_object.num_fields;
+
+            // Copy field information
+            type->field_names = malloc(sizeof(char*) * type->num_fields);
+            type->field_types = malloc(sizeof(Type*) * type->num_fields);
+            type->field_optional = malloc(sizeof(int) * type->num_fields);
+            type->field_defaults = malloc(sizeof(Expr*) * type->num_fields);
+
+            for (int i = 0; i < type->num_fields; i++) {
+                type->field_names[i] = strdup(stmt->as.define_object.field_names[i]);
+                type->field_types[i] = stmt->as.define_object.field_types[i];
+                type->field_optional[i] = stmt->as.define_object.field_optional[i];
+                type->field_defaults[i] = stmt->as.define_object.field_defaults[i];
+            }
+
+            // Register the type
+            register_object_type(type);
             break;
         }
     }

@@ -1,0 +1,3 @@
+// Empty object
+let obj = {};
+print(obj);

@@ -1,0 +1,10 @@
+// Nested objects
+let outer = {
+    x: 10,
+    inner: {
+        y: 20,
+    },
+};
+
+print(outer.x);
+print(outer.inner);

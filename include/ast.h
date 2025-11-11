@@ -18,9 +18,11 @@ typedef enum {
     EXPR_CALL,
     EXPR_ASSIGN,
     EXPR_GET_PROPERTY,
+    EXPR_SET_PROPERTY,
     EXPR_INDEX,
     EXPR_INDEX_ASSIGN,
     EXPR_FUNCTION,
+    EXPR_OBJECT_LITERAL,
 } ExprType;
 
 typedef enum {
@@ -65,7 +67,7 @@ struct Expr {
             UnaryOp op;
         } unary;
         struct {
-            char *name;
+            Expr *func;  // Changed from char *name to support method calls
             Expr **args;
             int num_args;
         } call;
@@ -77,6 +79,11 @@ struct Expr {
             Expr *object;
             char *property;
         } get_property;
+        struct {
+            Expr *object;
+            char *property;
+            Expr *value;
+        } set_property;
         struct {
             Expr *object;
             Expr *index;
@@ -93,6 +100,11 @@ struct Expr {
             Type *return_type;
             Stmt *body;
         } function;
+        struct {
+            char **field_names;
+            Expr **field_values;
+            int num_fields;
+        } object_literal;
     } as;
 };
 
@@ -128,6 +140,7 @@ typedef enum {
     STMT_WHILE,
     STMT_BLOCK,
     STMT_RETURN,
+    STMT_DEFINE_OBJECT,
 } StmtType;
 
 // Statement node
@@ -156,6 +169,14 @@ struct Stmt {
         struct {
             Expr *value;  // can be NULL for bare `return;`
         } return_stmt;
+        struct {
+            char *name;
+            char **field_names;
+            Type **field_types;       // NULL for dynamic fields
+            int *field_optional;      // 1 if optional, 0 if required
+            Expr **field_defaults;    // NULL or default value expression
+            int num_fields;
+        } define_object;
     } as;
 };
 
@@ -170,12 +191,14 @@ Expr* expr_string(const char *str);
 Expr* expr_ident(const char *name);
 Expr* expr_binary(Expr *left, BinaryOp op, Expr *right);
 Expr* expr_unary(UnaryOp op, Expr *operand);
-Expr* expr_call(const char *name, Expr **args, int num_args);
+Expr* expr_call(Expr *func, Expr **args, int num_args);
 Expr* expr_assign(const char *name, Expr *value);
 Expr* expr_get_property(Expr *object, const char *property);
+Expr* expr_set_property(Expr *object, const char *property, Expr *value);
 Expr* expr_index(Expr *object, Expr *index);
 Expr* expr_index_assign(Expr *object, Expr *index, Expr *value);
 Expr* expr_function(char **param_names, Type **param_types, int num_params, Type *return_type, Stmt *body);
+Expr* expr_object_literal(char **field_names, Expr **field_values, int num_fields);
 
 // Statement constructors
 Stmt* stmt_let(const char *name, Expr *value);
@@ -185,6 +208,8 @@ Stmt* stmt_while(Expr *condition, Stmt *body);
 Stmt* stmt_block(Stmt **statements, int count);
 Stmt* stmt_expr(Expr *expr);
 Stmt* stmt_return(Expr *value);
+Stmt* stmt_define_object(const char *name, char **field_names, Type **field_types,
+                         int *field_optional, Expr **field_defaults, int num_fields);
 Type* type_new(TypeKind kind);
 void type_free(Type *type);
 

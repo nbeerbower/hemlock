@@ -1,0 +1,14 @@
+// Multiple method calls on same object
+let obj = {
+    x: 10,
+    y: 20,
+    getX: fn() {
+        return self.x;
+    },
+    getY: fn() {
+        return self.y;
+    },
+};
+
+print(obj.getX());
+print(obj.getY());

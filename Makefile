@@ -15,7 +15,7 @@ $(BUILD_DIR):
 $(TARGET): $(OBJS)
 	$(CC) $(OBJS) -o $(TARGET)
 
-$(BUILD_DIR)/%.o: $(SRC_DIR)/%.c
+$(BUILD_DIR)/%.o: $(SRC_DIR)/%.c | $(BUILD_DIR)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 clean:
@@ -24,4 +24,7 @@ clean:
 run: $(TARGET)
 	./$(TARGET)
 
-.PHONY: all clean run
+test: $(TARGET)
+	@bash run_tests.sh
+
+.PHONY: all clean run test

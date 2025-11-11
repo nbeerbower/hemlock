@@ -1,0 +1,16 @@
+// Method modifying self
+let counter = {
+    count: 0,
+    increment: fn() {
+        self.count = self.count + 1;
+    },
+    getCount: fn() {
+        return self.count;
+    },
+};
+
+print(counter.getCount());
+counter.increment();
+print(counter.getCount());
+counter.increment();
+print(counter.getCount());

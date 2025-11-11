@@ -1,0 +1,12 @@
+// Deeply nested objects
+let data = {
+    level1: {
+        level2: {
+            level3: {
+                value: 42,
+            },
+        },
+    },
+};
+
+print(data.level1.level2.level3.value);

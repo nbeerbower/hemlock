@@ -1,0 +1,7 @@
+// Passing objects to functions
+fn printX(obj) {
+    print(obj.x);
+}
+
+let myObj = { x: 42, y: 99 };
+printX(myObj);

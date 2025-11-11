@@ -1,0 +1,8 @@
+// Object with multiple fields of different types
+let person = {
+    name: "Alice",
+    age: 30,
+    height: 1.75,
+    active: true,
+};
+print(person);

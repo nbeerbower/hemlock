@@ -1,0 +1,11 @@
+// Accessing different types of fields
+let obj = {
+    num: 42,
+    str: "hello",
+    flag: true,
+    flt: 3.14,
+};
+print(obj.num);
+print(obj.str);
+print(obj.flag);
+print(obj.flt);

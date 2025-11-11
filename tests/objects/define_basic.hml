@@ -1,0 +1,8 @@
+// Basic object type definition
+define Person {
+    name: string,
+    age: i32,
+}
+
+// Just test that parsing works - type checking not fully implemented yet
+print(42);

@@ -1,0 +1,11 @@
+// Method accessing multiple fields via self
+let person = {
+    name: "Alice",
+    age: 30,
+    describe: fn() {
+        print(self.name);
+        print(self.age);
+    },
+};
+
+person.describe();

@@ -1,0 +1,5 @@
+// Assigning to existing field
+let obj = { x: 10, y: 20 };
+print(obj.x);
+obj.x = 99;
+print(obj.x);

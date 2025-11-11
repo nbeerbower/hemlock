@@ -1,0 +1,9 @@
+// Adding fields dynamically
+let obj = { x: 10 };
+print(obj.x);
+
+obj.y = 20;
+print(obj.y);
+
+obj.z = 30;
+print(obj.z);
