@@ -1233,7 +1233,7 @@ try {
 
 **Memory & Cleanup:**
 - Joined tasks are automatically cleaned up after `join()` returns
-- Detached tasks clean up when thread completes
+- Detached tasks: pthread is cleaned up by OS, but Task struct (~64-96 bytes) currently leaks
 - Channels are reference-counted and freed when no longer used
 
 **Current limitations:**
