@@ -1,0 +1,21 @@
+// Test: Multiple concurrent tasks with spawn/join
+// Tests that multiple tasks can be spawned and joined
+
+async fn compute(id: i32, value: i32): i32 {
+    return id * 100 + value;
+}
+
+// Spawn multiple tasks
+let t1 = spawn(compute, 1, 10);
+let t2 = spawn(compute, 2, 20);
+let t3 = spawn(compute, 3, 30);
+
+// Join all tasks
+let r1 = join(t1);
+let r2 = join(t2);
+let r3 = join(t3);
+
+// Print results
+print(r1);  // 110
+print(r2);  // 220
+print(r3);  // 330

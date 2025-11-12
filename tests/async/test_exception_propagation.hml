@@ -1,0 +1,25 @@
+// Test: Exception propagation through join
+// Tests that exceptions thrown in tasks are re-thrown on join
+
+async fn risky_operation(should_fail: i32): i32 {
+    if (should_fail == 1) {
+        throw "Task failed!";
+    }
+    return 42;
+}
+
+// Test successful task
+let t1 = spawn(risky_operation, 0);
+let r1 = join(t1);
+print("Success: " + typeof(r1));
+
+// Test failing task
+let t2 = spawn(risky_operation, 1);
+try {
+    let r2 = join(t2);
+    print("Should not reach here");
+} catch (e) {
+    print("Caught exception: " + e);
+}
+
+print("Exception handling works!");

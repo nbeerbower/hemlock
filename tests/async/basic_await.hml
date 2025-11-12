@@ -1,0 +1,13 @@
+// Test: Basic await expression
+// This tests that await syntax is parsed and executed correctly
+
+async fn compute(x: i32): i32 {
+    return x * 2;
+}
+
+async fn main() {
+    let result = await compute(21);
+    print(result);
+}
+
+main();

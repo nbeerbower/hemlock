@@ -34,6 +34,8 @@ typedef enum {
     TOK_SWITCH,
     TOK_CASE,
     TOK_DEFAULT,
+    TOK_ASYNC,
+    TOK_AWAIT,
 
     // Type keywords
     TOK_TYPE_I8,

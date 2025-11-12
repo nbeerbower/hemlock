@@ -141,6 +141,12 @@ static TokenType identifier_type(Lexer *lex) {
     int len = lex->current - lex->start;
     
     switch (lex->start[0]) {
+        case 'a':
+            if (len == 5) {
+                if (strncmp(lex->start, "async", 5) == 0) return TOK_ASYNC;
+                if (strncmp(lex->start, "await", 5) == 0) return TOK_AWAIT;
+            }
+            break;
         case 'b':
             if (len == 4) return check_keyword(lex->start, 4, "bool", TOK_TYPE_BOOL);
             if (len == 5) return check_keyword(lex->start, 5, "break", TOK_BREAK);

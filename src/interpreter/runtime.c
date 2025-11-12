@@ -360,6 +360,24 @@ Value eval_expr(Expr *expr, Environment *env, ExecutionContext *ctx) {
                     if (args) free(args);
                     return result;
                 }
+
+                // Special handling for channel methods
+                if (method_self.type == VAL_CHANNEL) {
+                    const char *method = expr->as.call.func->as.get_property.property;
+
+                    // Evaluate arguments
+                    Value *args = NULL;
+                    if (expr->as.call.num_args > 0) {
+                        args = malloc(sizeof(Value) * expr->as.call.num_args);
+                        for (int i = 0; i < expr->as.call.num_args; i++) {
+                            args[i] = eval_expr(expr->as.call.args[i], env, ctx);
+                        }
+                    }
+
+                    Value result = call_channel_method(method_self.as.as_channel, method, args, expr->as.call.num_args);
+                    if (args) free(args);
+                    return result;
+                }
             }
 
             // Evaluate the function expression
@@ -608,6 +626,9 @@ Value eval_expr(Expr *expr, Environment *env, ExecutionContext *ctx) {
         case EXPR_FUNCTION: {
             // Create function object and capture current environment
             Function *fn = malloc(sizeof(Function));
+
+            // Copy is_async flag
+            fn->is_async = expr->as.function.is_async;
 
             // Copy parameter names
             fn->param_names = malloc(sizeof(char*) * expr->as.function.num_params);
@@ -913,6 +934,16 @@ Value eval_expr(Expr *expr, Environment *env, ExecutionContext *ctx) {
                 fprintf(stderr, "Runtime error: Invalid operand for --\n");
                 exit(1);
             }
+        }
+
+        case EXPR_AWAIT: {
+            // For MVP: await just evaluates the expression synchronously
+            // TODO: Implement proper async/await scheduling
+            Value awaited = eval_expr(expr->as.await_expr.awaited_expr, env, ctx);
+
+            // If it's a task, we should join it
+            // For now, just return the value as-is
+            return awaited;
         }
     }
 

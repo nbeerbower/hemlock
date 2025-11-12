@@ -26,6 +26,8 @@ typedef enum {
     VAL_TYPE,           // Represents a type (for sizeof, talloc, etc.)
     VAL_BUILTIN_FN,
     VAL_FUNCTION,       // User-defined function
+    VAL_TASK,           // Async task handle
+    VAL_CHANNEL,        // Communication channel
     VAL_NULL,
 } ValueType;
 
@@ -74,6 +76,7 @@ typedef struct {
 
 // Function struct (user-defined function)
 typedef struct {
+    int is_async;
     char **param_names;
     Type **param_types;
     int num_params;
@@ -81,6 +84,43 @@ typedef struct {
     Stmt *body;
     Environment *closure_env;  // CAPTURED ENVIRONMENT
 } Function;
+
+// Task states
+typedef enum {
+    TASK_READY,      // Ready to run
+    TASK_RUNNING,    // Currently executing
+    TASK_BLOCKED,    // Waiting on channel or join
+    TASK_COMPLETED,  // Finished execution
+} TaskState;
+
+// Task struct (async task handle)
+typedef struct Task {
+    int id;                     // Unique task ID
+    TaskState state;            // Current state
+    Function *function;         // Async function to execute
+    Value *args;                // Arguments to pass
+    int num_args;               // Number of arguments
+    Value *result;              // Return value when completed (NULL if not completed)
+    int joined;                 // Flag: task has been joined
+    Environment *env;           // Task's environment
+    ExecutionContext *ctx;      // Task's execution context
+    struct Task *waiting_on;    // Task we're blocked on (for join)
+    void *thread;               // pthread_t (opaque pointer)
+    int detached;               // Flag: task is detached (fire-and-forget)
+} Task;
+
+// Channel struct (communication channel)
+typedef struct {
+    Value *buffer;              // Ring buffer for messages
+    int capacity;               // Buffer capacity (0 for unbuffered)
+    int head;                   // Read position
+    int tail;                   // Write position
+    int count;                  // Number of messages in buffer
+    int closed;                 // Flag: channel is closed
+    void *mutex;                // pthread_mutex_t (opaque pointer)
+    void *not_empty;            // pthread_cond_t (opaque pointer)
+    void *not_full;             // pthread_cond_t (opaque pointer)
+} Channel;
 
 // Forward declare TypeKind from ast.h
 #include "ast.h"
@@ -107,6 +147,8 @@ typedef struct Value {
         TypeKind as_type;
         BuiltinFn as_builtin_fn;
         Function *as_function;
+        Task *as_task;
+        Channel *as_channel;
     } as;
 } Value;
 
@@ -157,6 +199,8 @@ Value val_type(TypeKind kind);
 Value val_builtin_fn(BuiltinFn fn);
 Value val_function(Function *fn);
 Value val_object(Object *obj);
+Value val_task(Task *task);
+Value val_channel(Channel *channel);
 Value val_null(void);
 
 // Value operations
@@ -184,6 +228,14 @@ void file_free(FileHandle *file);
 // Object operations
 void object_free(Object *obj);
 Object* object_new(char *type_name, int initial_capacity);
+
+// Task operations
+void task_free(Task *task);
+Task* task_new(int id, Function *function, Value *args, int num_args, Environment *env);
+
+// Channel operations
+void channel_free(Channel *channel);
+Channel* channel_new(int capacity);
 
 void register_builtins(Environment *env, int argc, char **argv, ExecutionContext *ctx);
 

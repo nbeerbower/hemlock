@@ -1,0 +1,11 @@
+// Test: spawn() and join() basic functionality
+// Tests that tasks can be spawned and joined
+
+async fn square(x: i32): i32 {
+    return x * x;
+}
+
+let task = spawn(square, 7);
+let result = join(task);
+
+print(result);  // Should print 49

@@ -1,0 +1,23 @@
+// Test: Channel send and recv
+// Tests basic channel operations
+
+let ch = channel(5);
+
+// Send messages
+ch.send(10);
+ch.send(20);
+ch.send(30);
+
+// Receive messages
+let val1 = ch.recv();
+let val2 = ch.recv();
+let val3 = ch.recv();
+
+print(val1);  // 10
+print(val2);  // 20
+print(val3);  // 30
+
+// Test close
+ch.close();
+let val4 = ch.recv();  // Should return null
+print(val4);  // null

@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
+#include <pthread.h>
 
 // ========== STRING OPERATIONS ==========
 
@@ -278,6 +279,129 @@ Value val_object(Object *obj) {
     return v;
 }
 
+// ========== TASK OPERATIONS ==========
+
+Task* task_new(int id, Function *function, Value *args, int num_args, Environment *env) {
+    Task *task = malloc(sizeof(Task));
+    if (!task) {
+        fprintf(stderr, "Runtime error: Memory allocation failed\n");
+        exit(1);
+    }
+    task->id = id;
+    task->state = TASK_READY;
+    task->function = function;
+    task->args = args;
+    task->num_args = num_args;
+    task->result = NULL;
+    task->joined = 0;
+    task->env = env;
+    task->ctx = exec_context_new();
+    task->waiting_on = NULL;
+    task->thread = NULL;
+    task->detached = 0;
+    return task;
+}
+
+void task_free(Task *task) {
+    if (task) {
+        if (task->args) {
+            free(task->args);
+        }
+        if (task->result) {
+            free(task->result);
+        }
+        if (task->ctx) {
+            exec_context_free(task->ctx);
+        }
+        if (task->thread) {
+            free(task->thread);
+        }
+        free(task);
+    }
+}
+
+Value val_task(Task *task) {
+    Value v;
+    v.type = VAL_TASK;
+    v.as.as_task = task;
+    return v;
+}
+
+// ========== CHANNEL OPERATIONS ==========
+
+Channel* channel_new(int capacity) {
+    Channel *ch = malloc(sizeof(Channel));
+    if (!ch) {
+        fprintf(stderr, "Runtime error: Memory allocation failed\n");
+        exit(1);
+    }
+    ch->capacity = capacity;
+    ch->head = 0;
+    ch->tail = 0;
+    ch->count = 0;
+    ch->closed = 0;
+
+    if (capacity > 0) {
+        ch->buffer = malloc(sizeof(Value) * capacity);
+        if (!ch->buffer) {
+            free(ch);
+            fprintf(stderr, "Runtime error: Memory allocation failed\n");
+            exit(1);
+        }
+    } else {
+        ch->buffer = NULL;
+    }
+
+    // Initialize pthread mutex and condition variables
+    ch->mutex = malloc(sizeof(pthread_mutex_t));
+    ch->not_empty = malloc(sizeof(pthread_cond_t));
+    ch->not_full = malloc(sizeof(pthread_cond_t));
+
+    if (!ch->mutex || !ch->not_empty || !ch->not_full) {
+        if (ch->buffer) free(ch->buffer);
+        if (ch->mutex) free(ch->mutex);
+        if (ch->not_empty) free(ch->not_empty);
+        if (ch->not_full) free(ch->not_full);
+        free(ch);
+        fprintf(stderr, "Runtime error: Memory allocation failed\n");
+        exit(1);
+    }
+
+    pthread_mutex_init((pthread_mutex_t*)ch->mutex, NULL);
+    pthread_cond_init((pthread_cond_t*)ch->not_empty, NULL);
+    pthread_cond_init((pthread_cond_t*)ch->not_full, NULL);
+
+    return ch;
+}
+
+void channel_free(Channel *ch) {
+    if (ch) {
+        if (ch->buffer) {
+            free(ch->buffer);
+        }
+        if (ch->mutex) {
+            pthread_mutex_destroy((pthread_mutex_t*)ch->mutex);
+            free(ch->mutex);
+        }
+        if (ch->not_empty) {
+            pthread_cond_destroy((pthread_cond_t*)ch->not_empty);
+            free(ch->not_empty);
+        }
+        if (ch->not_full) {
+            pthread_cond_destroy((pthread_cond_t*)ch->not_full);
+            free(ch->not_full);
+        }
+        free(ch);
+    }
+}
+
+Value val_channel(Channel *channel) {
+    Value v;
+    v.type = VAL_CHANNEL;
+    v.as.as_channel = channel;
+    return v;
+}
+
 // ========== VALUE OPERATIONS ==========
 
 Value val_i8(int8_t value) {
@@ -454,6 +578,15 @@ void print_value(Value val) {
         case VAL_FUNCTION:
             printf("<function>");
             break;
+        case VAL_TASK:
+            printf("<task id=%d state=%d>", val.as.as_task->id, val.as.as_task->state);
+            break;
+        case VAL_CHANNEL:
+            printf("<channel capacity=%d count=%d%s>",
+                   val.as.as_channel->capacity,
+                   val.as.as_channel->count,
+                   val.as.as_channel->closed ? " closed" : "");
+            break;
         case VAL_NULL:
             printf("null");
             break;
@@ -514,6 +647,16 @@ void value_free(Value val) {
                 // Note: closure_env and body are not freed (shared/owned by AST)
                 // This is a known limitation in v0.1
                 free(fn);
+            }
+            break;
+        case VAL_TASK:
+            if (val.as.as_task) {
+                task_free(val.as.as_task);
+            }
+            break;
+        case VAL_CHANNEL:
+            if (val.as.as_channel) {
+                channel_free(val.as.as_channel);
             }
             break;
         case VAL_PTR:

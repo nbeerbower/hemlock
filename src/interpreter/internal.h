@@ -163,6 +163,7 @@ int values_equal(Value a, Value b);
 Value call_file_method(FileHandle *file, const char *method, Value *args, int num_args);
 Value call_array_method(Array *arr, const char *method, Value *args, int num_args);
 Value call_string_method(String *str, const char *method, Value *args, int num_args);
+Value call_channel_method(Channel *ch, const char *method, Value *args, int num_args);
 
 // I/O builtin functions
 Value builtin_read_file(Value *args, int num_args, ExecutionContext *ctx);

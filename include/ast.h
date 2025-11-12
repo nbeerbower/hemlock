@@ -30,6 +30,7 @@ typedef enum {
     EXPR_PREFIX_DEC,
     EXPR_POSTFIX_INC,
     EXPR_POSTFIX_DEC,
+    EXPR_AWAIT,
 } ExprType;
 
 typedef enum {
@@ -106,6 +107,7 @@ struct Expr {
             Expr *value;
         } index_assign;
         struct {
+            int is_async;
             char **param_names;
             Type **param_types;
             int num_params;
@@ -133,6 +135,9 @@ struct Expr {
         struct {
             Expr *operand;
         } postfix_dec;
+        struct {
+            Expr *awaited_expr;
+        } await_expr;
     } as;
 };
 
@@ -271,13 +276,14 @@ Expr* expr_get_property(Expr *object, const char *property);
 Expr* expr_set_property(Expr *object, const char *property, Expr *value);
 Expr* expr_index(Expr *object, Expr *index);
 Expr* expr_index_assign(Expr *object, Expr *index, Expr *value);
-Expr* expr_function(char **param_names, Type **param_types, int num_params, Type *return_type, Stmt *body);
+Expr* expr_function(int is_async, char **param_names, Type **param_types, int num_params, Type *return_type, Stmt *body);
 Expr* expr_array_literal(Expr **elements, int num_elements);
 Expr* expr_object_literal(char **field_names, Expr **field_values, int num_fields);
 Expr* expr_prefix_inc(Expr *operand);
 Expr* expr_prefix_dec(Expr *operand);
 Expr* expr_postfix_inc(Expr *operand);
 Expr* expr_postfix_dec(Expr *operand);
+Expr* expr_await(Expr *awaited_expr);
 
 // Statement constructors
 Stmt* stmt_let(const char *name, Expr *value);

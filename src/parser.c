@@ -183,45 +183,57 @@ static Expr* primary(Parser *p) {
         return expr_array_literal(elements, num_elements);
     }
 
-    // Function expression: fn(...) { ... }
-    if (match(p, TOK_FN)) {
-        consume(p, TOK_LPAREN, "Expect '(' after 'fn'");
-
-        // Parse parameters
-        char **param_names = malloc(sizeof(char*) * 32);  // max 32 params
-        Type **param_types = malloc(sizeof(Type*) * 32);
-        int num_params = 0;
-
-        if (!check(p, TOK_RPAREN)) {
-            do {
-                consume(p, TOK_IDENT, "Expect parameter name");
-                param_names[num_params] = token_text(&p->previous);
-
-                // Optional type annotation
-                if (match(p, TOK_COLON)) {
-                    param_types[num_params] = parse_type(p);
-                } else {
-                    param_types[num_params] = NULL;
-                }
-
-                num_params++;
-            } while (match(p, TOK_COMMA));
-        }
-
-        consume(p, TOK_RPAREN, "Expect ')' after parameters");
-
-        // Optional return type
-        Type *return_type = NULL;
-        if (match(p, TOK_COLON)) {
-            return_type = parse_type(p);
-        }
-
-        // Parse body (must be a block)
-        consume(p, TOK_LBRACE, "Expect '{' before function body");
-        Stmt *body = block_statement(p);
-
-        return expr_function(param_names, param_types, num_params, return_type, body);
+    // Function expression: fn(...) { ... } or async fn(...) { ... }
+    int is_async_fn = 0;
+    if (match(p, TOK_ASYNC)) {
+        is_async_fn = 1;
+        consume(p, TOK_FN, "Expect 'fn' after 'async'");
+    } else if (match(p, TOK_FN)) {
+        is_async_fn = 0;
+    } else {
+        // Not a function expression, continue to other cases
+        goto not_fn_expr;
     }
+
+    // Parse function expression
+    consume(p, TOK_LPAREN, "Expect '(' after 'fn'");
+
+    // Parse parameters
+    char **param_names = malloc(sizeof(char*) * 32);  // max 32 params
+    Type **param_types = malloc(sizeof(Type*) * 32);
+    int num_params = 0;
+
+    if (!check(p, TOK_RPAREN)) {
+        do {
+            consume(p, TOK_IDENT, "Expect parameter name");
+            param_names[num_params] = token_text(&p->previous);
+
+            // Optional type annotation
+            if (match(p, TOK_COLON)) {
+                param_types[num_params] = parse_type(p);
+            } else {
+                param_types[num_params] = NULL;
+            }
+
+            num_params++;
+        } while (match(p, TOK_COMMA));
+    }
+
+    consume(p, TOK_RPAREN, "Expect ')' after parameters");
+
+    // Optional return type
+    Type *return_type = NULL;
+    if (match(p, TOK_COLON)) {
+        return_type = parse_type(p);
+    }
+
+    // Parse body (must be a block)
+    consume(p, TOK_LBRACE, "Expect '{' before function body");
+    Stmt *body = block_statement(p);
+
+    return expr_function(is_async_fn, param_names, param_types, num_params, return_type, body);
+
+not_fn_expr:
 
     // Allow type keywords to be used as identifiers (for sizeof, talloc, etc.)
     if (match(p, TOK_TYPE_I8)) return expr_ident("i8");
@@ -288,6 +300,11 @@ static Expr* postfix(Parser *p) {
 }
 
 static Expr* unary(Parser *p) {
+    if (match(p, TOK_AWAIT)) {
+        Expr *operand = unary(p);  // Recursive for multiple await/unary ops
+        return expr_await(operand);
+    }
+
     if (match(p, TOK_BANG)) {
         Expr *operand = unary(p);  // Recursive for multiple unary ops
         return expr_unary(UNARY_NOT, operand);
@@ -939,62 +956,73 @@ static Stmt* statement(Parser *p) {
         return stmt;
     }
 
-    // Named function: fn name(...) { ... }
-    // Desugar to: let name = fn(...) { ... };
-    if (match(p, TOK_FN)) {
-        // Check if it's a named function (next token is identifier)
-        if (check(p, TOK_IDENT)) {
-            char *name = token_text(&p->current);
-            advance(p);  // consume identifier
-
-            // Now parse as function expression
-            consume(p, TOK_LPAREN, "Expect '(' after function name");
-
-            // Parse parameters
-            char **param_names = malloc(sizeof(char*) * 32);
-            Type **param_types = malloc(sizeof(Type*) * 32);
-            int num_params = 0;
-
-            if (!check(p, TOK_RPAREN)) {
-                do {
-                    consume(p, TOK_IDENT, "Expect parameter name");
-                    param_names[num_params] = token_text(&p->previous);
-
-                    if (match(p, TOK_COLON)) {
-                        param_types[num_params] = parse_type(p);
-                    } else {
-                        param_types[num_params] = NULL;
-                    }
-
-                    num_params++;
-                } while (match(p, TOK_COMMA));
-            }
-
-            consume(p, TOK_RPAREN, "Expect ')' after parameters");
-
-            // Optional return type
-            Type *return_type = NULL;
-            if (match(p, TOK_COLON)) {
-                return_type = parse_type(p);
-            }
-
-            // Parse body
-            consume(p, TOK_LBRACE, "Expect '{' before function body");
-            Stmt *body = block_statement(p);
-
-            // Create function expression
-            Expr *fn_expr = expr_function(param_names, param_types, num_params, return_type, body);
-
-            // Desugar to let statement
-            Stmt *stmt = stmt_let_typed(name, NULL, fn_expr);
-            free(name);
-            return stmt;
-        } else {
-            // Anonymous function at statement level - error
-            error(p, "Unexpected anonymous function (did you mean to assign it?)");
-            return stmt_expr(expr_number(0));
-        }
+    // Named function: fn name(...) { ... } or async fn name(...) { ... }
+    // Desugar to: let name = fn(...) { ... }; or let name = async fn(...) { ... };
+    int is_async = 0;
+    if (match(p, TOK_ASYNC)) {
+        is_async = 1;
+        consume(p, TOK_FN, "Expect 'fn' after 'async'");
+    } else if (match(p, TOK_FN)) {
+        is_async = 0;
+    } else {
+        // Not a function declaration, continue to next check
+        goto not_function;
     }
+
+    // Check if it's a named function (next token is identifier)
+    if (check(p, TOK_IDENT)) {
+        char *name = token_text(&p->current);
+        advance(p);  // consume identifier
+
+        // Now parse as function expression
+        consume(p, TOK_LPAREN, "Expect '(' after function name");
+
+        // Parse parameters
+        char **param_names = malloc(sizeof(char*) * 32);
+        Type **param_types = malloc(sizeof(Type*) * 32);
+        int num_params = 0;
+
+        if (!check(p, TOK_RPAREN)) {
+            do {
+                consume(p, TOK_IDENT, "Expect parameter name");
+                param_names[num_params] = token_text(&p->previous);
+
+                if (match(p, TOK_COLON)) {
+                    param_types[num_params] = parse_type(p);
+                } else {
+                    param_types[num_params] = NULL;
+                }
+
+                num_params++;
+            } while (match(p, TOK_COMMA));
+        }
+
+        consume(p, TOK_RPAREN, "Expect ')' after parameters");
+
+        // Optional return type
+        Type *return_type = NULL;
+        if (match(p, TOK_COLON)) {
+            return_type = parse_type(p);
+        }
+
+        // Parse body
+        consume(p, TOK_LBRACE, "Expect '{' before function body");
+        Stmt *body = block_statement(p);
+
+        // Create function expression (with is_async flag)
+        Expr *fn_expr = expr_function(is_async, param_names, param_types, num_params, return_type, body);
+
+        // Desugar to let statement
+        Stmt *stmt = stmt_let_typed(name, NULL, fn_expr);
+        free(name);
+        return stmt;
+    } else {
+        // Anonymous function at statement level - error
+        error(p, "Unexpected anonymous function (did you mean to assign it?)");
+        return stmt_expr(expr_number(0));
+    }
+
+not_function:
 
     if (match(p, TOK_IF)) {
         return if_statement(p);
