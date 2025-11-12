@@ -46,9 +46,9 @@ Module* load_module(ModuleCache *cache, const char *module_path, ExecutionContex
 Module* get_cached_module(ModuleCache *cache, const char *absolute_path);
 
 // Module execution
-void execute_module(Module *module, ModuleCache *cache, ExecutionContext *ctx);
+void execute_module(Module *module, ModuleCache *cache, Environment *global_env, ExecutionContext *ctx);
 
 // High-level API
-int execute_file_with_modules(const char *file_path, int argc, char **argv, ExecutionContext *ctx);
+int execute_file_with_modules(const char *file_path, Environment *global_env, int argc, char **argv, ExecutionContext *ctx);
 
 #endif // HEMLOCK_MODULE_H

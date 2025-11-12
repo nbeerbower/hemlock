@@ -1,3 +1,4 @@
+#define _XOPEN_SOURCE 500
 #include "module.h"
 #include "parser.h"
 #include "lexer.h"
@@ -228,7 +229,7 @@ Module* load_module(ModuleCache *cache, const char *module_path, ExecutionContex
 // ========== MODULE EXECUTION ==========
 
 // Execute a module in topological order (dependencies first)
-void execute_module(Module *module, ModuleCache *cache, ExecutionContext *ctx) {
+void execute_module(Module *module, ModuleCache *cache, Environment *global_env, ExecutionContext *ctx) {
     if (module->exports_env) {
         // Already executed
         return;
@@ -244,7 +245,7 @@ void execute_module(Module *module, ModuleCache *cache, ExecutionContext *ctx) {
             free(resolved);
 
             if (imported) {
-                execute_module(imported, cache, ctx);
+                execute_module(imported, cache, global_env, ctx);
             }
         } else if (stmt->type == STMT_EXPORT && stmt->as.export_stmt.is_reexport) {
             char *reexport_path = stmt->as.export_stmt.module_path;
@@ -253,13 +254,13 @@ void execute_module(Module *module, ModuleCache *cache, ExecutionContext *ctx) {
             free(resolved);
 
             if (reexported) {
-                execute_module(reexported, cache, ctx);
+                execute_module(reexported, cache, global_env, ctx);
             }
         }
     }
 
-    // Create module's execution environment
-    Environment *module_env = env_new(NULL);
+    // Create module's execution environment (with global_env as parent for builtins)
+    Environment *module_env = env_new(global_env);
 
     // Execute module's statements (except import/export)
     for (int i = 0; i < module->num_statements; i++) {
@@ -363,7 +364,7 @@ void execute_module(Module *module, ModuleCache *cache, ExecutionContext *ctx) {
 
 // Execute a file using the module system
 // Returns 0 on success, non-zero on error
-int execute_file_with_modules(const char *file_path, int argc, char **argv, ExecutionContext *ctx) {
+int execute_file_with_modules(const char *file_path, Environment *global_env, int argc, char **argv, ExecutionContext *ctx) {
     // Get current working directory
     char cwd[PATH_MAX];
     if (!getcwd(cwd, sizeof(cwd))) {
@@ -383,7 +384,7 @@ int execute_file_with_modules(const char *file_path, int argc, char **argv, Exec
     }
 
     // Execute the main module (and all its dependencies in topological order)
-    execute_module(main_module, cache, ctx);
+    execute_module(main_module, cache, global_env, ctx);
 
     // Cleanup
     module_cache_free(cache);
