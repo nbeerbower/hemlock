@@ -1,5 +1,6 @@
 CC = gcc
 CFLAGS = -Wall -Wextra -std=c11 -g -D_POSIX_C_SOURCE=200809L -Iinclude -Isrc
+LDFLAGS = -lm -lpthread -lffi -ldl
 SRC_DIR = src
 BUILD_DIR = build
 
@@ -17,7 +18,7 @@ $(BUILD_DIR)/interpreter:
 	mkdir -p $(BUILD_DIR)/interpreter
 
 $(TARGET): $(OBJS)
-	$(CC) $(OBJS) -o $(TARGET) -lm -lpthread
+	$(CC) $(OBJS) -o $(TARGET) $(LDFLAGS)
 
 $(BUILD_DIR)/%.o: $(SRC_DIR)/%.c | $(BUILD_DIR)
 	mkdir -p $(dir $@)

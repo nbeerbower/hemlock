@@ -176,6 +176,30 @@ Value builtin_read_line(Value *args, int num_args, ExecutionContext *ctx);
 Value builtin_eprint(Value *args, int num_args, ExecutionContext *ctx);
 Value builtin_open(Value *args, int num_args, ExecutionContext *ctx);
 
+// ========== FFI (ffi.c) ==========
+
+// Forward declaration for FFI library
+typedef struct FFILibrary FFILibrary;
+
+// External function structure
+typedef struct {
+    char *name;              // Function name
+    void *func_ptr;          // Function pointer from dlsym()
+    void *cif;               // ffi_cif (opaque)
+    void **arg_types;        // libffi argument types (opaque)
+    void *return_type;       // libffi return type (opaque)
+    Type **hemlock_params;   // Hemlock parameter types
+    Type *hemlock_return;    // Hemlock return type
+    int num_params;
+} FFIFunction;
+
+void ffi_init(void);
+void ffi_cleanup(void);
+void execute_import_ffi(Stmt *stmt, ExecutionContext *ctx);
+void execute_extern_fn(Stmt *stmt, Environment *env, ExecutionContext *ctx);
+Value ffi_call_function(FFIFunction *func, Value *args, int num_args, ExecutionContext *ctx);
+void ffi_free_function(FFIFunction *func);
+
 // ========== RUNTIME (runtime.c) ==========
 
 Value eval_expr(Expr *expr, Environment *env, ExecutionContext *ctx);

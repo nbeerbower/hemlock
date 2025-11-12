@@ -160,6 +160,7 @@ typedef enum {
     TYPE_INFER,          // No annotation, infer from value
     TYPE_CUSTOM_OBJECT,  // Custom object type (Person, User, etc.)
     TYPE_GENERIC_OBJECT, // Generic 'object' keyword
+    TYPE_VOID,           // Void type (for FFI functions with no return)
 } TypeKind;
 
 struct Type {
@@ -187,6 +188,8 @@ typedef enum {
     STMT_SWITCH,
     STMT_IMPORT,
     STMT_EXPORT,
+    STMT_IMPORT_FFI,
+    STMT_EXTERN_FN,
 } StmtType;
 
 // Statement node
@@ -273,6 +276,15 @@ struct Stmt {
             int num_exports;         // Number of named exports
             char *module_path;       // Path for re-exports (NULL if not re-export)
         } export_stmt;
+        struct {
+            char *library_path;      // Library file path (e.g., "libc.so.6")
+        } import_ffi;
+        struct {
+            char *function_name;     // C function name
+            Type **param_types;      // Parameter types
+            int num_params;          // Number of parameters
+            Type *return_type;       // Return type (NULL for void)
+        } extern_fn;
     } as;
 };
 
@@ -328,6 +340,8 @@ Stmt* stmt_import_namespace(const char *namespace_name, const char *module_path)
 Stmt* stmt_export_declaration(Stmt *declaration);
 Stmt* stmt_export_list(char **export_names, char **export_aliases, int num_exports);
 Stmt* stmt_export_reexport(char **export_names, char **export_aliases, int num_exports, const char *module_path);
+Stmt* stmt_import_ffi(const char *library_path);
+Stmt* stmt_extern_fn(const char *function_name, Type **param_types, int num_params, Type *return_type);
 Type* type_new(TypeKind kind);
 void type_free(Type *type);
 

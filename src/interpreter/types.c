@@ -428,6 +428,12 @@ Value convert_to_type(Value value, Type *target_type, Environment *env, Executio
         case TYPE_INFER:
             return value;  // No conversion needed
 
+        case TYPE_VOID:
+            // Void type is only used for FFI function return types
+            // Should not be converted to in normal code
+            fprintf(stderr, "Runtime error: Cannot convert to void type\n");
+            exit(1);
+
         case TYPE_CUSTOM_OBJECT:
         case TYPE_GENERIC_OBJECT:
             // These should have been handled above in the early return

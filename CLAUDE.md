@@ -1466,8 +1466,8 @@ When adding features to Hemlock:
 
 ## Version History
 
-- **v0.1** - Primitives, memory management, strings, control flow, functions, closures, recursion, objects, arrays, error handling, file I/O, command-line arguments, async/await, structured concurrency (current)
-  - Type system: i8-i32, u8-u32, f32/f64, bool, string, null, ptr, buffer, array, object, file, task, channel
+- **v0.1** - Primitives, memory management, strings, control flow, functions, closures, recursion, objects, arrays, error handling, file I/O, command-line arguments, async/await, structured concurrency, FFI (current)
+  - Type system: i8-i32, u8-u32, f32/f64, bool, string, null, ptr, buffer, array, object, file, task, channel, void
   - Memory: alloc, free, memset, memcpy, realloc, talloc, sizeof
   - Objects: literals, methods, duck typing, optional fields, serialize/deserialize
   - **Strings:** 15 methods including substr, slice, find, contains, split, trim, to_upper, to_lower, starts_with, ends_with, replace, replace_all, repeat, char_at, to_bytes
@@ -1477,10 +1477,11 @@ When adding features to Hemlock:
   - File I/O: open, read, write, close, seek, tell, file_exists
   - Command-line arguments: built-in `args` array
   - **Async/Concurrency:** async/await syntax, spawn/join/detach, channels with send/recv/close, pthread-based true parallelism, exception propagation
-  - **Architecture:** Modular interpreter (environment, values, types, builtins, io, runtime)
-  - 180+ tests (all tests passing including 10 async/concurrency tests)
-- **v0.2** - FFI, C interop (planned)
-- **v0.3** - Compiler backend, optimization (planned)
+  - **FFI (Foreign Function Interface):** Call C functions from shared libraries using libffi, support for all primitive types, automatic type conversion
+  - **Architecture:** Modular interpreter (environment, values, types, builtins, io, runtime, ffi)
+  - 216 tests (all tests passing including 10 async/concurrency tests and 3 FFI tests)
+- **v0.2** - Compiler backend, optimization (planned)
+- **v0.3** - Advanced features (planned)
 
 ---
 

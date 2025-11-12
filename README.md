@@ -25,6 +25,7 @@ Hemlock is a systems scripting language that combines the power of C with the er
 - **Error handling** - try/catch/finally/throw for exception-based error handling
 - **Command-line arguments** - Access program arguments via built-in `args` array
 - **Structured concurrency** - async/await syntax, real OS threads via pthreads, thread-safe channels
+- **Foreign Function Interface** - Call C functions from shared libraries directly
 
 ## Quick Examples
 
@@ -257,7 +258,40 @@ print("Total: " + typeof(total));
 - ✅ Exception propagation across thread boundaries
 - ✅ Same threading model as C/C++/Rust
 
+### Foreign Function Interface (FFI)
+```hemlock
+// Call C functions from shared libraries
+import "libc.so.6";
+
+extern fn strlen(s: string): i32;
+extern fn getpid(): i32;
+
+let msg = "Hello from Hemlock!";
+let len = strlen(msg);
+let pid = getpid();
+
+print("String length: " + typeof(len));  // 19
+print("Process ID: " + typeof(pid));     // e.g., 5086
+```
+
+**Supported types:**
+- Primitive types: i8, i16, i32, u8, u16, u32, f32, f64
+- Special types: bool, string, ptr, void
+- Automatic type conversion between Hemlock and C
+- Thread-safe library loading
+
 ## Building
+
+### Dependencies
+
+On Ubuntu/Debian:
+```bash
+sudo apt-get install libffi-dev
+```
+
+On other Linux distributions, install the equivalent `libffi` development package.
+
+### Compile
 
 ```bash
 make
@@ -297,6 +331,7 @@ Hemlock is currently in early development (v0.1). The following features are imp
 - ✅ File I/O (open, read, write, close, seek, tell)
 - ✅ Command-line arguments (built-in `args` array)
 - ✅ Async/await and structured concurrency (real OS threads via pthreads, channels, spawn/join/detach)
+- ✅ Foreign Function Interface (FFI) for calling C functions from shared libraries
 
 ## Why Hemlock?
 

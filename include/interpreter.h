@@ -26,6 +26,7 @@ typedef enum {
     VAL_TYPE,           // Represents a type (for sizeof, talloc, etc.)
     VAL_BUILTIN_FN,
     VAL_FUNCTION,       // User-defined function
+    VAL_FFI_FUNCTION,   // FFI function
     VAL_TASK,           // Async task handle
     VAL_CHANNEL,        // Communication channel
     VAL_NULL,
@@ -147,6 +148,7 @@ typedef struct Value {
         TypeKind as_type;
         BuiltinFn as_builtin_fn;
         Function *as_function;
+        void *as_ffi_function;  // FFIFunction* (opaque)
         Task *as_task;
         Channel *as_channel;
     } as;

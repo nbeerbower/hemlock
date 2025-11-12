@@ -412,6 +412,23 @@ Stmt* stmt_export_reexport(char **export_names, char **export_aliases, int num_e
     return stmt;
 }
 
+Stmt* stmt_import_ffi(const char *library_path) {
+    Stmt *stmt = malloc(sizeof(Stmt));
+    stmt->type = STMT_IMPORT_FFI;
+    stmt->as.import_ffi.library_path = strdup(library_path);
+    return stmt;
+}
+
+Stmt* stmt_extern_fn(const char *function_name, Type **param_types, int num_params, Type *return_type) {
+    Stmt *stmt = malloc(sizeof(Stmt));
+    stmt->type = STMT_EXTERN_FN;
+    stmt->as.extern_fn.function_name = strdup(function_name);
+    stmt->as.extern_fn.param_types = param_types;
+    stmt->as.extern_fn.num_params = num_params;
+    stmt->as.extern_fn.return_type = return_type;
+    return stmt;
+}
+
 // ========== CLONING ==========
 
 Expr* expr_clone(const Expr *expr) {
@@ -772,6 +789,21 @@ void stmt_free(Stmt *stmt) {
                 }
                 free(stmt->as.export_stmt.export_names);
                 free(stmt->as.export_stmt.export_aliases);
+            }
+            break;
+        case STMT_IMPORT_FFI:
+            free(stmt->as.import_ffi.library_path);
+            break;
+        case STMT_EXTERN_FN:
+            free(stmt->as.extern_fn.function_name);
+            for (int i = 0; i < stmt->as.extern_fn.num_params; i++) {
+                if (stmt->as.extern_fn.param_types[i]) {
+                    type_free(stmt->as.extern_fn.param_types[i]);
+                }
+            }
+            free(stmt->as.extern_fn.param_types);
+            if (stmt->as.extern_fn.return_type) {
+                type_free(stmt->as.extern_fn.return_type);
             }
             break;
     }

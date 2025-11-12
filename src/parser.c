@@ -591,6 +591,7 @@ static Type* parse_type(Parser *p) {
         case TOK_TYPE_STRING: kind = TYPE_STRING; break;
         case TOK_TYPE_PTR: kind = TYPE_PTR; break;
         case TOK_TYPE_BUFFER: kind = TYPE_BUFFER; break;
+        case TOK_TYPE_VOID: kind = TYPE_VOID; break;
         default:
             error_at_current(p, "Expect type name");
             return type_new(TYPE_INFER);
@@ -868,6 +869,17 @@ static Stmt* return_statement(Parser *p) {
 }
 
 static Stmt* import_statement(Parser *p) {
+    // Check for FFI import: import "library.so"
+    if (check(p, TOK_STRING)) {
+        advance(p);
+        char *library_path = p->previous.string_value;
+        consume(p, TOK_SEMICOLON, "Expect ';' after FFI import");
+
+        Stmt *stmt = stmt_import_ffi(library_path);
+        free(library_path);
+        return stmt;
+    }
+
     // Check for namespace import: import * as name from "module"
     if (match(p, TOK_STAR)) {
         consume(p, TOK_AS, "Expect 'as' after '*' in namespace import");
@@ -887,7 +899,7 @@ static Stmt* import_statement(Parser *p) {
     }
 
     // Named imports: import { name1, name2 as alias } from "module"
-    consume(p, TOK_LBRACE, "Expect '{' or '*' after 'import'");
+    consume(p, TOK_LBRACE, "Expect '{', '*', or string after 'import'");
 
     char **import_names = malloc(sizeof(char*) * 32);
     char **import_aliases = malloc(sizeof(char*) * 32);
@@ -1029,6 +1041,43 @@ static Stmt* export_statement(Parser *p) {
     free(name);
 
     return stmt_export_declaration(decl);
+}
+
+static Stmt* extern_fn_statement(Parser *p) {
+    // extern fn name(param1: type1, param2: type2): return_type;
+    consume(p, TOK_FN, "Expect 'fn' after 'extern'");
+    consume(p, TOK_IDENT, "Expect function name");
+    char *function_name = token_text(&p->previous);
+
+    consume(p, TOK_LPAREN, "Expect '(' after function name");
+
+    // Parse parameters
+    Type **param_types = malloc(sizeof(Type*) * 32);
+    int num_params = 0;
+
+    if (!check(p, TOK_RPAREN)) {
+        do {
+            // Parameter name is not used in FFI, but required for syntax
+            consume(p, TOK_IDENT, "Expect parameter name");
+            consume(p, TOK_COLON, "Expect ':' after parameter name in extern declaration");
+            param_types[num_params] = parse_type(p);
+            num_params++;
+        } while (match(p, TOK_COMMA));
+    }
+
+    consume(p, TOK_RPAREN, "Expect ')' after parameters");
+
+    // Parse return type (optional, defaults to void)
+    Type *return_type = NULL;
+    if (match(p, TOK_COLON)) {
+        return_type = parse_type(p);
+    }
+
+    consume(p, TOK_SEMICOLON, "Expect ';' after extern declaration");
+
+    Stmt *stmt = stmt_extern_fn(function_name, param_types, num_params, return_type);
+    free(function_name);
+    return stmt;
 }
 
 static Stmt* statement(Parser *p) {
@@ -1262,6 +1311,10 @@ not_function:
 
     if (match(p, TOK_EXPORT)) {
         return export_statement(p);
+    }
+
+    if (match(p, TOK_EXTERN)) {
+        return extern_fn_statement(p);
     }
 
     // Bare block statement

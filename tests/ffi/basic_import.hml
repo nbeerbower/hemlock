@@ -1,0 +1,4 @@
+// Test: Basic FFI library import
+import "libc.so.6";
+
+print("FFI library imported successfully");

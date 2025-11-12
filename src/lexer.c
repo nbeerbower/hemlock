@@ -169,7 +169,10 @@ static TokenType identifier_type(Lexer *lex) {
             break;
         case 'e':
             if (len == 4) return check_keyword(lex->start, 4, "else", TOK_ELSE);
-            if (len == 6) return check_keyword(lex->start, 6, "export", TOK_EXPORT);
+            if (len == 6) {
+                if (strncmp(lex->start, "export", 6) == 0) return TOK_EXPORT;
+                if (strncmp(lex->start, "extern", 6) == 0) return TOK_EXTERN;
+            }
             break;
         case 'f':
             if (len == 2) return check_keyword(lex->start, 2, "fn", TOK_FN);
@@ -233,6 +236,9 @@ static TokenType identifier_type(Lexer *lex) {
                 if (strncmp(lex->start, "u16", 3) == 0) return TOK_TYPE_U16;
                 if (strncmp(lex->start, "u32", 3) == 0) return TOK_TYPE_U32;
             }
+            break;
+        case 'v':
+            if (len == 4) return check_keyword(lex->start, 4, "void", TOK_TYPE_VOID);
             break;
         case 'w':
             if (len == 5) return check_keyword(lex->start, 5, "while", TOK_WHILE);

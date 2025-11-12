@@ -468,6 +468,10 @@ Value eval_expr(Expr *expr, Environment *env, ExecutionContext *ctx) {
                 // NOTE: We don't free call_env here because closures might reference it
                 // This is a known memory leak in v0.1, to be fixed with refcounting in v0.2
                 // env_free(call_env);
+            } else if (func.type == VAL_FFI_FUNCTION) {
+                // Call FFI function
+                FFIFunction *ffi_func = (FFIFunction*)func.as.as_ffi_function;
+                result = ffi_call_function(ffi_func, args, expr->as.call.num_args, ctx);
             } else {
                 fprintf(stderr, "Runtime error: Value is not a function\n");
                 exit(1);
@@ -1296,6 +1300,14 @@ void eval_stmt(Stmt *stmt, Environment *env, ExecutionContext *ctx) {
         case STMT_IMPORT:
             // Import statements are handled by the module system during module loading
             // If we encounter one here, it's a no-op (module has already been loaded)
+            break;
+
+        case STMT_IMPORT_FFI:
+            execute_import_ffi(stmt, ctx);
+            break;
+
+        case STMT_EXTERN_FN:
+            execute_extern_fn(stmt, env, ctx);
             break;
 
         case STMT_EXPORT:

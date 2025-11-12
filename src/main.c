@@ -7,6 +7,10 @@
 #include "interpreter.h"
 #include "module.h"
 
+// FFI functions (from interpreter/ffi.c)
+extern void ffi_init(void);
+extern void ffi_cleanup(void);
+
 // Read entire file into a string (caller must free)
 static char* read_file(const char *path) {
     FILE *file = fopen(path, "rb");
@@ -105,6 +109,9 @@ static void run_file(const char *path, int argc, char **argv) {
         exit(1);
     }
 
+    // Initialize FFI
+    ffi_init();
+
     // Check if file uses modules
     if (has_modules(source)) {
         // Use module system
@@ -121,6 +128,9 @@ static void run_file(const char *path, int argc, char **argv) {
         exec_context_free(ctx);
         free(source);
 
+        // Cleanup FFI
+        ffi_cleanup();
+
         if (result != 0) {
             exit(1);
         }
@@ -128,6 +138,9 @@ static void run_file(const char *path, int argc, char **argv) {
         // Use traditional execution
         run_source(source, argc, argv);
         free(source);
+
+        // Cleanup FFI
+        ffi_cleanup();
     }
 }
 
@@ -137,6 +150,9 @@ static void run_repl(void) {
 
     // Create execution context for REPL (persists across lines)
     ExecutionContext *ctx = exec_context_new();
+
+    // Initialize FFI
+    ffi_init();
 
     register_builtins(env, 0, NULL, ctx);
 
@@ -189,6 +205,9 @@ static void run_repl(void) {
         }
         free(statements);
     }
+
+    // Cleanup FFI
+    ffi_cleanup();
 
     exec_context_free(ctx);
     env_free(env);

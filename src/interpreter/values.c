@@ -578,6 +578,9 @@ void print_value(Value val) {
         case VAL_FUNCTION:
             printf("<function>");
             break;
+        case VAL_FFI_FUNCTION:
+            printf("<ffi function>");
+            break;
         case VAL_TASK:
             printf("<task id=%d state=%d>", val.as.as_task->id, val.as.as_task->state);
             break;
@@ -647,6 +650,12 @@ void value_free(Value val) {
                 // Note: closure_env and body are not freed (shared/owned by AST)
                 // This is a known limitation in v0.1
                 free(fn);
+            }
+            break;
+        case VAL_FFI_FUNCTION:
+            if (val.as.as_ffi_function) {
+                // FFI functions are managed by the FFI module
+                // Don't free them here
             }
             break;
         case VAL_TASK:

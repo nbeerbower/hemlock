@@ -1,0 +1,7 @@
+// Test: FFI getpid function (no parameters)
+import "libc.so.6";
+
+extern fn getpid(): i32;
+
+let pid = getpid();
+print(pid);

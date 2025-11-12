@@ -1,0 +1,9 @@
+// Test: FFI strlen function
+import "libc.so.6";
+
+extern fn strlen(s: string): i32;
+
+let msg = "Hello, Hemlock!";
+let len = strlen(msg);
+
+print(len);

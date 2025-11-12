@@ -40,6 +40,7 @@ typedef enum {
     TOK_EXPORT,
     TOK_FROM,
     TOK_AS,
+    TOK_EXTERN,
 
     // Type keywords
     TOK_TYPE_I8,
@@ -58,6 +59,7 @@ typedef enum {
     TOK_TYPE_STRING,
     TOK_TYPE_PTR,
     TOK_TYPE_BUFFER,
+    TOK_TYPE_VOID,
 
     // Operators
     TOK_PLUS,
