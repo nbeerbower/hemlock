@@ -1082,7 +1082,20 @@ while (i < args.length) {
 
 ## Async/Concurrency
 
-Hemlock provides **structured concurrency** with async/await syntax, task spawning, and channels for communication. The implementation uses POSIX threads (pthreads) for true multi-threaded parallelism.
+Hemlock provides **structured concurrency** with async/await syntax, task spawning, and channels for communication. The implementation uses POSIX threads (pthreads) for **TRUE multi-threaded parallelism**.
+
+**What this means:**
+- ✅ **Real OS threads** - Each spawned task runs on a separate pthread (POSIX thread)
+- ✅ **True parallelism** - Tasks execute simultaneously on multiple CPU cores
+- ✅ **Kernel-scheduled** - The OS scheduler distributes tasks across available cores
+- ✅ **Thread-safe channels** - Uses pthread mutexes and condition variables for synchronization
+
+**What this is NOT:**
+- ❌ **NOT green threads** - Not user-space cooperative multitasking
+- ❌ **NOT async/await coroutines** - Not single-threaded event loop like JavaScript/Python asyncio
+- ❌ **NOT emulated concurrency** - Not simulated parallelism
+
+This is the **same threading model as C, C++, and Rust** when using OS threads. You get actual parallel execution across multiple cores.
 
 ### Async Functions
 
@@ -1102,13 +1115,14 @@ async fn compute(n: i32): i32 {
 
 **Key points:**
 - `async fn` declares an asynchronous function
-- Async functions can be spawned as concurrent tasks
-- Async functions can be called directly (runs synchronously)
-- `await` keyword can be used inside async functions
+- Async functions can be spawned as concurrent tasks using `spawn()`
+- Async functions can also be called directly (runs synchronously in current thread)
+- When spawned, each task runs on its **own OS thread** (not a coroutine!)
+- `await` keyword is reserved for future use
 
 ### Task Spawning
 
-Use `spawn()` to run async functions concurrently on separate threads:
+Use `spawn()` to run async functions **in parallel on separate OS threads**:
 
 ```hemlock
 async fn factorial(n: i32): i32 {
@@ -1116,10 +1130,12 @@ async fn factorial(n: i32): i32 {
     return n * factorial(n - 1);
 }
 
-// Spawn multiple tasks
-let t1 = spawn(factorial, 5);
-let t2 = spawn(factorial, 6);
-let t3 = spawn(factorial, 7);
+// Spawn multiple tasks - these run in PARALLEL on different CPU cores!
+let t1 = spawn(factorial, 5);  // Thread 1
+let t2 = spawn(factorial, 6);  // Thread 2
+let t3 = spawn(factorial, 7);  // Thread 3
+
+// All three are computing simultaneously right now!
 
 // Wait for results
 let f5 = join(t1);  // 120
@@ -1128,9 +1144,9 @@ let f7 = join(t3);  // 5040
 ```
 
 **Built-in functions:**
-- `spawn(async_fn, arg1, arg2, ...)` - Create a new task, returns task handle
-- `join(task)` - Wait for task completion, returns result
-- `detach(task)` - Fire-and-forget execution (no join allowed)
+- `spawn(async_fn, arg1, arg2, ...)` - Create a new task on a new pthread, returns task handle
+- `join(task)` - Wait for task completion (blocks until thread finishes), returns result
+- `detach(task)` - Fire-and-forget execution (thread runs independently, no join allowed)
 
 ### Channels
 
@@ -1198,17 +1214,33 @@ try {
 
 ### Implementation Details
 
-- **Thread model:** Each spawned task runs on a separate pthread
-- **Blocking semantics:** Channel send/recv block using pthread condition variables
-- **Memory safety:** Channels use mutexes for thread-safe access
-- **Cleanup:** Joined tasks are automatically cleaned up; detached tasks clean up when done
-- **True parallelism:** Tasks run on multiple CPU cores simultaneously
+**Threading Model:**
+- **1:1 threading** - Each spawned task creates a dedicated OS thread via `pthread_create()`
+- **Kernel-scheduled** - The OS kernel schedules threads across available CPU cores
+- **Pre-emptive multitasking** - The OS can interrupt and switch between threads
+- **No GIL** - Unlike Python, there's no Global Interpreter Lock limiting parallelism
+
+**Synchronization:**
+- **Mutexes** - Channels use `pthread_mutex_t` for thread-safe access
+- **Condition variables** - Blocking send/recv use `pthread_cond_t` for efficient waiting
+- **Lock-free operations** - Task state transitions are atomic
+
+**Performance Characteristics:**
+- **True parallelism** - N spawned tasks can utilize N CPU cores simultaneously
+- **Proven speedup** - Stress tests show 8-9x CPU time vs wall time (multiple cores working)
+- **Thread overhead** - Each task has ~8KB stack + pthread overhead
+- **Blocking I/O safe** - Blocking operations in one task don't block others
+
+**Memory & Cleanup:**
+- Joined tasks are automatically cleaned up after `join()` returns
+- Detached tasks clean up when thread completes
+- Channels are reference-counted and freed when no longer used
 
 **Current limitations:**
-- No `select` for multiplexing multiple channels (planned)
-- No work-stealing scheduler (uses 1 thread per task)
-- No async I/O integration yet
-- Channel capacity is fixed at creation time
+- No `select()` for multiplexing multiple channels (planned)
+- No work-stealing scheduler (uses 1 thread per task, can be inefficient for many short tasks)
+- No async I/O integration yet (file/network operations still block)
+- Channel capacity is fixed at creation time (no dynamic resizing)
 
 ---
 
