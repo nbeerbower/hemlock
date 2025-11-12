@@ -24,7 +24,7 @@ Hemlock is a systems scripting language that combines the power of C with the er
 - **Mutable strings** - First-class UTF-8 strings with indexing and concatenation
 - **Error handling** - try/catch/finally/throw for exception-based error handling
 - **Command-line arguments** - Access program arguments via built-in `args` array
-- **Structured concurrency** - async/await, spawn/join/detach (coming soon)
+- **Structured concurrency** - async/await syntax, real OS threads via pthreads, thread-safe channels
 
 ## Quick Examples
 
@@ -193,6 +193,70 @@ try {
 }
 ```
 
+### Async/Concurrency (TRUE Multi-Threading!)
+```hemlock
+// Async functions for concurrent execution
+async fn compute(n: i32): i32 {
+    let sum = 0;
+    let i = 0;
+    while (i < n) {
+        sum = sum + i;
+        i = i + 1;
+    }
+    return sum;
+}
+
+// Spawn tasks on separate OS threads (real pthreads!)
+let t1 = spawn(compute, 1000);
+let t2 = spawn(compute, 2000);
+let t3 = spawn(compute, 3000);
+
+// Wait for results (all three computing in parallel!)
+let r1 = join(t1);
+let r2 = join(t2);
+let r3 = join(t3);
+
+print("Results: " + typeof(r1) + ", " + typeof(r2) + ", " + typeof(r3));
+```
+
+**Producer-Consumer with Channels:**
+```hemlock
+async fn producer(ch, count: i32) {
+    let i = 0;
+    while (i < count) {
+        ch.send(i * 10);
+        i = i + 1;
+    }
+    ch.close();
+    return null;
+}
+
+async fn consumer(ch): i32 {
+    let sum = 0;
+    let val = ch.recv();
+    while (val != null) {
+        sum = sum + val;
+        val = ch.recv();
+    }
+    return sum;
+}
+
+let ch = channel(10);
+let p = spawn(producer, ch, 5);
+let c = spawn(consumer, ch);
+
+join(p);
+let total = join(c);  // 100
+print("Total: " + typeof(total));
+```
+
+**What makes this special:**
+- ✅ Real OS threads (POSIX pthreads) - not green threads or coroutines
+- ✅ True parallelism across multiple CPU cores
+- ✅ Thread-safe channels with blocking send/recv
+- ✅ Exception propagation across thread boundaries
+- ✅ Same threading model as C/C++/Rust
+
 ## Building
 
 ```bash
@@ -232,7 +296,7 @@ Hemlock is currently in early development (v0.1). The following features are imp
 - ✅ Error handling (try/catch/finally/throw)
 - ✅ File I/O (open, read, write, close, seek, tell)
 - ✅ Command-line arguments (built-in `args` array)
-- 🚧 Async/await and structured concurrency
+- ✅ Async/await and structured concurrency (real OS threads via pthreads, channels, spawn/join/detach)
 
 ## Why Hemlock?
 
