@@ -367,6 +367,15 @@ Value eval_expr(Expr *expr, Environment *env, ExecutionContext *ctx) {
                 }
             }
 
+            // Object comparisons (reference equality)
+            if (left.type == VAL_OBJECT && right.type == VAL_OBJECT) {
+                if (expr->as.binary.op == OP_EQUAL) {
+                    return val_bool(left.as.as_object == right.as.as_object);
+                } else if (expr->as.binary.op == OP_NOT_EQUAL) {
+                    return val_bool(left.as.as_object != right.as.as_object);
+                }
+            }
+
             // Cross-type equality comparisons (before numeric type check)
             // If types are different and not both numeric, == returns false, != returns true
             if (expr->as.binary.op == OP_EQUAL || expr->as.binary.op == OP_NOT_EQUAL) {

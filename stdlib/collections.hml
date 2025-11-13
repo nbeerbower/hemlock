@@ -162,8 +162,13 @@ export fn HashMap() {
         bucket_count = bucket_count * 2;
         buckets = [];
 
-        // Initialize new buckets
+        // Declare all loop variables at the top
         let i = 0;
+        let j = 0;
+        let bucket = null;
+        let entry = null;
+
+        // Initialize new buckets
         while (i < bucket_count) {
             buckets.push([]);
             i = i + 1;
@@ -172,15 +177,16 @@ export fn HashMap() {
         // Rehash all entries
         item_count = 0;
         i = 0;
-        let bucket = null;
-        let j = 0;
-        let entry = null;
         while (i < old_buckets.length) {
             bucket = old_buckets[i];
             j = 0;
             while (j < bucket.length) {
                 entry = bucket[j];
-                self.set(entry.key, entry.value);
+                // Directly add entry to new buckets (can't use self.set here)
+                let idx = get_bucket_index(entry.key);
+                let new_bucket = buckets[idx];
+                new_bucket.push(entry);
+                item_count = item_count + 1;
                 j = j + 1;
             }
             i = i + 1;
