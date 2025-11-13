@@ -1175,6 +1175,7 @@ Value eval_expr(Expr *expr, Environment *env, ExecutionContext *ctx) {
             } else {
                 runtime_error(ctx, "Invalid operand for ++");
             }
+            return val_null();  // Unreachable, but silences fallthrough warning
         }
 
         case EXPR_PREFIX_DEC: {
@@ -1222,6 +1223,7 @@ Value eval_expr(Expr *expr, Environment *env, ExecutionContext *ctx) {
             } else {
                 runtime_error(ctx, "Invalid operand for --");
             }
+            return val_null();  // Unreachable, but silences fallthrough warning
         }
 
         case EXPR_POSTFIX_INC: {
@@ -1269,6 +1271,7 @@ Value eval_expr(Expr *expr, Environment *env, ExecutionContext *ctx) {
             } else {
                 runtime_error(ctx, "Invalid operand for ++");
             }
+            return val_null();  // Unreachable, but silences fallthrough warning
         }
 
         case EXPR_POSTFIX_DEC: {
@@ -1316,6 +1319,7 @@ Value eval_expr(Expr *expr, Environment *env, ExecutionContext *ctx) {
             } else {
                 runtime_error(ctx, "Invalid operand for --");
             }
+            return val_null();  // Unreachable, but silences fallthrough warning
         }
 
         case EXPR_AWAIT: {

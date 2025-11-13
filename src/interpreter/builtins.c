@@ -146,15 +146,34 @@ static Value builtin_free(Value *args, int num_args, ExecutionContext *ctx) {
         free(args[0].as.as_ptr);
         return val_null();
     } else if (args[0].type == VAL_BUFFER) {
-        buffer_free(args[0].as.as_buffer);
+        // Manually free and set ref_count to 0 to prevent double-free
+        if (args[0].as.as_buffer->ref_count > 0) {
+            args[0].as.as_buffer->ref_count = 0;
+            free(args[0].as.as_buffer->data);
+            free(args[0].as.as_buffer);
+        }
         return val_null();
     } else if (args[0].type == VAL_OBJECT) {
-        // Free object with cycle detection
-        object_free(args[0].as.as_object);
+        // Manually free and set ref_count to 0 to prevent double-free
+        if (args[0].as.as_object->ref_count > 0) {
+            args[0].as.as_object->ref_count = 0;
+            // Need to free object contents manually here
+            if (args[0].as.as_object->type_name) free(args[0].as.as_object->type_name);
+            for (int i = 0; i < args[0].as.as_object->num_fields; i++) {
+                free(args[0].as.as_object->field_names[i]);
+            }
+            free(args[0].as.as_object->field_names);
+            free(args[0].as.as_object->field_values);
+            free(args[0].as.as_object);
+        }
         return val_null();
     } else if (args[0].type == VAL_ARRAY) {
-        // Free array with cycle detection
-        array_free(args[0].as.as_array);
+        // Manually free and set ref_count to 0 to prevent double-free
+        if (args[0].as.as_array->ref_count > 0) {
+            args[0].as.as_array->ref_count = 0;
+            free(args[0].as.as_array->elements);
+            free(args[0].as.as_array);
+        }
         return val_null();
     } else {
         fprintf(stderr, "Runtime error: free() requires a pointer, buffer, object, or array\n");
@@ -1728,6 +1747,7 @@ static Value builtin_clamp(Value *args, int num_args, ExecutionContext *ctx) {
 }
 
 static Value builtin_rand(Value *args, int num_args, ExecutionContext *ctx) {
+    (void)args;
     (void)ctx;
     if (num_args != 0) {
         fprintf(stderr, "Runtime error: rand() expects no arguments\n");
@@ -1770,6 +1790,7 @@ static Value builtin_seed(Value *args, int num_args, ExecutionContext *ctx) {
 // ========== TIME BUILTIN FUNCTIONS ==========
 
 static Value builtin_now(Value *args, int num_args, ExecutionContext *ctx) {
+    (void)args;
     (void)ctx;
     if (num_args != 0) {
         fprintf(stderr, "Runtime error: now() expects no arguments\n");
@@ -1779,6 +1800,7 @@ static Value builtin_now(Value *args, int num_args, ExecutionContext *ctx) {
 }
 
 static Value builtin_time_ms(Value *args, int num_args, ExecutionContext *ctx) {
+    (void)args;
     (void)ctx;
     if (num_args != 0) {
         fprintf(stderr, "Runtime error: time_ms() expects no arguments\n");
@@ -1814,6 +1836,7 @@ static Value builtin_sleep(Value *args, int num_args, ExecutionContext *ctx) {
 }
 
 static Value builtin_clock(Value *args, int num_args, ExecutionContext *ctx) {
+    (void)args;
     (void)ctx;
     if (num_args != 0) {
         fprintf(stderr, "Runtime error: clock() expects no arguments\n");
@@ -1940,6 +1963,7 @@ static Value builtin_exit(Value *args, int num_args, ExecutionContext *ctx) {
 }
 
 static Value builtin_get_pid(Value *args, int num_args, ExecutionContext *ctx) {
+    (void)args;
     (void)ctx;
     if (num_args != 0) {
         fprintf(stderr, "Runtime error: get_pid() expects no arguments\n");
