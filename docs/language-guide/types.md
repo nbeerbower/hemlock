@@ -1,0 +1,512 @@
+# Type System
+
+Hemlock features a **dynamic type system** with optional type annotations and runtime type checking.
+
+## Philosophy
+
+- **Dynamic by default** - Every value has a runtime type tag
+- **Typed by choice** - Optional type annotations enforce runtime checks
+- **Explicit conversions** - Implicit conversions follow clear promotion rules
+- **Honest about types** - `typeof()` always tells the truth
+
+## Primitive Types
+
+### Integer Types
+
+**Signed integers:**
+```hemlock
+let tiny: i8 = 127;              // 8-bit  (-128 to 127)
+let small: i16 = 32767;          // 16-bit (-32768 to 32767)
+let normal: i32 = 2147483647;    // 32-bit (default)
+let large: i64 = 9223372036854775807;  // 64-bit
+```
+
+**Unsigned integers:**
+```hemlock
+let byte: u8 = 255;              // 8-bit  (0 to 255)
+let word: u16 = 65535;           // 16-bit (0 to 65535)
+let dword: u32 = 4294967295;     // 32-bit (0 to 4294967295)
+let qword: u64 = 18446744073709551615;  // 64-bit
+```
+
+**Type aliases:**
+```hemlock
+let i: integer = 42;   // Alias for i32
+let b: byte = 255;     // Alias for u8
+```
+
+### Floating-Point Types
+
+```hemlock
+let f: f32 = 3.14159;        // 32-bit float
+let d: f64 = 2.718281828;    // 64-bit float (default)
+let n: number = 1.618;       // Alias for f64
+```
+
+### Boolean Type
+
+```hemlock
+let flag: bool = true;
+let active: bool = false;
+```
+
+### String Type
+
+```hemlock
+let text: string = "Hello, World!";
+let empty: string = "";
+```
+
+Strings are **mutable**, **UTF-8 encoded**, and **heap-allocated**.
+
+See [Strings](strings.md) for full details.
+
+### Rune Type
+
+```hemlock
+let ch: rune = 'A';
+let emoji: rune = '🚀';
+let newline: rune = '\n';
+let unicode: rune = '\u{1F680}';
+```
+
+Runes represent **Unicode codepoints** (U+0000 to U+10FFFF).
+
+See [Runes](runes.md) for full details.
+
+### Null Type
+
+```hemlock
+let nothing = null;
+let uninitialized: string = null;
+```
+
+`null` is its own type with a single value.
+
+## Composite Types
+
+### Array Type
+
+```hemlock
+let numbers: array = [1, 2, 3, 4, 5];
+let mixed = [1, "two", true, null];  // Mixed types allowed
+let empty: array = [];
+```
+
+See [Arrays](arrays.md) for full details.
+
+### Object Type
+
+```hemlock
+let obj: object = { x: 10, y: 20 };
+let person = { name: "Alice", age: 30 };
+```
+
+See [Objects](objects.md) for full details.
+
+### Pointer Types
+
+**Raw pointer:**
+```hemlock
+let p: ptr = alloc(64);
+// No bounds checking, manual lifetime management
+free(p);
+```
+
+**Safe buffer:**
+```hemlock
+let buf: buffer = buffer(64);
+// Bounds-checked, tracks length and capacity
+free(buf);
+```
+
+See [Memory Management](memory.md) for full details.
+
+## Special Types
+
+### File Type
+
+```hemlock
+let f: file = open("data.txt", "r");
+f.close();
+```
+
+Represents an open file handle.
+
+### Task Type
+
+```hemlock
+async fn compute(): i32 { return 42; }
+let task = spawn(compute);
+let result: i32 = join(task);
+```
+
+Represents an async task handle.
+
+### Channel Type
+
+```hemlock
+let ch: channel = channel(10);
+ch.send(42);
+let value = ch.recv();
+```
+
+Represents a communication channel between tasks.
+
+### Void Type
+
+```hemlock
+extern fn exit(code: i32): void;
+```
+
+Used for functions that don't return a value (FFI only).
+
+## Type Inference
+
+### Integer Literal Inference
+
+Hemlock infers integer types based on value range:
+
+```hemlock
+let a = 42;              // i32 (fits in 32-bit)
+let b = 5000000000;      // i64 (> i32 max)
+let c = 128;             // i32
+let d: u8 = 128;         // u8 (explicit annotation)
+```
+
+**Rules:**
+- Values in i32 range (-2147483648 to 2147483647): infer as `i32`
+- Values outside i32 range but within i64: infer as `i64`
+- Use explicit annotations for other types (i8, i16, u8, u16, u32, u64)
+
+### Float Literal Inference
+
+```hemlock
+let x = 3.14;        // f64 (default)
+let y: f32 = 3.14;   // f32 (explicit)
+```
+
+### Other Type Inference
+
+```hemlock
+let s = "hello";     // string
+let ch = 'A';        // rune
+let flag = true;     // bool
+let arr = [1, 2, 3]; // array
+let obj = { x: 10 }; // object
+let nothing = null;  // null
+```
+
+## Type Annotations
+
+### Variable Annotations
+
+```hemlock
+let age: i32 = 30;
+let ratio: f64 = 1.618;
+let name: string = "Alice";
+```
+
+### Function Parameter Annotations
+
+```hemlock
+fn greet(name: string, age: i32) {
+    print("Hello, " + name + "!");
+}
+```
+
+### Function Return Type Annotations
+
+```hemlock
+fn add(a: i32, b: i32): i32 {
+    return a + b;
+}
+```
+
+### Object Type Annotations (Duck Typing)
+
+```hemlock
+define Person {
+    name: string,
+    age: i32,
+}
+
+let p: Person = { name: "Bob", age: 25 };
+```
+
+## Type Checking
+
+### Runtime Type Checking
+
+Type annotations are checked at **runtime**, not compile-time:
+
+```hemlock
+let x: i32 = 42;     // OK
+let y: i32 = 3.14;   // Runtime error: type mismatch
+
+fn add(a: i32, b: i32): i32 {
+    return a + b;
+}
+
+add(5, 3);           // OK
+add(5, "hello");     // Runtime error: type mismatch
+```
+
+### Type Queries
+
+Use `typeof()` to check value types:
+
+```hemlock
+print(typeof(42));         // "i32"
+print(typeof(3.14));       // "f64"
+print(typeof("hello"));    // "string"
+print(typeof(true));       // "bool"
+print(typeof(null));       // "null"
+print(typeof([1, 2, 3]));  // "array"
+print(typeof({ x: 10 }));  // "object"
+```
+
+## Type Conversions
+
+### Implicit Type Promotion
+
+When mixing types in operations, Hemlock promotes to the "higher" type:
+
+**Promotion Hierarchy (lowest to highest):**
+```
+i8 → i16 → i32 → u32 → i64 → u64 → f32 → f64
+      ↑     ↑     ↑
+     u8    u16
+```
+
+**Float always wins:**
+```hemlock
+let x: i32 = 10;
+let y: f64 = 3.5;
+let result = x + y;  // result is f64 (13.5)
+```
+
+**Larger size wins:**
+```hemlock
+let a: i32 = 100;
+let b: i64 = 200;
+let sum = a + b;     // sum is i64 (300)
+```
+
+**Examples:**
+```hemlock
+u8 + i32  → i32
+i32 + i64 → i64
+u32 + u64 → u64
+i32 + f32 → f32
+i64 + f64 → f64
+i8 + f64  → f64
+```
+
+### Explicit Type Conversion
+
+**Integer ↔ Float:**
+```hemlock
+let i: i32 = 42;
+let f: f64 = i;      // i32 → f64 (42.0)
+
+let x: f64 = 3.14;
+let n: i32 = x;      // f64 → i32 (3, truncated)
+```
+
+**Integer ↔ Rune:**
+```hemlock
+let code: i32 = 65;
+let ch: rune = code;  // i32 → rune ('A')
+
+let r: rune = 'Z';
+let value: i32 = r;   // rune → i32 (90)
+```
+
+**Rune → String:**
+```hemlock
+let ch: rune = '🚀';
+let s: string = ch;   // rune → string ("🚀")
+```
+
+**u8 → Rune:**
+```hemlock
+let b: u8 = 65;
+let r: rune = b;      // u8 → rune ('A')
+```
+
+## Range Checking
+
+Type annotations enforce range checks at assignment:
+
+```hemlock
+let x: u8 = 255;    // OK
+let y: u8 = 256;    // ERROR: out of range for u8
+
+let a: i8 = 127;    // OK
+let b: i8 = 128;    // ERROR: out of range for i8
+
+let c: i64 = 2147483647;   // OK
+let d: u64 = 4294967295;   // OK
+let e: u64 = -1;           // ERROR: u64 cannot be negative
+```
+
+## Type Promotion Examples
+
+### Mixed Integer Types
+
+```hemlock
+let a: i8 = 10;
+let b: i32 = 20;
+let sum = a + b;     // i32 (30)
+
+let c: u8 = 100;
+let d: u32 = 200;
+let total = c + d;   // u32 (300)
+```
+
+### Integer + Float
+
+```hemlock
+let i: i32 = 5;
+let f: f32 = 2.5;
+let result = i * f;  // f32 (12.5)
+```
+
+### Complex Expressions
+
+```hemlock
+let a: i8 = 10;
+let b: i32 = 20;
+let c: f64 = 3.0;
+
+let result = a + b * c;  // f64 (70.0)
+// Evaluation: b * c → f64(60.0)
+//             a + f64(60.0) → f64(70.0)
+```
+
+## Duck Typing (Objects)
+
+Objects use **structural typing** (duck typing):
+
+```hemlock
+define Person {
+    name: string,
+    age: i32,
+}
+
+// OK: Has all required fields
+let p1: Person = { name: "Alice", age: 30 };
+
+// OK: Extra fields allowed
+let p2: Person = { name: "Bob", age: 25, city: "NYC" };
+
+// ERROR: Missing 'age' field
+let p3: Person = { name: "Carol" };
+
+// ERROR: Wrong type for 'age'
+let p4: Person = { name: "Dave", age: "thirty" };
+```
+
+**Type checking happens at assignment:**
+- Validates all required fields present
+- Validates field types match
+- Extra fields are allowed and preserved
+- Sets object's type name for `typeof()`
+
+## Optional Fields
+
+```hemlock
+define Config {
+    host: string,
+    port: i32,
+    debug?: false,     // Optional with default
+    timeout?: i32,     // Optional, defaults to null
+}
+
+let cfg1: Config = { host: "localhost", port: 8080 };
+print(cfg1.debug);    // false (default)
+print(cfg1.timeout);  // null
+
+let cfg2: Config = { host: "0.0.0.0", port: 80, debug: true };
+print(cfg2.debug);    // true (overridden)
+```
+
+## Type System Limitations
+
+Current limitations (v0.1):
+
+- **No generics** - Cannot parameterize types
+- **No union types** - Cannot express "A or B"
+- **No nullable types** - All types can be null
+- **No type aliases** - Cannot `typedef` custom types
+- **Runtime only** - No compile-time type checking
+
+## Best Practices
+
+### When to Use Type Annotations
+
+**DO use annotations when:**
+- Precise type matters (e.g., `u8` for byte values)
+- Documenting function interfaces
+- Enforcing constraints (e.g., range checks)
+
+```hemlock
+fn hash(data: buffer, length: u32): u64 {
+    // Implementation
+}
+```
+
+**DON'T use annotations when:**
+- Type is obvious from literal
+- Internal implementation details
+- Unnecessary ceremony
+
+```hemlock
+// Unnecessary
+let x: i32 = 42;
+
+// Better
+let x = 42;
+```
+
+### Type Safety Patterns
+
+**Check before use:**
+```hemlock
+if (typeof(value) == "i32") {
+    // Safe to use as i32
+}
+```
+
+**Validate function arguments:**
+```hemlock
+fn divide(a, b) {
+    if (typeof(a) != "i32" || typeof(b) != "i32") {
+        throw "arguments must be integers";
+    }
+    if (b == 0) {
+        throw "division by zero";
+    }
+    return a / b;
+}
+```
+
+**Use duck typing for flexibility:**
+```hemlock
+define Printable {
+    toString: fn,
+}
+
+fn print_item(item: Printable) {
+    print(item.toString());
+}
+```
+
+## Next Steps
+
+- [Strings](strings.md) - UTF-8 string type and operations
+- [Runes](runes.md) - Unicode codepoint type
+- [Arrays](arrays.md) - Dynamic array type
+- [Objects](objects.md) - Object literals and duck typing
+- [Memory](memory.md) - Pointer and buffer types

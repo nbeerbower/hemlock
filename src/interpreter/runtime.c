@@ -60,8 +60,16 @@ void call_stack_push(CallStack *stack, const char *function_name) {
     }
 
     stack->frames[stack->count].function_name = strdup(function_name);
-    stack->frames[stack->count].line = 0;  // TODO: Add line tracking
+    stack->frames[stack->count].line = 0;  // Set by caller
     stack->count++;
+}
+
+// Push with line number
+void call_stack_push_line(CallStack *stack, const char *function_name, int line) {
+    call_stack_push(stack, function_name);
+    if (stack->count > 0) {
+        stack->frames[stack->count - 1].line = line;
+    }
 }
 
 void call_stack_pop(CallStack *stack) {
@@ -78,7 +86,13 @@ void call_stack_print(CallStack *stack) {
 
     fprintf(stderr, "\nStack trace (most recent call first):\n");
     for (int i = stack->count - 1; i >= 0; i--) {
-        fprintf(stderr, "  at %s()\n", stack->frames[i].function_name);
+        if (stack->frames[i].line > 0) {
+            fprintf(stderr, "  at %s() (line %d)\n",
+                    stack->frames[i].function_name,
+                    stack->frames[i].line);
+        } else {
+            fprintf(stderr, "  at %s()\n", stack->frames[i].function_name);
+        }
     }
 }
 
@@ -278,17 +292,14 @@ Value eval_expr(Expr *expr, Environment *env, ExecutionContext *ctx) {
                                 if (operand.as.as_u64 <= INT64_MAX) {
                                     return val_i64(-(int64_t)operand.as.as_u64);
                                 } else {
-                                    fprintf(stderr, "Runtime error: Cannot negate u64 value larger than INT64_MAX\n");
-                                    exit(1);
+                                    runtime_error(ctx, "Cannot negate u64 value larger than INT64_MAX");
                                 }
                             }
                             default:
-                                fprintf(stderr, "Runtime error: Cannot negate non-integer value\n");
-                                exit(1);
+                                runtime_error(ctx, "Cannot negate non-integer value");
                         }
                     }
-                    fprintf(stderr, "Runtime error: Cannot negate non-numeric value\n");
-                    exit(1);
+                    runtime_error(ctx, "Cannot negate non-numeric value");
 
                 case UNARY_BIT_NOT:
                     if (is_integer(operand)) {
@@ -303,12 +314,10 @@ Value eval_expr(Expr *expr, Environment *env, ExecutionContext *ctx) {
                             case VAL_U32: return val_u32(~operand.as.as_u32);
                             case VAL_U64: return val_u64(~operand.as.as_u64);
                             default:
-                                fprintf(stderr, "Runtime error: Cannot apply bitwise NOT to non-integer value\n");
-                                exit(1);
+                                runtime_error(ctx, "Cannot apply bitwise NOT to non-integer value");
                         }
                     }
-                    fprintf(stderr, "Runtime error: Cannot apply bitwise NOT to non-integer value\n");
-                    exit(1);
+                    runtime_error(ctx, "Cannot apply bitwise NOT to non-integer value");
             }
             break;
         }
@@ -478,8 +487,7 @@ Value eval_expr(Expr *expr, Environment *env, ExecutionContext *ctx) {
 
             // Numeric operations
             if (!is_numeric(left) || !is_numeric(right)) {
-                fprintf(stderr, "Runtime error: Binary operation requires numeric operands\n");
-                exit(1);
+                runtime_error(ctx, "Binary operation requires numeric operands");
             }
 
             // Determine result type and promote operands
@@ -502,8 +510,7 @@ Value eval_expr(Expr *expr, Environment *env, ExecutionContext *ctx) {
                         return (result_type == VAL_F32) ? val_f32((float)(l * r)) : val_f64(l * r);
                     case OP_DIV:
                         if (r == 0.0) {
-                            fprintf(stderr, "Runtime error: Division by zero\n");
-                            exit(1);
+                            runtime_error(ctx, "Division by zero");
                         }
                         return (result_type == VAL_F32) ? val_f32((float)(l / r)) : val_f64(l / r);
                     case OP_EQUAL: return val_bool(l == r);
@@ -527,8 +534,7 @@ Value eval_expr(Expr *expr, Environment *env, ExecutionContext *ctx) {
                                 int8_t l = left.as.as_i8;
                                 int8_t r = right.as.as_i8;
                                 if (expr->as.binary.op == OP_DIV && r == 0) {
-                                    fprintf(stderr, "Runtime error: Division by zero\n");
-                                    exit(1);
+                                    runtime_error(ctx, "Division by zero");
                                 }
                                 int8_t result = (expr->as.binary.op == OP_ADD) ? (l + r) :
                                                (expr->as.binary.op == OP_SUB) ? (l - r) :
@@ -539,8 +545,7 @@ Value eval_expr(Expr *expr, Environment *env, ExecutionContext *ctx) {
                                 int16_t l = left.as.as_i16;
                                 int16_t r = right.as.as_i16;
                                 if (expr->as.binary.op == OP_DIV && r == 0) {
-                                    fprintf(stderr, "Runtime error: Division by zero\n");
-                                    exit(1);
+                                    runtime_error(ctx, "Division by zero");
                                 }
                                 int16_t result = (expr->as.binary.op == OP_ADD) ? (l + r) :
                                                 (expr->as.binary.op == OP_SUB) ? (l - r) :
@@ -551,8 +556,7 @@ Value eval_expr(Expr *expr, Environment *env, ExecutionContext *ctx) {
                                 int32_t l = left.as.as_i32;
                                 int32_t r = right.as.as_i32;
                                 if (expr->as.binary.op == OP_DIV && r == 0) {
-                                    fprintf(stderr, "Runtime error: Division by zero\n");
-                                    exit(1);
+                                    runtime_error(ctx, "Division by zero");
                                 }
                                 int32_t result = (expr->as.binary.op == OP_ADD) ? (l + r) :
                                                 (expr->as.binary.op == OP_SUB) ? (l - r) :
@@ -563,8 +567,7 @@ Value eval_expr(Expr *expr, Environment *env, ExecutionContext *ctx) {
                                 int64_t l = left.as.as_i64;
                                 int64_t r = right.as.as_i64;
                                 if (expr->as.binary.op == OP_DIV && r == 0) {
-                                    fprintf(stderr, "Runtime error: Division by zero\n");
-                                    exit(1);
+                                    runtime_error(ctx, "Division by zero");
                                 }
                                 int64_t result = (expr->as.binary.op == OP_ADD) ? (l + r) :
                                                 (expr->as.binary.op == OP_SUB) ? (l - r) :
@@ -575,8 +578,7 @@ Value eval_expr(Expr *expr, Environment *env, ExecutionContext *ctx) {
                                 uint8_t l = left.as.as_u8;
                                 uint8_t r = right.as.as_u8;
                                 if (expr->as.binary.op == OP_DIV && r == 0) {
-                                    fprintf(stderr, "Runtime error: Division by zero\n");
-                                    exit(1);
+                                    runtime_error(ctx, "Division by zero");
                                 }
                                 uint8_t result = (expr->as.binary.op == OP_ADD) ? (l + r) :
                                                 (expr->as.binary.op == OP_SUB) ? (l - r) :
@@ -587,8 +589,7 @@ Value eval_expr(Expr *expr, Environment *env, ExecutionContext *ctx) {
                                 uint16_t l = left.as.as_u16;
                                 uint16_t r = right.as.as_u16;
                                 if (expr->as.binary.op == OP_DIV && r == 0) {
-                                    fprintf(stderr, "Runtime error: Division by zero\n");
-                                    exit(1);
+                                    runtime_error(ctx, "Division by zero");
                                 }
                                 uint16_t result = (expr->as.binary.op == OP_ADD) ? (l + r) :
                                                  (expr->as.binary.op == OP_SUB) ? (l - r) :
@@ -599,8 +600,7 @@ Value eval_expr(Expr *expr, Environment *env, ExecutionContext *ctx) {
                                 uint32_t l = left.as.as_u32;
                                 uint32_t r = right.as.as_u32;
                                 if (expr->as.binary.op == OP_DIV && r == 0) {
-                                    fprintf(stderr, "Runtime error: Division by zero\n");
-                                    exit(1);
+                                    runtime_error(ctx, "Division by zero");
                                 }
                                 uint32_t result = (expr->as.binary.op == OP_ADD) ? (l + r) :
                                                  (expr->as.binary.op == OP_SUB) ? (l - r) :
@@ -611,8 +611,7 @@ Value eval_expr(Expr *expr, Environment *env, ExecutionContext *ctx) {
                                 uint64_t l = left.as.as_u64;
                                 uint64_t r = right.as.as_u64;
                                 if (expr->as.binary.op == OP_DIV && r == 0) {
-                                    fprintf(stderr, "Runtime error: Division by zero\n");
-                                    exit(1);
+                                    runtime_error(ctx, "Division by zero");
                                 }
                                 uint64_t result = (expr->as.binary.op == OP_ADD) ? (l + r) :
                                                  (expr->as.binary.op == OP_SUB) ? (l - r) :
@@ -620,8 +619,7 @@ Value eval_expr(Expr *expr, Environment *env, ExecutionContext *ctx) {
                                 return val_u64(result);
                             }
                             default:
-                                fprintf(stderr, "Runtime error: Invalid integer type for arithmetic\n");
-                                exit(1);
+                                runtime_error(ctx, "Invalid integer type for arithmetic");
                         }
                     }
 
@@ -751,8 +749,7 @@ Value eval_expr(Expr *expr, Environment *env, ExecutionContext *ctx) {
                 }
             }
 
-            fprintf(stderr, "Runtime error: Unknown binary operator\n");
-            exit(1);
+            runtime_error(ctx, "Unknown binary operator");
         }
 
         case EXPR_CALL: {
@@ -895,8 +892,9 @@ Value eval_expr(Expr *expr, Environment *env, ExecutionContext *ctx) {
                     fn_name = expr->as.call.func->as.ident;
                 }
 
-                // Push call onto stack trace
-                call_stack_push(&ctx->call_stack, fn_name);
+                // Push call onto stack trace (with line number from function body)
+                int line = (fn->body != NULL) ? fn->body->line : 0;
+                call_stack_push_line(&ctx->call_stack, fn_name, line);
 
                 // Create call environment with closure_env as parent
                 Environment *call_env = env_new(fn->closure_env);
@@ -996,16 +994,14 @@ Value eval_expr(Expr *expr, Environment *env, ExecutionContext *ctx) {
                     return val_i32(str->length);
                 }
 
-                fprintf(stderr, "Runtime error: Unknown property '%s' for string\n", property);
-                exit(1);
+                runtime_error(ctx, "Unknown property '%s' for string", property);
             } else if (object.type == VAL_BUFFER) {
                 if (strcmp(property, "length") == 0) {
                     return val_int(object.as.as_buffer->length);
                 } else if (strcmp(property, "capacity") == 0) {
                     return val_int(object.as.as_buffer->capacity);
                 }
-                fprintf(stderr, "Runtime error: Unknown property '%s' for buffer\n", property);
-                exit(1);
+                runtime_error(ctx, "Unknown property '%s' for buffer", property);
             } else if (object.type == VAL_FILE) {
                 FileHandle *file = object.as.as_file;
                 if (strcmp(property, "path") == 0) {
@@ -1015,15 +1011,13 @@ Value eval_expr(Expr *expr, Environment *env, ExecutionContext *ctx) {
                 } else if (strcmp(property, "closed") == 0) {
                     return val_bool(file->closed);
                 }
-                fprintf(stderr, "Runtime error: Unknown property '%s' for file\n", property);
-                exit(1);
+                runtime_error(ctx, "Unknown property '%s' for file", property);
             } else if (object.type == VAL_ARRAY) {
                 // Array properties
                 if (strcmp(property, "length") == 0) {
                     return val_i32(object.as.as_array->length);
                 }
-                fprintf(stderr, "Runtime error: Array has no property '%s'\n", property);
-                exit(1);
+                runtime_error(ctx, "Array has no property '%s'", property);
             } else if (object.type == VAL_OBJECT) {
                 // Look up field in object
                 Object *obj = object.as.as_object;
@@ -1032,11 +1026,9 @@ Value eval_expr(Expr *expr, Environment *env, ExecutionContext *ctx) {
                         return obj->field_values[i];
                     }
                 }
-                fprintf(stderr, "Runtime error: Object has no field '%s'\n", property);
-                exit(1);
+                runtime_error(ctx, "Object has no field '%s'", property);
             } else {
-                fprintf(stderr, "Runtime error: Only strings, buffers, arrays, and objects have properties\n");
-                exit(1);
+                runtime_error(ctx, "Only strings, buffers, arrays, and objects have properties");
             }
         }
 
@@ -1045,8 +1037,7 @@ Value eval_expr(Expr *expr, Environment *env, ExecutionContext *ctx) {
             Value index_val = eval_expr(expr->as.index.index, env, ctx);
 
             if (!is_integer(index_val)) {
-                fprintf(stderr, "Runtime error: Index must be an integer\n");
-                exit(1);
+                runtime_error(ctx, "Index must be an integer");
             }
 
             int32_t index = value_to_int(index_val);
@@ -1061,9 +1052,7 @@ Value eval_expr(Expr *expr, Environment *env, ExecutionContext *ctx) {
 
                 // Check bounds using character count (not byte count)
                 if (index < 0 || index >= str->char_length) {
-                    fprintf(stderr, "Runtime error: String index %d out of bounds (length=%d)\n",
-                            index, str->char_length);
-                    exit(1);
+                    runtime_error(ctx, "String index %d out of bounds (length=%d)", index, str->char_length);
                 }
 
                 // Find byte offset of the i-th codepoint
@@ -1077,9 +1066,7 @@ Value eval_expr(Expr *expr, Environment *env, ExecutionContext *ctx) {
                 Buffer *buf = object.as.as_buffer;
 
                 if (index < 0 || index >= buf->length) {
-                    fprintf(stderr, "Runtime error: Buffer index %d out of bounds (length %d)\n",
-                            index, buf->length);
-                    exit(1);
+                    runtime_error(ctx, "Buffer index %d out of bounds (length %d)", index, buf->length);
                 }
 
                 // Return the byte as an integer (u8)
@@ -1088,8 +1075,7 @@ Value eval_expr(Expr *expr, Environment *env, ExecutionContext *ctx) {
                 // Array indexing
                 return array_get(object.as.as_array, index);
             } else {
-                fprintf(stderr, "Runtime error: Only strings, buffers, and arrays can be indexed\n");
-                exit(1);
+                runtime_error(ctx, "Only strings, buffers, and arrays can be indexed");
             }
         }
 
@@ -1099,8 +1085,7 @@ Value eval_expr(Expr *expr, Environment *env, ExecutionContext *ctx) {
             Value value = eval_expr(expr->as.index_assign.value, env, ctx);
 
             if (!is_integer(index_val)) {
-                fprintf(stderr, "Runtime error: Index must be an integer\n");
-                exit(1);
+                runtime_error(ctx, "Index must be an integer");
             }
 
             int32_t index = value_to_int(index_val);
@@ -1113,17 +1098,14 @@ Value eval_expr(Expr *expr, Environment *env, ExecutionContext *ctx) {
 
             // For strings and buffers, value must be an integer (byte)
             if (!is_integer(value)) {
-                fprintf(stderr, "Runtime error: Index value must be an integer (byte) for strings/buffers\n");
-                exit(1);
+                runtime_error(ctx, "Index value must be an integer (byte) for strings/buffers");
             }
 
             if (object.type == VAL_STRING) {
                 String *str = object.as.as_string;
 
                 if (index < 0 || index >= str->length) {
-                    fprintf(stderr, "Runtime error: String index %d out of bounds (length %d)\n",
-                            index, str->length);
-                    exit(1);
+                    runtime_error(ctx, "String index %d out of bounds (length %d)", index, str->length);
                 }
 
                 // Strings are mutable - set the byte
@@ -1133,17 +1115,14 @@ Value eval_expr(Expr *expr, Environment *env, ExecutionContext *ctx) {
                 Buffer *buf = object.as.as_buffer;
 
                 if (index < 0 || index >= buf->length) {
-                    fprintf(stderr, "Runtime error: Buffer index %d out of bounds (length %d)\n",
-                            index, buf->length);
-                    exit(1);
+                    runtime_error(ctx, "Buffer index %d out of bounds (length %d)", index, buf->length);
                 }
 
                 // Buffers are mutable - set the byte
                 ((unsigned char *)buf->data)[index] = (unsigned char)value_to_int(value);
                 return value;
             } else {
-                fprintf(stderr, "Runtime error: Only strings, buffers, and arrays support index assignment\n");
-                exit(1);
+                runtime_error(ctx, "Only strings, buffers, and arrays support index assignment");
             }
         }
 
@@ -1221,8 +1200,7 @@ Value eval_expr(Expr *expr, Environment *env, ExecutionContext *ctx) {
             Value value = eval_expr(expr->as.set_property.value, env, ctx);
 
             if (object.type != VAL_OBJECT) {
-                fprintf(stderr, "Runtime error: Only objects can have properties set\n");
-                exit(1);
+                runtime_error(ctx, "Only objects can have properties set");
             }
 
             Object *obj = object.as.as_object;
@@ -1242,8 +1220,7 @@ Value eval_expr(Expr *expr, Environment *env, ExecutionContext *ctx) {
                 char **new_names = realloc(obj->field_names, sizeof(char*) * obj->capacity);
                 Value *new_values = realloc(obj->field_values, sizeof(Value) * obj->capacity);
                 if (!new_names || !new_values) {
-                    fprintf(stderr, "Runtime error: Failed to grow object capacity\n");
-                    exit(1);
+                    runtime_error(ctx, "Failed to grow object capacity");
                 }
                 obj->field_names = new_names;
                 obj->field_values = new_values;
