@@ -1795,7 +1795,13 @@ try {
 
 ## Async/Concurrency
 
-Hemlock provides **structured concurrency** with async/await syntax, task spawning, and channels for communication. The implementation uses POSIX threads (pthreads) for **TRUE multi-threaded parallelism**.
+Hemlock provides **structured concurrency** with `async fn` syntax, task spawning, and channels for communication. The implementation uses POSIX threads (pthreads) for **TRUE multi-threaded parallelism**.
+
+**Important: Current Implementation Status**
+- ✅ `async fn` - Fully implemented, functions can be spawned as tasks
+- ✅ `spawn()` / `join()` - Fully implemented with true parallelism
+- ⚠️ `await` - Currently a no-op (just evaluates expression synchronously, no automatic task joining)
+- Use explicit `join(task)` to wait for task results
 
 **What this means:**
 - ✅ **Real OS threads** - Each spawned task runs on a separate pthread (POSIX thread)
@@ -1831,7 +1837,8 @@ async fn compute(n: i32): i32 {
 - Async functions can be spawned as concurrent tasks using `spawn()`
 - Async functions can also be called directly (runs synchronously in current thread)
 - When spawned, each task runs on its **own OS thread** (not a coroutine!)
-- `await` keyword is reserved for future use
+- `await` keyword exists but currently just evaluates expressions synchronously (no automatic task joining yet)
+- Use explicit `join(task)` to wait for task completion
 
 ### Task Spawning
 
@@ -1979,6 +1986,7 @@ The ratio indicates how many cores were utilized: 3.6x means ~3-4 CPU cores were
 - Channels are reference-counted and freed when no longer used
 
 **Current limitations:**
+- `await` keyword parses but doesn't do automatic task joining (use explicit `join()`)
 - No `select()` for multiplexing multiple channels (planned)
 - No work-stealing scheduler (uses 1 thread per task, can be inefficient for many short tasks)
 - No async I/O integration yet (file/network operations still block)
