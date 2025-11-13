@@ -45,6 +45,51 @@ Environment* env_new(Environment *parent) {
 
 // ========== CYCLE BREAKING ==========
 
+// Global set to track manually freed objects/arrays (for compatibility with builtin_free)
+// When builtin_free() manually frees an object/array while it's still referenced in the
+// environment, we register it here so env_break_cycles() can skip it without crashing.
+static void **manually_freed_pointers = NULL;
+static int manually_freed_count = 0;
+static int manually_freed_capacity = 0;
+
+void register_manually_freed_pointer(void *ptr) {
+    if (!manually_freed_pointers) {
+        manually_freed_capacity = 16;
+        manually_freed_pointers = malloc(sizeof(void*) * manually_freed_capacity);
+        if (!manually_freed_pointers) {
+            fprintf(stderr, "Runtime error: Memory allocation failed\n");
+            exit(1);
+        }
+    }
+
+    // Grow if needed
+    if (manually_freed_count >= manually_freed_capacity) {
+        manually_freed_capacity *= 2;
+        void **new_pointers = realloc(manually_freed_pointers, sizeof(void*) * manually_freed_capacity);
+        if (!new_pointers) {
+            fprintf(stderr, "Runtime error: Memory allocation failed\n");
+            exit(1);
+        }
+        manually_freed_pointers = new_pointers;
+    }
+
+    manually_freed_pointers[manually_freed_count++] = ptr;
+}
+
+int is_manually_freed_pointer(void *ptr) {
+    for (int i = 0; i < manually_freed_count; i++) {
+        if (manually_freed_pointers[i] == ptr) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
+void clear_manually_freed_pointers(void) {
+    manually_freed_count = 0;
+    // Don't free the array, just reset count for reuse
+}
+
 // Visited set for tracking processed pointers during cycle breaking
 typedef struct {
     void **pointers;
@@ -118,6 +163,10 @@ static void value_break_cycles_internal(Value val, VisitedSet *visited) {
         case VAL_OBJECT:
             if (val.as.as_object) {
                 Object *obj = val.as.as_object;
+                // Skip objects that have been manually freed via builtin_free()
+                if (is_manually_freed_pointer(obj)) {
+                    return;
+                }
                 // Check if already visited (cycle detection)
                 if (visited_set_contains(visited, obj)) {
                     return;
@@ -125,9 +174,6 @@ static void value_break_cycles_internal(Value val, VisitedSet *visited) {
                 visited_set_add(visited, obj);
 
                 // Recursively process all field values
-                // Note: This may crash if the object has been manually freed via builtin_free()
-                // while still being referenced in the environment. The proper solution is to
-                // not use manual free() on reference-counted objects that are still referenced.
                 for (int i = 0; i < obj->num_fields; i++) {
                     value_break_cycles_internal(obj->field_values[i], visited);
                 }
@@ -137,6 +183,10 @@ static void value_break_cycles_internal(Value val, VisitedSet *visited) {
         case VAL_ARRAY:
             if (val.as.as_array) {
                 Array *arr = val.as.as_array;
+                // Skip arrays that have been manually freed via builtin_free()
+                if (is_manually_freed_pointer(arr)) {
+                    return;
+                }
                 // Check if already visited (cycle detection)
                 if (visited_set_contains(visited, arr)) {
                     return;
@@ -144,9 +194,6 @@ static void value_break_cycles_internal(Value val, VisitedSet *visited) {
                 visited_set_add(visited, arr);
 
                 // Recursively process all elements
-                // Note: This may crash if the array has been manually freed via builtin_free()
-                // while still being referenced in the environment. The proper solution is to
-                // not use manual free() on reference-counted arrays that are still referenced.
                 for (int i = 0; i < arr->length; i++) {
                     value_break_cycles_internal(arr->elements[i], visited);
                 }
@@ -170,6 +217,9 @@ void env_break_cycles(Environment *env) {
     }
 
     visited_set_free(visited);
+
+    // Clear the manually freed pointers set after breaking cycles
+    clear_manually_freed_pointers();
 }
 
 void env_free(Environment *env) {
