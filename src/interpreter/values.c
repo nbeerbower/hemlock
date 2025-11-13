@@ -879,8 +879,7 @@ static void value_free_internal(Value val, VisitedSet *visited) {
             break;
         case VAL_FFI_FUNCTION:
             if (val.as.as_ffi_function) {
-                // FFI functions are managed by the FFI module
-                // Don't free them here
+                ffi_free_function((FFIFunction*)val.as.as_ffi_function);
             }
             break;
         case VAL_TASK:

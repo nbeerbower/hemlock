@@ -1,0 +1,31 @@
+// Test: FFI function cleanup
+// This tests that FFI functions are properly freed when scopes exit
+import "libc.so.6";
+
+// Global FFI function (should be cleaned up at program exit)
+extern fn strlen(s: string): i32;
+
+// Test FFI function in nested scope
+{
+    extern fn getpid(): i32;
+    let pid = getpid();
+    print("PID in scope:");
+    print(pid);
+    // getpid FFI function should be freed when scope exits
+}
+
+// Test FFI function used and then scope exits
+let result = 0;
+{
+    extern fn abs(n: i32): i32;
+    result = abs(-42);
+    // abs FFI function should be freed when scope exits
+}
+
+print("Result:");
+print(result);
+
+// Use global strlen
+let len = strlen("test");
+print("Length:");
+print(len);
