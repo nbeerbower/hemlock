@@ -23,10 +23,30 @@ echo ""
 
 # Build the project
 echo -e "${BLUE}Building hemlock...${NC}"
-if cd .. && make clean > /dev/null 2>&1 && make > /dev/null && cd tests > /dev/null 2>&1; then
-    echo -e "${GREEN}✓ Build successful${NC}"
+# Detect if we're in the tests directory or project root
+if [ -f "../Makefile" ]; then
+    # We're in tests directory
+    PROJECT_ROOT=".."
+    TEST_DIR="."
+    if cd .. && make clean > /dev/null 2>&1 && make > /dev/null 2>&1; then
+        cd tests > /dev/null 2>&1
+        echo -e "${GREEN}✓ Build successful${NC}"
+    else
+        echo -e "${RED}✗ Build failed${NC}"
+        exit 1
+    fi
+elif [ -f "Makefile" ]; then
+    # We're in project root
+    PROJECT_ROOT="."
+    TEST_DIR="tests"
+    if make clean > /dev/null 2>&1 && make > /dev/null 2>&1; then
+        echo -e "${GREEN}✓ Build successful${NC}"
+    else
+        echo -e "${RED}✗ Build failed${NC}"
+        exit 1
+    fi
 else
-    echo -e "${RED}✗ Build failed${NC}"
+    echo -e "${RED}✗ Cannot find Makefile${NC}"
     exit 1
 fi
 echo ""
@@ -45,12 +65,18 @@ echo -e "${BLUE}Running tests...${NC}"
 echo ""
 
 # Find all test files
-TEST_FILES=$(find tests -name "*.hml" | sort)
+TEST_FILES=$(find "$TEST_DIR" -name "*.hml" | sort)
 
 CURRENT_CATEGORY=""
 for test_file in $TEST_FILES; do
     # Extract category from path
-    category=$(dirname "$test_file" | cut -d'/' -f2)
+    if [ "$TEST_DIR" = "tests" ]; then
+        category=$(dirname "$test_file" | cut -d'/' -f2)
+        test_name="${test_file#tests/}"
+    else
+        category=$(dirname "$test_file" | cut -d'/' -f1)
+        test_name="$test_file"
+    fi
 
     # Print category header if changed
     if [ "$category" != "$CURRENT_CATEGORY" ]; then
@@ -61,10 +87,8 @@ for test_file in $TEST_FILES; do
         CURRENT_CATEGORY="$category"
     fi
 
-    test_name="${test_file#tests/}"
-
     # Run the test with timeout and capture output and exit code
-    output=$(timeout 5 ./hemlock "$test_file" 2>&1)
+    output=$(timeout 5 "$PROJECT_ROOT/hemlock" "$test_file" 2>&1)
     exit_code=$?
 
     # Check if timeout occurred
