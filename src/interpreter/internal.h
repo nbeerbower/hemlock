@@ -248,6 +248,6 @@ void defer_stack_execute(DeferStack *stack, ExecutionContext *ctx);
 void defer_stack_free(DeferStack *stack);
 
 // Runtime error with stack trace (printf-style)
-void runtime_error(ExecutionContext *ctx, const char *format, ...);
+__attribute__((noreturn)) void runtime_error(ExecutionContext *ctx, const char *format, ...);
 
 #endif // HEMLOCK_INTERPRETER_INTERNAL_H
