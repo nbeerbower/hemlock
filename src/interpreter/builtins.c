@@ -535,6 +535,12 @@ static void* task_thread_wrapper(void* arg) {
     Task *task = (Task*)arg;
     Function *fn = task->function;
 
+    // Block all signals in worker thread - only main thread should handle signals
+    // This prevents signal handlers from corrupting task state during execution
+    sigset_t set;
+    sigfillset(&set);
+    pthread_sigmask(SIG_BLOCK, &set, NULL);
+
     // Mark as running (thread-safe)
     pthread_mutex_lock((pthread_mutex_t*)task->task_mutex);
     task->state = TASK_RUNNING;
@@ -745,6 +751,46 @@ static Value builtin_channel(Value *args, int num_args, ExecutionContext *ctx) {
 
     Channel *ch = channel_new(capacity);
     return val_channel(ch);
+}
+
+static Value builtin_task_debug_info(Value *args, int num_args, ExecutionContext *ctx) {
+    (void)ctx;
+
+    if (num_args != 1) {
+        fprintf(stderr, "Runtime error: task_debug_info() expects 1 argument (task handle)\n");
+        exit(1);
+    }
+
+    if (args[0].type != VAL_TASK) {
+        fprintf(stderr, "Runtime error: task_debug_info() expects a task handle\n");
+        exit(1);
+    }
+
+    Task *task = args[0].as.as_task;
+
+    // Lock mutex to safely read task state
+    pthread_mutex_lock((pthread_mutex_t*)task->task_mutex);
+
+    printf("=== Task Debug Info ===\n");
+    printf("Task ID: %d\n", task->id);
+    printf("State: ");
+    switch (task->state) {
+        case TASK_READY: printf("READY\n"); break;
+        case TASK_RUNNING: printf("RUNNING\n"); break;
+        case TASK_BLOCKED: printf("BLOCKED\n"); break;
+        case TASK_COMPLETED: printf("COMPLETED\n"); break;
+        default: printf("UNKNOWN\n"); break;
+    }
+    printf("Joined: %s\n", task->joined ? "true" : "false");
+    printf("Detached: %s\n", task->detached ? "true" : "false");
+    printf("Ref Count: %d\n", task->ref_count);
+    printf("Has Result: %s\n", task->result ? "true" : "false");
+    printf("Exception: %s\n", task->ctx->exception_state.is_throwing ? "true" : "false");
+    printf("======================\n");
+
+    pthread_mutex_unlock((pthread_mutex_t*)task->task_mutex);
+
+    return val_null();
 }
 
 // ========== INTERNAL HELPER BUILTINS ==========
@@ -2206,6 +2252,7 @@ static BuiltinInfo builtins[] = {
     {"join", builtin_join},
     {"detach", builtin_detach},
     {"channel", builtin_channel},
+    {"task_debug_info", builtin_task_debug_info},
     {"signal", builtin_signal},
     {"raise", builtin_raise},
     // Math functions (use stdlib/math.hml module for public API)
