@@ -1,7 +1,7 @@
 // Test: Basic JSON deserialization via round-trip
 let original = { x: 10, y: 20, name: "test" };
-let json = serialize(original);
-let obj = deserialize(json);
+let json = original.serialize();
+let obj = json.deserialize();
 print(obj.x);
 print(obj.y);
 print(obj.name);

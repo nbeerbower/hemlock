@@ -573,6 +573,28 @@ Value eval_expr(Expr *expr, Environment *env, ExecutionContext *ctx) {
                     if (args) free(args);
                     return result;
                 }
+
+                // Special handling for object built-in methods (e.g., serialize)
+                if (method_self.type == VAL_OBJECT) {
+                    const char *method = expr->as.call.func->as.get_property.property;
+
+                    // Only handle built-in object methods here (currently just serialize)
+                    if (strcmp(method, "serialize") == 0) {
+                        // Evaluate arguments
+                        Value *args = NULL;
+                        if (expr->as.call.num_args > 0) {
+                            args = malloc(sizeof(Value) * expr->as.call.num_args);
+                            for (int i = 0; i < expr->as.call.num_args; i++) {
+                                args[i] = eval_expr(expr->as.call.args[i], env, ctx);
+                            }
+                        }
+
+                        Value result = call_object_method(method_self.as.as_object, method, args, expr->as.call.num_args);
+                        if (args) free(args);
+                        return result;
+                    }
+                    // For user-defined methods, fall through to normal function call handling
+                }
             }
 
             // Evaluate the function expression

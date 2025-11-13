@@ -178,6 +178,7 @@ Value call_file_method(FileHandle *file, const char *method, Value *args, int nu
 Value call_array_method(Array *arr, const char *method, Value *args, int num_args);
 Value call_string_method(String *str, const char *method, Value *args, int num_args);
 Value call_channel_method(Channel *ch, const char *method, Value *args, int num_args);
+Value call_object_method(Object *obj, const char *method, Value *args, int num_args);
 
 // I/O builtin functions
 Value builtin_read_line(Value *args, int num_args, ExecutionContext *ctx);

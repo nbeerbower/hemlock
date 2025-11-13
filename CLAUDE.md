@@ -1041,19 +1041,22 @@ print(p2.active);  // false (overridden)
 - Optional fields are added to objects during duck typing if missing
 
 ### JSON Serialization
+
+Objects can be serialized to JSON strings using the `.serialize()` method, and JSON strings can be deserialized back to objects using the `.deserialize()` method on strings:
+
 ```hemlock
-// serialize() - Convert to JSON string
+// obj.serialize() - Convert object to JSON string
 let obj = { x: 10, y: 20, name: "test" };
-let json = serialize(obj);
+let json = obj.serialize();
 print(json);  // {"x":10,"y":20,"name":"test"}
 
 // Nested objects
 let nested = { inner: { a: 1, b: 2 }, outer: 3 };
-print(serialize(nested));  // {"inner":{"a":1,"b":2},"outer":3}
+print(nested.serialize());  // {"inner":{"a":1,"b":2},"outer":3}
 
-// deserialize() - Parse JSON string
-let json_str = serialize(obj);
-let restored = deserialize(json_str);
+// json.deserialize() - Parse JSON string to object
+let json_str = obj.serialize();
+let restored = json_str.deserialize();
 print(restored.name);  // "test"
 ```
 
@@ -1061,7 +1064,7 @@ print(restored.name);  // "test"
 ```hemlock
 let obj = { x: 10 };
 obj.me = obj;  // Create circular reference
-serialize(obj);  // ERROR: serialize() detected circular reference
+obj.serialize();  // ERROR: serialize() detected circular reference
 ```
 
 **Supported types in JSON:**
@@ -1070,14 +1073,19 @@ serialize(obj);  // ERROR: serialize() detected circular reference
 - Strings (with escape sequences)
 - Null
 - Objects (nested)
+- Arrays
 - Not supported: functions, pointers, buffers
+
+**Object Methods:**
+- `obj.serialize()` - Convert object to JSON string (with cycle detection)
+
+**String Methods (for JSON):**
+- `json_string.deserialize()` - Parse JSON string to object/value
 
 ### Built-in Functions
 - `typeof(value)` - Returns type name string
   - Anonymous objects: `"object"`
   - Typed objects: custom type name (e.g., `"Person"`)
-- `serialize(object)` - Convert object to JSON string (with cycle detection)
-- `deserialize(json_string)` - Parse JSON string to object
 
 ### Implementation Details
 - Objects are heap-allocated
