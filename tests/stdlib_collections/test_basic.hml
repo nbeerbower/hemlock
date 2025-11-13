@@ -1,0 +1,49 @@
+// Basic collections tests - demonstrating core functionality
+
+import { HashMap, Queue, Stack, Set } from "@stdlib/collections";
+
+print("=== Testing Queue ===");
+let q = Queue();
+q.enqueue(10);
+q.enqueue(20);
+q.enqueue(30);
+assert(q.size == 3, "Queue size should be 3");
+assert(q.dequeue() == 10, "First dequeue should return 10");
+assert(q.dequeue() == 20, "Second dequeue should return 20");
+assert(q.size == 1, "Queue size should be 1");
+print("Queue tests passed!");
+
+print("=== Testing Stack ===");
+let s = Stack();
+s.push(10);
+s.push(20);
+s.push(30);
+assert(s.size == 3, "Stack size should be 3");
+assert(s.pop() == 30, "First pop should return 30");
+assert(s.pop() == 20, "Second pop should return 20");
+assert(s.size == 1, "Stack size should be 1");
+print("Stack tests passed!");
+
+print("=== Testing Set ===");
+let set = Set();
+assert(set.add(10) == true, "Adding 10 should return true");
+assert(set.add(20) == true, "Adding 20 should return true");
+assert(set.add(10) == false, "Adding duplicate 10 should return false");
+assert(set.size == 2, "Set size should be 2");
+assert(set.has(10) == true, "Set should have 10");
+assert(set.has(30) == false, "Set should not have 30");
+print("Set tests passed!");
+
+print("=== Testing HashMap (basic) ===");
+let map = HashMap();
+map.set("name", "Alice");
+map.set("age", 30);
+assert(map.size == 2, "Map size should be 2");
+assert(map.get("name") == "Alice", "Should get correct value for name");
+assert(map.get("age") == 30, "Should get correct value for age");
+assert(map.has("name") == true, "Map should have name key");
+assert(map.has("missing") == false, "Map should not have missing key");
+print("HashMap tests passed!");
+
+print("");
+print("All basic collections tests passed!");

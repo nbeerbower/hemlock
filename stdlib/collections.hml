@@ -1,0 +1,750 @@
+// Hemlock Standard Library: Collections
+// This module provides data structures: HashMap, Queue, Stack, Set, LinkedList
+
+// ========== HASHMAP ==========
+// Hash table implementation with separate chaining
+// Key-value storage with O(1) average-case operations
+
+export fn HashMap() {
+    let buckets = [];
+    let bucket_count = 16;
+    let item_count = 0;
+    let load_factor = 0.75;
+
+    // Initialize buckets
+    let i = 0;
+    while (i < bucket_count) {
+        buckets.push([]);
+        i = i + 1;
+    }
+
+    // Helper: modulo operation (optimized for small divisors)
+    fn mod(a, b) {
+        let result = a;
+        let divisor = b;
+
+        // Handle negative numbers
+        if (result < 0) {
+            result = -result;
+        }
+
+        // Fast path for result already smaller than divisor
+        if (result < divisor) {
+            return result;
+        }
+
+        // For larger numbers, use repeated doubling to speed up
+        let multiples = [divisor];
+        let last = divisor;
+
+        // Build powers of 2 times divisor up to result
+        while (last + last <= result) {
+            last = last + last;
+            multiples.push(last);
+        }
+
+        // Subtract largest multiples first
+        let i = multiples.length - 1;
+        while (i >= 0) {
+            while (result >= multiples[i]) {
+                result = result - multiples[i];
+            }
+            i = i - 1;
+        }
+
+        return result;
+    }
+
+    // Helper: convert float to integer (truncate towards zero)
+    fn float_to_int(f) {
+        // Handle negative numbers
+        let is_negative = f < 0.0;
+        if (is_negative) {
+            f = -f;
+        }
+
+        // Truncate by repeatedly subtracting 1.0 and counting
+        let result = 0;
+        while (f >= 1.0) {
+            f = f - 1.0;
+            result = result + 1;
+        }
+
+        if (is_negative) {
+            result = -result;
+        }
+
+        return result;
+    }
+
+    // Simple hash function for various types
+    fn hash(key) {
+        let type = typeof(key);
+
+        if (type == "string") {
+            let h = 0;
+            let i = 0;
+            let byte_val = 0;
+            while (i < key.length) {
+                byte_val = key.byte_at(i);
+                h = h + byte_val;
+                i = i + 1;
+            }
+            if (h < 0) {
+                h = -h;
+            }
+            return h;
+        }
+
+        if (type == "i32") {
+            let val = key;
+            if (val < 0) {
+                val = -val;
+            }
+            return val;
+        }
+
+        if (type == "i64" || type == "u32" || type == "u64" ||
+            type == "i8" || type == "i16" || type == "u8" || type == "u16") {
+            // For other integer types, just convert to basic int
+            let val = key + 0;
+            if (val < 0) {
+                val = -val;
+            }
+            return val;
+        }
+
+        if (type == "f32" || type == "f64") {
+            // Convert float to int representation
+            let val = key * 1000.0;
+            let intval = float_to_int(val);
+            if (intval < 0) {
+                intval = -intval;
+            }
+            return intval;
+        }
+
+        if (type == "bool") {
+            if (key) {
+                return 1;
+            }
+            return 0;
+        }
+
+        if (type == "null") {
+            return 0;
+        }
+
+        // For other types, use a basic hash
+        return 42;
+    }
+
+    // Get bucket index
+    fn get_bucket_index(key) {
+        let h = hash(key);
+        if (h < 0) {
+            h = -h;
+        }
+        return mod(h, bucket_count);
+    }
+
+    // Check if two keys are equal
+    fn keys_equal(k1, k2) {
+        if (typeof(k1) != typeof(k2)) {
+            return false;
+        }
+        return k1 == k2;
+    }
+
+    // Resize when load factor exceeded
+    fn resize() {
+        let old_buckets = buckets;
+        bucket_count = bucket_count * 2;
+        buckets = [];
+
+        // Declare all loop variables at the top
+        let i = 0;
+        let j = 0;
+        let bucket = null;
+        let entry = null;
+
+        // Initialize new buckets
+        while (i < bucket_count) {
+            buckets.push([]);
+            i = i + 1;
+        }
+
+        // Rehash all entries
+        item_count = 0;
+        i = 0;
+        while (i < old_buckets.length) {
+            bucket = old_buckets[i];
+            j = 0;
+            while (j < bucket.length) {
+                entry = bucket[j];
+                // Directly add entry to new buckets (can't use self.set here)
+                let idx = get_bucket_index(entry.key);
+                let new_bucket = buckets[idx];
+                new_bucket.push(entry);
+                item_count = item_count + 1;
+                j = j + 1;
+            }
+            i = i + 1;
+        }
+    }
+
+    return {
+        size: 0,
+
+        set: fn(key, value) {
+            let idx = get_bucket_index(key);
+            let bucket = buckets[idx];
+
+            // Check if key exists, update if so
+            let i = 0;
+            while (i < bucket.length) {
+                if (keys_equal(bucket[i].key, key)) {
+                    bucket[i].value = value;
+                    return null;
+                }
+                i = i + 1;
+            }
+
+            // Add new entry
+            bucket.push({ key: key, value: value });
+            item_count = item_count + 1;
+            self.size = item_count;
+
+            // Resize if load factor exceeded
+            let current_load = item_count + 0.0;
+            let capacity = bucket_count + 0.0;
+            if (current_load / capacity > load_factor) {
+                resize();
+            }
+
+            return null;
+        },
+
+        get: fn(key) {
+            let idx = get_bucket_index(key);
+            let bucket = buckets[idx];
+
+            let i = 0;
+            while (i < bucket.length) {
+                if (keys_equal(bucket[i].key, key)) {
+                    return bucket[i].value;
+                }
+                i = i + 1;
+            }
+
+            return null;
+        },
+
+        has: fn(key) {
+            let idx = get_bucket_index(key);
+            let bucket = buckets[idx];
+
+            let i = 0;
+            while (i < bucket.length) {
+                if (keys_equal(bucket[i].key, key)) {
+                    return true;
+                }
+                i = i + 1;
+            }
+
+            return false;
+        },
+
+        delete: fn(key) {
+            let idx = get_bucket_index(key);
+            let bucket = buckets[idx];
+
+            let i = 0;
+            while (i < bucket.length) {
+                if (keys_equal(bucket[i].key, key)) {
+                    bucket.remove(i);
+                    item_count = item_count - 1;
+                    self.size = item_count;
+                    return true;
+                }
+                i = i + 1;
+            }
+
+            return false;
+        },
+
+        clear: fn() {
+            buckets = [];
+            let i = 0;
+            while (i < bucket_count) {
+                buckets.push([]);
+                i = i + 1;
+            }
+            item_count = 0;
+            self.size = 0;
+            return null;
+        },
+
+        keys: fn() {
+            let result = [];
+            let i = 0;
+            let bucket = null;
+            let j = 0;
+            while (i < buckets.length) {
+                bucket = buckets[i];
+                j = 0;
+                while (j < bucket.length) {
+                    result.push(bucket[j].key);
+                    j = j + 1;
+                }
+                i = i + 1;
+            }
+            return result;
+        },
+
+        values: fn() {
+            let result = [];
+            let i = 0;
+            let bucket = null;
+            let j = 0;
+            while (i < buckets.length) {
+                bucket = buckets[i];
+                j = 0;
+                while (j < bucket.length) {
+                    result.push(bucket[j].value);
+                    j = j + 1;
+                }
+                i = i + 1;
+            }
+            return result;
+        },
+
+        entries: fn() {
+            let result = [];
+            let i = 0;
+            let bucket = null;
+            let j = 0;
+            while (i < buckets.length) {
+                bucket = buckets[i];
+                j = 0;
+                while (j < bucket.length) {
+                    result.push([bucket[j].key, bucket[j].value]);
+                    j = j + 1;
+                }
+                i = i + 1;
+            }
+            return result;
+        }
+    };
+}
+
+// ========== QUEUE ==========
+// FIFO (First-In-First-Out) data structure
+// Efficient enqueue and dequeue operations
+
+export fn Queue() {
+    let items = [];
+
+    return {
+        size: 0,
+
+        enqueue: fn(item) {
+            items.push(item);
+            self.size = items.length;
+            return null;
+        },
+
+        dequeue: fn() {
+            if (items.length == 0) {
+                throw "Queue is empty";
+            }
+            let item = items.shift();
+            self.size = items.length;
+            return item;
+        },
+
+        peek: fn() {
+            if (items.length == 0) {
+                return null;
+            }
+            return items[0];
+        },
+
+        is_empty: fn() {
+            return items.length == 0;
+        },
+
+        clear: fn() {
+            items = [];
+            self.size = 0;
+            return null;
+        },
+
+        to_array: fn() {
+            return items.slice(0, items.length);
+        }
+    };
+}
+
+// ========== STACK ==========
+// LIFO (Last-In-First-Out) data structure
+// Efficient push and pop operations
+
+export fn Stack() {
+    let items = [];
+
+    return {
+        size: 0,
+
+        push: fn(item) {
+            items.push(item);
+            self.size = items.length;
+            return null;
+        },
+
+        pop: fn() {
+            if (items.length == 0) {
+                throw "Stack is empty";
+            }
+            let item = items.pop();
+            self.size = items.length;
+            return item;
+        },
+
+        peek: fn() {
+            if (items.length == 0) {
+                return null;
+            }
+            return items.last();
+        },
+
+        is_empty: fn() {
+            return items.length == 0;
+        },
+
+        clear: fn() {
+            items = [];
+            self.size = 0;
+            return null;
+        },
+
+        to_array: fn() {
+            return items.slice(0, items.length);
+        }
+    };
+}
+
+// ========== SET ==========
+// Collection of unique values
+// Prevents duplicate entries
+
+export fn Set() {
+    let items = [];
+
+    // Helper to find index of item
+    fn find_index(item) {
+        let i = 0;
+        while (i < items.length) {
+            if (items[i] == item) {
+                return i;
+            }
+            i = i + 1;
+        }
+        return -1;
+    }
+
+    return {
+        size: 0,
+
+        add: fn(item) {
+            if (find_index(item) == -1) {
+                items.push(item);
+                self.size = items.length;
+                return true;
+            }
+            return false;
+        },
+
+        delete: fn(item) {
+            let idx = find_index(item);
+            if (idx != -1) {
+                items.remove(idx);
+                self.size = items.length;
+                return true;
+            }
+            return false;
+        },
+
+        has: fn(item) {
+            return find_index(item) != -1;
+        },
+
+        clear: fn() {
+            items = [];
+            self.size = 0;
+            return null;
+        },
+
+        values: fn() {
+            return items.slice(0, items.length);
+        },
+
+        union: fn(other_set) {
+            let result = Set();
+            let i = 0;
+            while (i < items.length) {
+                result.add(items[i]);
+                i = i + 1;
+            }
+            let other_values = other_set.values();
+            i = 0;
+            while (i < other_values.length) {
+                result.add(other_values[i]);
+                i = i + 1;
+            }
+            return result;
+        },
+
+        intersection: fn(other_set) {
+            let result = Set();
+            let i = 0;
+            while (i < items.length) {
+                if (other_set.has(items[i])) {
+                    result.add(items[i]);
+                }
+                i = i + 1;
+            }
+            return result;
+        },
+
+        difference: fn(other_set) {
+            let result = Set();
+            let i = 0;
+            while (i < items.length) {
+                if (!other_set.has(items[i])) {
+                    result.add(items[i]);
+                }
+                i = i + 1;
+            }
+            return result;
+        }
+    };
+}
+
+// ========== LINKEDLIST ==========
+// Doubly-linked list implementation
+// Efficient insertion and deletion at any position
+
+export fn LinkedList() {
+    let head = null;
+    let tail = null;
+    let count = 0;
+
+    // Create a new node
+    fn create_node(value) {
+        return {
+            value: value,
+            next: null,
+            prev: null
+        };
+    }
+
+    // Get node at index
+    fn get_node(index) {
+        let zero = 0;
+        if (index < zero) {
+            return null;
+        }
+        if (index >= count) {
+            return null;
+        }
+
+        let current = head;
+        let i = 0;
+        while (i < index) {
+            current = current.next;
+            i = i + 1;
+        }
+        return current;
+    }
+
+    return {
+        size: 0,
+
+        append: fn(value) {
+            let node = create_node(value);
+
+            if (head == null) {
+                head = node;
+                tail = node;
+            } else {
+                tail.next = node;
+                node.prev = tail;
+                tail = node;
+            }
+
+            count = count + 1;
+            self.size = count;
+            return null;
+        },
+
+        prepend: fn(value) {
+            let node = create_node(value);
+
+            if (head == null) {
+                head = node;
+                tail = node;
+            } else {
+                node.next = head;
+                head.prev = node;
+                head = node;
+            }
+
+            count = count + 1;
+            self.size = count;
+            return null;
+        },
+
+        insert: fn(index, value) {
+            let zero = 0;
+            if (index < zero) {
+                throw "Index out of bounds";
+            }
+            if (index > count) {
+                throw "Index out of bounds";
+            }
+
+            if (index == zero) {
+                self.prepend(value);
+                return null;
+            }
+
+            if (index == count) {
+                self.append(value);
+                return null;
+            }
+
+            let node = create_node(value);
+            let current = get_node(index);
+            let prev_node = current.prev;
+
+            prev_node.next = node;
+            node.prev = prev_node;
+            node.next = current;
+            current.prev = node;
+
+            count = count + 1;
+            self.size = count;
+            return null;
+        },
+
+        remove: fn(index) {
+            let zero = 0;
+            if (index < zero) {
+                throw "Index out of bounds";
+            }
+            if (index >= count) {
+                throw "Index out of bounds";
+            }
+
+            let node = get_node(index);
+            let value = node.value;
+
+            if (node == head && node == tail) {
+                head = null;
+                tail = null;
+            } else if (node == head) {
+                head = node.next;
+                head.prev = null;
+            } else if (node == tail) {
+                tail = node.prev;
+                tail.next = null;
+            } else {
+                node.prev.next = node.next;
+                node.next.prev = node.prev;
+            }
+
+            count = count - 1;
+            self.size = count;
+            return value;
+        },
+
+        get: fn(index) {
+            let node = get_node(index);
+            if (node == null) {
+                throw "Index out of bounds";
+            }
+            return node.value;
+        },
+
+        set: fn(index, value) {
+            let node = get_node(index);
+            if (node == null) {
+                throw "Index out of bounds";
+            }
+            node.value = value;
+            return null;
+        },
+
+        index_of: fn(value) {
+            let current = head;
+            let i = 0;
+            while (current != null) {
+                if (current.value == value) {
+                    return i;
+                }
+                current = current.next;
+                i = i + 1;
+            }
+            return -1;
+        },
+
+        contains: fn(value) {
+            return self.index_of(value) != -1;
+        },
+
+        clear: fn() {
+            head = null;
+            tail = null;
+            count = 0;
+            self.size = 0;
+            return null;
+        },
+
+        is_empty: fn() {
+            return count == 0;
+        },
+
+        to_array: fn() {
+            let result = [];
+            let current = head;
+            while (current != null) {
+                result.push(current.value);
+                current = current.next;
+            }
+            return result;
+        },
+
+        reverse: fn() {
+            if (head == null) {
+                return null;
+            }
+
+            let current = head;
+            let temp = null;
+
+            while (current != null) {
+                temp = current.prev;
+                current.prev = current.next;
+                current.next = temp;
+                current = current.prev;
+            }
+
+            temp = head;
+            head = tail;
+            tail = temp;
+
+            return null;
+        }
+    };
+}

@@ -1,0 +1,129 @@
+// Test Stack collection
+
+import { Stack } from "@stdlib/collections";
+
+let s = Stack();
+
+// Test initial state
+assert(s.size == 0, "Initial size should be 0");
+assert(s.is_empty() == true, "Stack should be empty initially");
+assert(s.peek() == null, "Peek should return null for empty stack");
+
+// Test push
+s.push(10);
+assert(s.size == 1, "Size should be 1 after push");
+assert(s.is_empty() == false, "Stack should not be empty");
+assert(s.peek() == 10, "Peek should return top element");
+
+s.push(20);
+s.push(30);
+assert(s.size == 3, "Size should be 3");
+assert(s.peek() == 30, "Peek should return most recently pushed element");
+
+// Test pop (LIFO behavior)
+let val = s.pop();
+assert(val == 30, "First pop should return 30");
+assert(s.size == 2, "Size should be 2 after pop");
+assert(s.peek() == 20, "Peek should now return 20");
+
+let val2 = s.pop();
+assert(val2 == 20, "Second pop should return 20");
+assert(s.size == 1, "Size should be 1");
+
+let val3 = s.pop();
+assert(val3 == 10, "Third pop should return 10");
+assert(s.size == 0, "Size should be 0");
+assert(s.is_empty() == true, "Stack should be empty");
+
+// Test pop on empty stack (should throw)
+let caught = false;
+try {
+    s.pop();
+} catch (e) {
+    caught = true;
+}
+assert(caught == true, "Pop on empty stack should throw");
+
+// Test with different types
+s.push("first");
+s.push("second");
+s.push(42);
+s.push(true);
+s.push(null);
+
+assert(s.size == 5, "Should handle mixed types");
+assert(s.pop() == null, "Should pop null");
+assert(s.pop() == true, "Should pop boolean");
+assert(s.pop() == 42, "Should pop number");
+assert(s.pop() == "second", "Should pop string");
+assert(s.pop() == "first", "Should pop string");
+
+// Test clear
+s.push(1);
+s.push(2);
+s.push(3);
+assert(s.size == 3, "Size should be 3");
+
+s.clear();
+assert(s.size == 0, "Size should be 0 after clear");
+assert(s.is_empty() == true, "Stack should be empty after clear");
+
+// Test to_array
+s.push("a");
+s.push("b");
+s.push("c");
+
+let arr = s.to_array();
+assert(arr.length == 3, "Array length should be 3");
+assert(arr[0] == "a", "Array should preserve insertion order");
+assert(arr[1] == "b", "Array should preserve insertion order");
+assert(arr[2] == "c", "Array should preserve insertion order");
+
+// Ensure to_array doesn't mutate stack
+assert(s.size == 3, "to_array should not mutate stack");
+
+// Test stack operations sequence
+s.clear();
+s.push(1);
+s.push(2);
+assert(s.pop() == 2, "Pop should return 2");
+s.push(3);
+s.push(4);
+assert(s.pop() == 4, "Pop should return 4");
+assert(s.pop() == 3, "Pop should return 3");
+assert(s.pop() == 1, "Pop should return 1");
+assert(s.is_empty() == true, "Stack should be empty");
+
+// Test large stack
+let i = 0;
+while (i < 1000) {
+    s.push(i);
+    i = i + 1;
+}
+
+assert(s.size == 1000, "Should handle large stack");
+
+i = 999;
+while (i >= 0) {
+    let val = s.pop();
+    assert(val == i, "Should pop in LIFO order");
+    i = i - 1;
+}
+
+assert(s.is_empty() == true, "Stack should be empty after popping all");
+
+// Test classic use case: reversing
+s.push("first");
+s.push("second");
+s.push("third");
+
+let reversed = [];
+while (!s.is_empty()) {
+    reversed.push(s.pop());
+}
+
+assert(reversed[0] == "third", "Stack reverses order");
+assert(reversed[1] == "second", "Stack reverses order");
+assert(reversed[2] == "first", "Stack reverses order");
+
+print("All Stack tests passed!");

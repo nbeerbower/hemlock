@@ -1,0 +1,217 @@
+// Test LinkedList collection
+
+import { LinkedList } from "@stdlib/collections";
+
+let list = LinkedList();
+
+// Test initial state
+assert(list.size == 0, "Initial size should be 0");
+assert(list.is_empty() == true, "List should be empty initially");
+
+// Test append
+list.append(10);
+assert(list.size == 1, "Size should be 1 after append");
+assert(list.is_empty() == false, "List should not be empty");
+assert(list.get(0) == 10, "First element should be 10");
+
+list.append(20);
+list.append(30);
+assert(list.size == 3, "Size should be 3");
+assert(list.get(0) == 10, "Element at 0 should be 10");
+assert(list.get(1) == 20, "Element at 1 should be 20");
+assert(list.get(2) == 30, "Element at 2 should be 30");
+
+// Test prepend
+list.prepend(5);
+assert(list.size == 4, "Size should be 4");
+assert(list.get(0) == 5, "Element at 0 should be 5");
+assert(list.get(1) == 10, "Element at 1 should be 10");
+
+// Test insert at beginning
+list.insert(0, 1);
+assert(list.get(0) == 1, "Element at 0 should be 1");
+assert(list.size == 5, "Size should be 5");
+
+// Test insert in middle
+list.insert(3, 15);
+assert(list.get(3) == 15, "Element at 3 should be 15");
+assert(list.size == 6, "Size should be 6");
+
+// Test insert at end
+list.insert(6, 40);
+assert(list.get(6) == 40, "Element at 6 should be 40");
+assert(list.size == 7, "Size should be 7");
+
+// Test get out of bounds
+let caught = false;
+try {
+    list.get(100);
+} catch (e) {
+    caught = true;
+}
+assert(caught == true, "get with invalid index should throw");
+
+// Test set
+list.set(0, 100);
+assert(list.get(0) == 100, "Element should be updated");
+assert(list.size == 7, "Size should remain 7");
+
+// Test set out of bounds
+caught = false;
+try {
+    list.set(100, 999);
+} catch (e) {
+    caught = true;
+}
+assert(caught == true, "set with invalid index should throw");
+
+// Test remove from beginning
+list.clear();
+list.append(1);
+list.append(2);
+list.append(3);
+
+let removed = list.remove(0);
+assert(removed == 1, "Removed value should be 1");
+assert(list.size == 2, "Size should be 2");
+assert(list.get(0) == 2, "First element should now be 2");
+
+// Test remove from middle
+list.append(4);
+list.append(5);
+removed = list.remove(1);
+assert(removed == 3, "Removed value should be 3");
+assert(list.get(1) == 4, "Element at 1 should now be 4");
+
+// Test remove from end
+removed = list.remove(2);
+assert(removed == 5, "Removed value should be 5");
+assert(list.size == 2, "Size should be 2");
+
+// Test remove out of bounds
+caught = false;
+try {
+    list.remove(100);
+} catch (e) {
+    caught = true;
+}
+assert(caught == true, "remove with invalid index should throw");
+
+// Test index_of
+list.clear();
+list.append("apple");
+list.append("banana");
+list.append("cherry");
+
+assert(list.index_of("banana") == 1, "index_of should return 1 for banana");
+assert(list.index_of("missing") == -1, "index_of should return -1 for missing value");
+
+// Test contains
+assert(list.contains("apple") == true, "Should contain apple");
+assert(list.contains("missing") == false, "Should not contain missing");
+
+// Test to_array
+let arr = list.to_array();
+assert(arr.length == 3, "Array length should be 3");
+assert(arr[0] == "apple", "Array should have correct order");
+assert(arr[1] == "banana", "Array should have correct order");
+assert(arr[2] == "cherry", "Array should have correct order");
+
+// Ensure to_array doesn't mutate list
+assert(list.size == 3, "to_array should not mutate list");
+
+// Test reverse
+list.reverse();
+assert(list.get(0) == "cherry", "First element should be cherry after reverse");
+assert(list.get(1) == "banana", "Second element should be banana after reverse");
+assert(list.get(2) == "apple", "Third element should be apple after reverse");
+assert(list.size == 3, "Size should remain 3");
+
+// Reverse again (back to original)
+list.reverse();
+assert(list.get(0) == "apple", "Should be back to original order");
+
+// Test reverse with single element
+list.clear();
+list.append(42);
+list.reverse();
+assert(list.get(0) == 42, "Single element should remain");
+assert(list.size == 1, "Size should be 1");
+
+// Test reverse with empty list
+list.clear();
+list.reverse();
+assert(list.size == 0, "Empty list should remain empty");
+
+// Test clear
+list.append(1);
+list.append(2);
+list.append(3);
+list.clear();
+assert(list.size == 0, "Size should be 0 after clear");
+assert(list.is_empty() == true, "List should be empty after clear");
+
+// Test with different types
+list.append(123);
+list.append("text");
+list.append(true);
+list.append(null);
+list.append(3.14);
+
+assert(list.size == 5, "Should handle mixed types");
+assert(list.get(0) == 123, "Should store integer");
+assert(list.get(1) == "text", "Should store string");
+assert(list.get(2) == true, "Should store boolean");
+assert(list.get(3) == null, "Should store null");
+
+let val: f64 = list.get(4);
+assert(val == 3.14, "Should store float");
+
+// Test large list
+list.clear();
+let i = 0;
+while (i < 1000) {
+    list.append(i);
+    i = i + 1;
+}
+
+assert(list.size == 1000, "Should handle large list");
+
+i = 0;
+while (i < 1000) {
+    assert(list.get(i) == i, "Should retrieve correct value at index " + typeof(i));
+    i = i + 1;
+}
+
+// Test operations on large list
+list.prepend(-1);
+assert(list.get(0) == -1, "Should prepend to large list");
+assert(list.size == 1001, "Size should be 1001");
+
+list.insert(500, 9999);
+assert(list.get(500) == 9999, "Should insert into middle of large list");
+assert(list.size == 1002, "Size should be 1002");
+
+// Test sequential removes
+list.clear();
+list.append(1);
+list.append(2);
+list.append(3);
+list.append(4);
+list.append(5);
+
+list.remove(2);  // Remove 3
+list.remove(2);  // Remove 4 (now at index 2)
+assert(list.size == 3, "Size should be 3 after 2 removes");
+assert(list.get(0) == 1, "First element should be 1");
+assert(list.get(1) == 2, "Second element should be 2");
+assert(list.get(2) == 5, "Third element should be 5");
+
+// Test removing until empty
+while (!list.is_empty()) {
+    list.remove(0);
+}
+assert(list.size == 0, "List should be empty");
+assert(list.is_empty() == true, "is_empty should be true");
+
+print("All LinkedList tests passed!");

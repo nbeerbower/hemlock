@@ -1,0 +1,104 @@
+// Test Queue collection
+
+import { Queue } from "@stdlib/collections";
+
+let q = Queue();
+
+// Test initial state
+assert(q.size == 0, "Initial size should be 0");
+assert(q.is_empty() == true, "Queue should be empty initially");
+assert(q.peek() == null, "Peek should return null for empty queue");
+
+// Test enqueue
+q.enqueue(10);
+assert(q.size == 1, "Size should be 1 after enqueue");
+assert(q.is_empty() == false, "Queue should not be empty");
+assert(q.peek() == 10, "Peek should return first element");
+
+q.enqueue(20);
+q.enqueue(30);
+assert(q.size == 3, "Size should be 3");
+assert(q.peek() == 10, "Peek should still return first element");
+
+// Test dequeue (FIFO behavior)
+let val = q.dequeue();
+assert(val == 10, "First dequeue should return 10");
+assert(q.size == 2, "Size should be 2 after dequeue");
+assert(q.peek() == 20, "Peek should now return 20");
+
+let val2 = q.dequeue();
+assert(val2 == 20, "Second dequeue should return 20");
+assert(q.size == 1, "Size should be 1");
+
+let val3 = q.dequeue();
+assert(val3 == 30, "Third dequeue should return 30");
+assert(q.size == 0, "Size should be 0");
+assert(q.is_empty() == true, "Queue should be empty");
+
+// Test dequeue on empty queue (should throw)
+let caught = false;
+try {
+    q.dequeue();
+} catch (e) {
+    caught = true;
+}
+assert(caught == true, "Dequeue on empty queue should throw");
+
+// Test with different types
+q.enqueue("first");
+q.enqueue("second");
+q.enqueue(42);
+q.enqueue(true);
+q.enqueue(null);
+
+assert(q.size == 5, "Should handle mixed types");
+assert(q.dequeue() == "first", "Should dequeue string");
+assert(q.dequeue() == "second", "Should dequeue string");
+assert(q.dequeue() == 42, "Should dequeue number");
+assert(q.dequeue() == true, "Should dequeue boolean");
+assert(q.dequeue() == null, "Should dequeue null");
+
+// Test clear
+q.enqueue(1);
+q.enqueue(2);
+q.enqueue(3);
+assert(q.size == 3, "Size should be 3");
+
+q.clear();
+assert(q.size == 0, "Size should be 0 after clear");
+assert(q.is_empty() == true, "Queue should be empty after clear");
+
+// Test to_array
+q.enqueue("a");
+q.enqueue("b");
+q.enqueue("c");
+
+let arr = q.to_array();
+assert(arr.length == 3, "Array length should be 3");
+assert(arr[0] == "a", "Array should have correct order");
+assert(arr[1] == "b", "Array should have correct order");
+assert(arr[2] == "c", "Array should have correct order");
+
+// Ensure to_array doesn't mutate queue
+assert(q.size == 3, "to_array should not mutate queue");
+
+// Test large queue
+q.clear();
+let i = 0;
+while (i < 1000) {
+    q.enqueue(i);
+    i = i + 1;
+}
+
+assert(q.size == 1000, "Should handle large queue");
+
+let i = 0;
+while (i < 1000) {
+    let val = q.dequeue();
+    assert(val == i, "Should dequeue in FIFO order");
+    i = i + 1;
+}
+
+assert(q.is_empty() == true, "Queue should be empty after dequeueing all");
+
+print("All Queue tests passed!");

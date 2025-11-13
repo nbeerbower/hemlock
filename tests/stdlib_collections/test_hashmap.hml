@@ -1,0 +1,107 @@
+// Test HashMap collection
+
+import { HashMap } from "@stdlib/collections";
+
+let map = HashMap();
+
+// Test initial state
+assert(map.size == 0, "Initial size should be 0");
+assert(map.keys().length == 0, "Initial keys should be empty");
+
+// Test set and get with strings
+map.set("name", "Alice");
+map.set("age", 30);
+map.set("city", "NYC");
+
+assert(map.size == 3, "Size should be 3 after adding 3 items");
+assert(map.get("name") == "Alice", "Should get correct value for 'name'");
+assert(map.get("age") == 30, "Should get correct value for 'age'");
+assert(map.get("city") == "NYC", "Should get correct value for 'city'");
+
+// Test has
+assert(map.has("name") == true, "Should have 'name' key");
+assert(map.has("country") == false, "Should not have 'country' key");
+
+// Test update existing key
+map.set("age", 31);
+assert(map.get("age") == 31, "Should update existing value");
+assert(map.size == 3, "Size should remain 3 after update");
+
+// Test integer keys
+map.set(1, "one");
+map.set(2, "two");
+map.set(100, "hundred");
+
+assert(map.get(1) == "one", "Should get value for integer key 1");
+assert(map.get(100) == "hundred", "Should get value for integer key 100");
+assert(map.size == 6, "Size should be 6");
+
+// Test keys, values, entries
+let keys = map.keys();
+assert(keys.length == 6, "keys() should return 6 keys");
+assert(keys.contains("name"), "keys should contain 'name'");
+assert(keys.contains(1), "keys should contain 1");
+
+let values = map.values();
+assert(values.length == 6, "values() should return 6 values");
+assert(values.contains("Alice"), "values should contain 'Alice'");
+assert(values.contains("one"), "values should contain 'one'");
+
+let entries = map.entries();
+assert(entries.length == 6, "entries() should return 6 entries");
+
+// Test delete
+let deleted = map.delete("city");
+assert(deleted == true, "delete should return true for existing key");
+assert(map.has("city") == false, "Should not have 'city' after delete");
+assert(map.size == 5, "Size should be 5 after delete");
+
+let deleted2 = map.delete("missing");
+assert(deleted2 == false, "delete should return false for non-existent key");
+
+// Test null key
+map.set(null, "null value");
+assert(map.get(null) == "null value", "Should handle null key");
+
+// Test boolean keys
+map.set(true, "truthy");
+map.set(false, "falsy");
+assert(map.get(true) == "truthy", "Should handle boolean true key");
+assert(map.get(false) == "falsy", "Should handle boolean false key");
+
+// Test float keys
+map.set(3.14, "pi");
+assert(map.get(3.14) == "pi", "Should handle float key");
+
+// Test clear
+map.clear();
+assert(map.size == 0, "Size should be 0 after clear");
+assert(map.keys().length == 0, "Should have no keys after clear");
+assert(map.get("name") == null, "Should return null for cleared key");
+
+// Test large dataset (trigger resize)
+let i = 0;
+while (i < 100) {
+    map.set(i, i * 10);
+    i = i + 1;
+}
+
+assert(map.size == 100, "Should handle 100 items");
+
+i = 0;
+while (i < 100) {
+    assert(map.get(i) == i * 10, "Should retrieve correct value for key " + typeof(i));
+    i = i + 1;
+}
+
+// Test collision handling with string keys
+map.clear();
+map.set("abc", 1);
+map.set("bca", 2);
+map.set("cab", 3);
+
+assert(map.get("abc") == 1, "Should handle potential collisions");
+assert(map.get("bca") == 2, "Should handle potential collisions");
+assert(map.get("cab") == 3, "Should handle potential collisions");
+
+print("All HashMap tests passed!");

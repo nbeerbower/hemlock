@@ -1,0 +1,156 @@
+// Test Set collection
+
+import { Set } from "@stdlib/collections";
+
+let s = Set();
+
+// Test initial state
+assert(s.size == 0, "Initial size should be 0");
+assert(s.values().length == 0, "Initial values should be empty");
+
+// Test add
+let added = s.add(10);
+assert(added == true, "add should return true for new value");
+assert(s.size == 1, "Size should be 1");
+assert(s.has(10) == true, "Set should have 10");
+
+// Test duplicate prevention
+let added2 = s.add(10);
+assert(added2 == false, "add should return false for duplicate value");
+assert(s.size == 1, "Size should still be 1");
+
+// Test multiple adds
+s.add(20);
+s.add(30);
+s.add(40);
+assert(s.size == 4, "Size should be 4");
+assert(s.has(20) == true, "Set should have 20");
+assert(s.has(30) == true, "Set should have 30");
+assert(s.has(40) == true, "Set should have 40");
+
+// Test has for non-existent value
+assert(s.has(100) == false, "Set should not have 100");
+
+// Test delete
+let deleted = s.delete(20);
+assert(deleted == true, "delete should return true for existing value");
+assert(s.size == 3, "Size should be 3");
+assert(s.has(20) == false, "Set should not have 20 after delete");
+
+let deleted2 = s.delete(100);
+assert(deleted2 == false, "delete should return false for non-existent value");
+assert(s.size == 3, "Size should still be 3");
+
+// Test values
+let vals = s.values();
+assert(vals.length == 3, "values() should return 3 values");
+assert(vals.contains(10), "values should contain 10");
+assert(vals.contains(30), "values should contain 30");
+assert(vals.contains(40), "values should contain 40");
+
+// Test with different types
+s.add("hello");
+s.add("world");
+s.add(true);
+s.add(false);
+s.add(null);
+
+assert(s.size == 8, "Should handle mixed types");
+assert(s.has("hello") == true, "Should have string");
+assert(s.has(true) == true, "Should have boolean");
+assert(s.has(null) == true, "Should have null");
+
+// Test clear
+s.clear();
+assert(s.size == 0, "Size should be 0 after clear");
+assert(s.has(10) == false, "Should not have any values after clear");
+
+// Test union
+let s1 = Set();
+s1.add(1);
+s1.add(2);
+s1.add(3);
+
+let s2 = Set();
+s2.add(3);
+s2.add(4);
+s2.add(5);
+
+let union = s1.union(s2);
+assert(union.size == 5, "Union should have 5 elements");
+assert(union.has(1) == true, "Union should have 1");
+assert(union.has(2) == true, "Union should have 2");
+assert(union.has(3) == true, "Union should have 3");
+assert(union.has(4) == true, "Union should have 4");
+assert(union.has(5) == true, "Union should have 5");
+
+// Original sets should be unchanged
+assert(s1.size == 3, "s1 should be unchanged");
+assert(s2.size == 3, "s2 should be unchanged");
+
+// Test intersection
+let inter = s1.intersection(s2);
+assert(inter.size == 1, "Intersection should have 1 element");
+assert(inter.has(3) == true, "Intersection should have 3");
+assert(inter.has(1) == false, "Intersection should not have 1");
+assert(inter.has(5) == false, "Intersection should not have 5");
+
+// Test difference
+let diff = s1.difference(s2);
+assert(diff.size == 2, "Difference should have 2 elements");
+assert(diff.has(1) == true, "Difference should have 1");
+assert(diff.has(2) == true, "Difference should have 2");
+assert(diff.has(3) == false, "Difference should not have 3");
+
+// Test empty set operations
+let empty1 = Set();
+let empty2 = Set();
+
+let empty_union = empty1.union(empty2);
+assert(empty_union.size == 0, "Union of empty sets should be empty");
+
+let empty_inter = empty1.intersection(s1);
+assert(empty_inter.size == 0, "Intersection with empty set should be empty");
+
+let empty_diff = empty1.difference(s1);
+assert(empty_diff.size == 0, "Difference of empty set should be empty");
+
+// Test with strings
+let words = Set();
+words.add("apple");
+words.add("banana");
+words.add("apple");  // duplicate
+words.add("cherry");
+
+assert(words.size == 3, "Should prevent duplicate strings");
+assert(words.has("apple") == true, "Should have apple");
+assert(words.has("banana") == true, "Should have banana");
+assert(words.has("cherry") == true, "Should have cherry");
+
+// Test large set
+let large = Set();
+let i = 0;
+while (i < 1000) {
+    large.add(i);
+    i = i + 1;
+}
+
+assert(large.size == 1000, "Should handle large set");
+
+i = 0;
+while (i < 1000) {
+    assert(large.has(i) == true, "Should contain all added values");
+    i = i + 1;
+}
+
+// Test adding duplicates to large set
+i = 0;
+while (i < 1000) {
+    let result = large.add(i);
+    assert(result == false, "Should reject duplicates in large set");
+    i = i + 1;
+}
+
+assert(large.size == 1000, "Size should remain 1000 after duplicate adds");
+
+print("All Set tests passed!");

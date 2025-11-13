@@ -356,6 +356,44 @@ Value eval_expr(Expr *expr, Environment *env, ExecutionContext *ctx) {
                 }
             }
 
+            // Null comparisons
+            if (left.type == VAL_NULL || right.type == VAL_NULL) {
+                if (expr->as.binary.op == OP_EQUAL) {
+                    // Both null -> true, one null -> false
+                    return val_bool(left.type == VAL_NULL && right.type == VAL_NULL);
+                } else if (expr->as.binary.op == OP_NOT_EQUAL) {
+                    // Both null -> false, one null -> true
+                    return val_bool(!(left.type == VAL_NULL && right.type == VAL_NULL));
+                }
+            }
+
+            // Object comparisons (reference equality)
+            if (left.type == VAL_OBJECT && right.type == VAL_OBJECT) {
+                if (expr->as.binary.op == OP_EQUAL) {
+                    return val_bool(left.as.as_object == right.as.as_object);
+                } else if (expr->as.binary.op == OP_NOT_EQUAL) {
+                    return val_bool(left.as.as_object != right.as.as_object);
+                }
+            }
+
+            // Cross-type equality comparisons (before numeric type check)
+            // If types are different and not both numeric, == returns false, != returns true
+            if (expr->as.binary.op == OP_EQUAL || expr->as.binary.op == OP_NOT_EQUAL) {
+                int left_is_numeric = is_numeric(left);
+                int right_is_numeric = is_numeric(right);
+
+                // If one is numeric and the other is not, types don't match
+                if (left_is_numeric != right_is_numeric) {
+                    return val_bool(expr->as.binary.op == OP_NOT_EQUAL);
+                }
+
+                // If both are non-numeric but types are different (handled above for strings/bools/runes)
+                // this handles any remaining cases
+                if (!left_is_numeric && !right_is_numeric && left.type != right.type) {
+                    return val_bool(expr->as.binary.op == OP_NOT_EQUAL);
+                }
+            }
+
             // Numeric operations
             if (!is_numeric(left) || !is_numeric(right)) {
                 fprintf(stderr, "Runtime error: Binary operation requires numeric operands\n");
@@ -1372,7 +1410,10 @@ void eval_stmt(Stmt *stmt, Environment *env, ExecutionContext *ctx) {
 
                 if (!value_is_truthy(condition)) break;
 
-                eval_stmt(stmt->as.while_stmt.body, env, ctx);
+                // Create new environment for this iteration
+                Environment *iter_env = env_new(env);
+                eval_stmt(stmt->as.while_stmt.body, iter_env, ctx);
+                env_release(iter_env);
 
                 // Check for break/continue/return/exception
                 if (ctx->loop_state.is_breaking) {
@@ -1418,8 +1459,10 @@ void eval_stmt(Stmt *stmt, Environment *env, ExecutionContext *ctx) {
                     }
                 }
 
-                // Execute body
-                eval_stmt(stmt->as.for_loop.body, loop_env, ctx);
+                // Execute body (create new environment for this iteration)
+                Environment *iter_env = env_new(loop_env);
+                eval_stmt(stmt->as.for_loop.body, iter_env, ctx);
+                env_release(iter_env);
 
                 // Check for break/continue/return/exception
                 if (ctx->loop_state.is_breaking) {
@@ -1469,22 +1512,28 @@ void eval_stmt(Stmt *stmt, Environment *env, ExecutionContext *ctx) {
                 Array *arr = iterable.as.as_array;
 
                 for (int i = 0; i < arr->length; i++) {
+                    // Create new environment for this iteration
+                    Environment *iter_env = env_new(loop_env);
+
                     // Bind variables
                     if (stmt->as.for_in.key_var) {
-                        env_set(loop_env, stmt->as.for_in.key_var, val_i32(i), ctx);
+                        env_set(iter_env, stmt->as.for_in.key_var, val_i32(i), ctx);
                         // Check for exception from env_set
                         if (ctx->exception_state.is_throwing) {
+                            env_release(iter_env);
                             break;
                         }
                     }
-                    env_set(loop_env, stmt->as.for_in.value_var, arr->elements[i], ctx);
+                    env_set(iter_env, stmt->as.for_in.value_var, arr->elements[i], ctx);
                     // Check for exception from env_set
                     if (ctx->exception_state.is_throwing) {
+                        env_release(iter_env);
                         break;
                     }
 
                     // Execute body
-                    eval_stmt(stmt->as.for_in.body, loop_env, ctx);
+                    eval_stmt(stmt->as.for_in.body, iter_env, ctx);
+                    env_release(iter_env);
 
                     // Check break/continue/return/exception
                     if (ctx->loop_state.is_breaking) {
@@ -1503,22 +1552,28 @@ void eval_stmt(Stmt *stmt, Environment *env, ExecutionContext *ctx) {
                 Object *obj = iterable.as.as_object;
 
                 for (int i = 0; i < obj->num_fields; i++) {
+                    // Create new environment for this iteration
+                    Environment *iter_env = env_new(loop_env);
+
                     // Bind variables
                     if (stmt->as.for_in.key_var) {
-                        env_set(loop_env, stmt->as.for_in.key_var, val_string(obj->field_names[i]), ctx);
+                        env_set(iter_env, stmt->as.for_in.key_var, val_string(obj->field_names[i]), ctx);
                         // Check for exception from env_set
                         if (ctx->exception_state.is_throwing) {
+                            env_release(iter_env);
                             break;
                         }
                     }
-                    env_set(loop_env, stmt->as.for_in.value_var, obj->field_values[i], ctx);
+                    env_set(iter_env, stmt->as.for_in.value_var, obj->field_values[i], ctx);
                     // Check for exception from env_set
                     if (ctx->exception_state.is_throwing) {
+                        env_release(iter_env);
                         break;
                     }
 
                     // Execute body
-                    eval_stmt(stmt->as.for_in.body, loop_env, ctx);
+                    eval_stmt(stmt->as.for_in.body, iter_env, ctx);
+                    env_release(iter_env);
 
                     // Check break/continue/return/exception
                     if (ctx->loop_state.is_breaking) {
