@@ -1386,27 +1386,27 @@ static BuiltinInfo builtins[] = {
     {"__dirent_name", builtin_dirent_name},
     {"__string_to_cstr", builtin_string_to_cstr},
     {"__cstr_to_string", builtin_cstr_to_string},
-    // File operations
-    {"exists", builtin_exists},
-    {"read_file", builtin_read_file},
-    {"write_file", builtin_write_file},
-    {"append_file", builtin_append_file},
-    // Directory operations
-    {"make_dir", builtin_make_dir},
-    {"remove_dir", builtin_remove_dir},
-    {"list_dir", builtin_list_dir},
-    // File management
-    {"remove_file", builtin_remove_file},
-    {"rename", builtin_rename},
-    {"copy_file", builtin_copy_file},
-    // File info
-    {"is_file", builtin_is_file},
-    {"is_dir", builtin_is_dir},
-    {"file_stat", builtin_file_stat},
-    // Directory navigation
-    {"cwd", builtin_cwd},
-    {"chdir", builtin_chdir},
-    {"absolute_path", builtin_absolute_path},
+    // Internal file operations (use stdlib/fs.hml module for public API)
+    {"__exists", builtin_exists},
+    {"__read_file", builtin_read_file},
+    {"__write_file", builtin_write_file},
+    {"__append_file", builtin_append_file},
+    // Internal directory operations (use stdlib/fs.hml module for public API)
+    {"__make_dir", builtin_make_dir},
+    {"__remove_dir", builtin_remove_dir},
+    {"__list_dir", builtin_list_dir},
+    // Internal file management (use stdlib/fs.hml module for public API)
+    {"__remove_file", builtin_remove_file},
+    {"__rename", builtin_rename},
+    {"__copy_file", builtin_copy_file},
+    // Internal file info (use stdlib/fs.hml module for public API)
+    {"__is_file", builtin_is_file},
+    {"__is_dir", builtin_is_dir},
+    {"__file_stat", builtin_file_stat},
+    // Internal directory navigation (use stdlib/fs.hml module for public API)
+    {"__cwd", builtin_cwd},
+    {"__chdir", builtin_chdir},
+    {"__absolute_path", builtin_absolute_path},
     {NULL, NULL}  // Sentinel
 };
 
