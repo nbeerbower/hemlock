@@ -367,6 +367,24 @@ Value eval_expr(Expr *expr, Environment *env, ExecutionContext *ctx) {
                 }
             }
 
+            // Cross-type equality comparisons (before numeric type check)
+            // If types are different and not both numeric, == returns false, != returns true
+            if (expr->as.binary.op == OP_EQUAL || expr->as.binary.op == OP_NOT_EQUAL) {
+                int left_is_numeric = is_numeric(left);
+                int right_is_numeric = is_numeric(right);
+
+                // If one is numeric and the other is not, types don't match
+                if (left_is_numeric != right_is_numeric) {
+                    return val_bool(expr->as.binary.op == OP_NOT_EQUAL);
+                }
+
+                // If both are non-numeric but types are different (handled above for strings/bools/runes)
+                // this handles any remaining cases
+                if (!left_is_numeric && !right_is_numeric && left.type != right.type) {
+                    return val_bool(expr->as.binary.op == OP_NOT_EQUAL);
+                }
+            }
+
             // Numeric operations
             if (!is_numeric(left) || !is_numeric(right)) {
                 fprintf(stderr, "Runtime error: Binary operation requires numeric operands\n");

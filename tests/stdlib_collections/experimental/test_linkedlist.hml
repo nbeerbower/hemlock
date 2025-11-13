@@ -177,7 +177,7 @@ while (i < 1000) {
 
 assert(list.size == 1000, "Should handle large list");
 
-let i = 0;
+i = 0;
 while (i < 1000) {
     assert(list.get(i) == i, "Should retrieve correct value at index " + typeof(i));
     i = i + 1;

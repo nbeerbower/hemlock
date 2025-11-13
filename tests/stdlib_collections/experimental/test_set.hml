@@ -137,14 +137,14 @@ while (i < 1000) {
 
 assert(large.size == 1000, "Should handle large set");
 
-let i = 0;
+i = 0;
 while (i < 1000) {
     assert(large.has(i) == true, "Should contain all added values");
     i = i + 1;
 }
 
 // Test adding duplicates to large set
-let i = 0;
+i = 0;
 while (i < 1000) {
     let result = large.add(i);
     assert(result == false, "Should reject duplicates in large set");

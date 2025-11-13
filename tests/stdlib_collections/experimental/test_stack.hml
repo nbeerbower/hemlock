@@ -103,7 +103,7 @@ while (i < 1000) {
 
 assert(s.size == 1000, "Should handle large stack");
 
-let i = 999;
+i = 999;
 while (i >= 0) {
     let val = s.pop();
     assert(val == i, "Should pop in LIFO order");

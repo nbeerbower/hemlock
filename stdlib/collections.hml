@@ -55,6 +55,28 @@ export fn HashMap() {
         return result;
     }
 
+    // Helper: convert float to integer (truncate towards zero)
+    fn float_to_int(f) {
+        // Handle negative numbers
+        let is_negative = f < 0.0;
+        if (is_negative) {
+            f = -f;
+        }
+
+        // Truncate by repeatedly subtracting 1.0 and counting
+        let result = 0;
+        while (f >= 1.0) {
+            f = f - 1.0;
+            result = result + 1;
+        }
+
+        if (is_negative) {
+            result = -result;
+        }
+
+        return result;
+    }
+
     // Simple hash function for various types
     fn hash(key) {
         let type = typeof(key);
@@ -95,7 +117,7 @@ export fn HashMap() {
         if (type == "f32" || type == "f64") {
             // Convert float to int representation
             let val = key * 1000.0;
-            let intval = val + 0;
+            let intval = float_to_int(val);
             if (intval < 0) {
                 intval = -intval;
             }

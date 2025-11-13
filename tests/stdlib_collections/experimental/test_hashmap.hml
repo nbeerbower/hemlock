@@ -88,7 +88,7 @@ while (i < 100) {
 
 assert(map.size == 100, "Should handle 100 items");
 
-let i = 0;
+i = 0;
 while (i < 100) {
     assert(map.get(i) == i * 10, "Should retrieve correct value for key " + typeof(i));
     i = i + 1;
