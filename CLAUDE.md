@@ -1372,6 +1372,186 @@ while (i < args.length) {
 
 ---
 
+## Command Execution
+
+Hemlock provides the **`exec()` builtin function** to execute shell commands and capture their output.
+
+### The `exec()` Function
+
+```hemlock
+let result = exec("echo hello");
+print(result.output);      // "hello\n"
+print(result.exit_code);   // 0
+```
+
+**Signature:**
+- `exec(command: string): object`
+
+**Returns:** An object with two fields:
+- `output` (string): The command's stdout output (as a string)
+- `exit_code` (i32): The command's exit status code
+
+### Basic Usage
+
+```hemlock
+// Simple command
+let r = exec("ls -la");
+print(r.output);
+print("Exit code: " + typeof(r.exit_code));
+
+// Check exit status
+let r2 = exec("grep pattern file.txt");
+if (r2.exit_code == 0) {
+    print("Found: " + r2.output);
+} else {
+    print("Pattern not found");
+}
+
+// Commands with pipes
+let r3 = exec("ps aux | grep hemlock");
+print(r3.output);
+```
+
+### Result Object
+
+The object returned by `exec()` has the following structure:
+
+```hemlock
+{
+    output: string,      // Command stdout (captured output)
+    exit_code: i32       // Process exit status (0 = success)
+}
+```
+
+**Field details:**
+- **`output`**: Contains all text written to stdout by the command
+  - Empty string if command produces no output
+  - Includes newlines and whitespace as-is
+  - Multi-line output preserved
+  - Not limited in size (dynamically allocated)
+
+- **`exit_code`**: The command's exit status
+  - `0` typically indicates success
+  - Non-zero values indicate errors (convention: 1-255)
+  - `-1` if command could not be executed or terminated abnormally
+
+### Advanced Examples
+
+**Handling failures:**
+```hemlock
+let r = exec("ls /nonexistent");
+if (r.exit_code != 0) {
+    print("Command failed with code: " + typeof(r.exit_code));
+    print("Error output: " + r.output);  // Note: stderr not captured
+}
+```
+
+**Processing multi-line output:**
+```hemlock
+let r = exec("cat file.txt");
+let lines = r.output.split("\n");
+let i = 0;
+while (i < lines.length) {
+    print("Line " + typeof(i) + ": " + lines[i]);
+    i = i + 1;
+}
+```
+
+**Command chaining:**
+```hemlock
+// Multiple commands with && and ||
+let r1 = exec("mkdir -p /tmp/test && touch /tmp/test/file.txt");
+if (r1.exit_code == 0) {
+    print("Setup complete");
+}
+
+// Pipes and redirections work
+let r2 = exec("echo 'data' | base64");
+print("Base64: " + r2.output);
+```
+
+**Exit code patterns:**
+```hemlock
+// Different exit codes indicate different conditions
+let r = exec("test -f myfile.txt");
+if (r.exit_code == 0) {
+    print("File exists");
+} else if (r.exit_code == 1) {
+    print("File does not exist");
+} else {
+    print("Test command failed: " + typeof(r.exit_code));
+}
+```
+
+### Error Handling
+
+The `exec()` function throws an exception if the command cannot be executed:
+
+```hemlock
+try {
+    let r = exec("nonexistent_command_xyz");
+} catch (e) {
+    print("Failed to execute: " + e);
+}
+```
+
+**When exceptions are thrown:**
+- `popen()` fails (e.g., cannot create pipe)
+- System resource limits exceeded
+- Memory allocation failures
+
+**When exceptions are NOT thrown:**
+- Command runs but returns non-zero exit code (check `exit_code` field)
+- Command produces no output (returns empty string in `output`)
+- Command not found by shell (returns non-zero `exit_code`)
+
+### Implementation Details
+
+**How it works:**
+- Uses `popen()` to execute commands via `/bin/sh`
+- Captures stdout only (stderr is not captured)
+- Output buffered dynamically (starts at 4KB, grows as needed)
+- Exit status extracted using `WIFEXITED()` and `WEXITSTATUS()` macros
+- Output string is properly null-terminated
+
+**Performance considerations:**
+- Creates a new shell process for each call
+- Output stored entirely in memory
+- No streaming support (waits for command completion)
+- Suitable for commands with reasonable output sizes
+
+**Security considerations:**
+- ⚠️ **Shell injection risk**: The command is executed by the shell (`/bin/sh`)
+- ⚠️ Always validate/sanitize user input before passing to `exec()`
+- Commands have full shell access (pipes, redirects, variables, etc.)
+- Runs with the same permissions as the Hemlock process
+
+### Limitations
+
+- **No stderr capture**: Only stdout is captured, stderr goes to terminal
+- **No streaming**: Must wait for command completion
+- **No timeout**: Commands can run indefinitely
+- **No signal handling**: Cannot send signals to running commands
+- **No process control**: Cannot interact with command after starting
+
+### Use Cases
+
+**Good use cases:**
+- Running system utilities (ls, grep, find, etc.)
+- Quick data processing with Unix tools
+- Checking system state or file existence
+- Generating reports from command-line tools
+- Automation scripts
+
+**Not recommended for:**
+- Long-running services or daemons
+- Interactive commands requiring input
+- Commands producing gigabytes of output
+- Real-time streaming data processing
+- Mission-critical error handling (stderr not captured)
+
+---
+
 ## Async/Concurrency
 
 Hemlock provides **structured concurrency** with async/await syntax, task spawning, and channels for communication. The implementation uses POSIX threads (pthreads) for **TRUE multi-threaded parallelism**.
