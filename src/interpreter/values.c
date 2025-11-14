@@ -160,7 +160,10 @@ void buffer_retain(Buffer *buf) {
 }
 
 void buffer_release(Buffer *buf) {
-    if (buf && buf->ref_count > 0) {
+    if (!buf) return;
+    // Skip if already manually freed via builtin_free()
+    if (is_manually_freed_pointer(buf)) return;
+    if (buf->ref_count > 0) {
         buf->ref_count--;
         if (buf->ref_count == 0) {
             buffer_free(buf);

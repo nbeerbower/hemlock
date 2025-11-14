@@ -69,43 +69,61 @@ Value builtin_free(Value *args, int num_args, ExecutionContext *ctx) {
         free(args[0].as.as_ptr);
         return val_null();
     } else if (args[0].type == VAL_BUFFER) {
-        // Manually free and set ref_count to 0 to prevent double-free
-        if (args[0].as.as_buffer->ref_count > 0) {
-            args[0].as.as_buffer->ref_count = 0;
-            free(args[0].as.as_buffer->data);
-            free(args[0].as.as_buffer);
+        Buffer *buf = args[0].as.as_buffer;
+
+        // Safety check: don't allow free on shared references
+        if (buf->ref_count > 1) {
+            fprintf(stderr, "Runtime error: Cannot free buffer with %d active references. "
+                    "Ensure exclusive ownership before calling free().\n", buf->ref_count);
+            exit(1);
         }
+
+        // Mark as manually freed to prevent double-free from value_release
+        if (buf->ref_count == 1) {
+            register_manually_freed_pointer(buf);
+        }
+
+        free(buf->data);
+        free(buf);
         return val_null();
     } else if (args[0].type == VAL_OBJECT) {
-        // Manually free object while respecting ref_counts of nested values
         Object *obj = args[0].as.as_object;
-        if (obj && obj->ref_count > 0) {
+
+        // Mark as manually freed to prevent double-free from value_release
+        // Note: We allow freeing objects even with ref_count > 1 to support circular references
+        // The manually_freed_pointer tracking prevents double-frees
+        if (obj->ref_count >= 1) {
             register_manually_freed_pointer(obj);
-            // Release all field values (decrements their ref_counts)
-            for (int i = 0; i < obj->num_fields; i++) {
-                value_release(obj->field_values[i]);
-                free(obj->field_names[i]);
-            }
-            // Free object structure
-            free(obj->field_names);
-            free(obj->field_values);
-            if (obj->type_name) free(obj->type_name);
-            free(obj);
         }
+
+        // Release all field values (decrements their ref_counts)
+        for (int i = 0; i < obj->num_fields; i++) {
+            value_release(obj->field_values[i]);
+            free(obj->field_names[i]);
+        }
+        // Free object structure
+        free(obj->field_names);
+        free(obj->field_values);
+        if (obj->type_name) free(obj->type_name);
+        free(obj);
         return val_null();
     } else if (args[0].type == VAL_ARRAY) {
-        // For reference-counted arrays, use array_free which handles cycles
         Array *arr = args[0].as.as_array;
-        if (arr && arr->ref_count > 0) {
+
+        // Mark as manually freed to prevent double-free from value_release
+        // Note: We allow freeing arrays even with ref_count > 1 to support circular references
+        // The manually_freed_pointer tracking prevents double-frees
+        if (arr->ref_count >= 1) {
             register_manually_freed_pointer(arr);
-            // Release all elements (decrements their ref_counts)
-            for (int i = 0; i < arr->length; i++) {
-                value_release(arr->elements[i]);
-            }
-            // Free array structure
-            free(arr->elements);
-            free(arr);
         }
+
+        // Release all elements (decrements their ref_counts)
+        for (int i = 0; i < arr->length; i++) {
+            value_release(arr->elements[i]);
+        }
+        // Free array structure
+        free(arr->elements);
+        free(arr);
         return val_null();
     } else {
         fprintf(stderr, "Runtime error: free() requires a pointer, buffer, object, or array\n");
