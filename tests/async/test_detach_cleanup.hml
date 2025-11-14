@@ -1,9 +1,10 @@
 // Test: detach() cleanup verification
 // Tests that detached tasks properly clean up their memory when they complete
 
-let counter = 0;
+// Create channel for thread-safe communication
+let ch = channel(100);
 
-async fn increment_task(id: i32) {
+async fn increment_task(id: i32, ch) {
     // Simulate some work
     let i = 0;
     let sum = 0;
@@ -12,8 +13,8 @@ async fn increment_task(id: i32) {
         i = i + 1;
     }
 
-    // Increment shared counter
-    counter = counter + 1;
+    // Signal completion via channel (thread-safe)
+    ch.send(1);
 
     return null;
 }
@@ -22,20 +23,22 @@ async fn increment_task(id: i32) {
 let num_tasks = 50;
 let i = 0;
 while (i < num_tasks) {
-    detach(increment_task, i);
+    detach(increment_task, i, ch);
     i = i + 1;
 }
 
 print("Detached tasks:");
 print(num_tasks);
 
-// Give detached tasks time to complete
-// Note: This is a simple busy-wait for testing purposes
-let wait_counter = 0;
-while (wait_counter < 1000000) {
-    wait_counter = wait_counter + 1;
+// Wait for all tasks to complete by receiving from channel
+let completed = 0;
+let j = 0;
+while (j < num_tasks) {
+    let val = ch.recv();
+    completed = completed + val;
+    j = j + 1;
 }
 
-print("Counter after wait:");
-print(counter);
+print("Tasks completed:");
+print(completed);
 print("Test completed without crashes");
