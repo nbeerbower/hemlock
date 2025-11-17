@@ -176,8 +176,6 @@ Value eval_expr(Expr *expr, Environment *env, ExecutionContext *ctx) {
             // String concatenation
             if (expr->as.binary.op == OP_ADD && left.type == VAL_STRING && right.type == VAL_STRING) {
                 String *result = string_concat(left.as.as_string, right.as.as_string);
-                value_release(left);  // Release left operand
-                value_release(right);  // Release right operand
                 return (Value){ .type = VAL_STRING, .as.as_string = result };
             }
 
@@ -192,8 +190,6 @@ Value eval_expr(Expr *expr, Environment *env, ExecutionContext *ctx) {
                 String *rune_str = string_new(rune_bytes);
                 String *result = string_concat(left.as.as_string, rune_str);
                 free(rune_str);  // Free temporary string
-                value_release(left);  // Release left operand
-                // right is rune (primitive), no release needed
                 return (Value){ .type = VAL_STRING, .as.as_string = result };
             }
 
@@ -208,8 +204,6 @@ Value eval_expr(Expr *expr, Environment *env, ExecutionContext *ctx) {
                 String *rune_str = string_new(rune_bytes);
                 String *result = string_concat(rune_str, right.as.as_string);
                 free(rune_str);  // Free temporary string
-                // left is rune (primitive), no release needed
-                value_release(right);  // Release right operand
                 return (Value){ .type = VAL_STRING, .as.as_string = result };
             }
 
