@@ -71,7 +71,12 @@ Value builtin_free(Value *args, int num_args, ExecutionContext *ctx) {
     } else if (args[0].type == VAL_BUFFER) {
         Buffer *buf = args[0].as.as_buffer;
 
+        // Release once to drop the env_get() retain (caller's reference)
+        // After this, ref_count should be 1 (only environment reference)
+        value_release(args[0]);
+
         // Safety check: don't allow free on shared references
+        // After releasing env_get() reference, should have ref_count == 1 (environment only)
         if (buf->ref_count > 1) {
             fprintf(stderr, "Runtime error: Cannot free buffer with %d active references. "
                     "Ensure exclusive ownership before calling free().\n", buf->ref_count);
@@ -88,6 +93,9 @@ Value builtin_free(Value *args, int num_args, ExecutionContext *ctx) {
         return val_null();
     } else if (args[0].type == VAL_OBJECT) {
         Object *obj = args[0].as.as_object;
+
+        // Release once to drop the env_get() retain
+        value_release(args[0]);
 
         // Mark as manually freed to prevent double-free from value_release
         // Note: We allow freeing objects even with ref_count > 1 to support circular references
@@ -109,6 +117,9 @@ Value builtin_free(Value *args, int num_args, ExecutionContext *ctx) {
         return val_null();
     } else if (args[0].type == VAL_ARRAY) {
         Array *arr = args[0].as.as_array;
+
+        // Release once to drop the env_get() retain
+        value_release(args[0]);
 
         // Mark as manually freed to prevent double-free from value_release
         // Note: We allow freeing arrays even with ref_count > 1 to support circular references

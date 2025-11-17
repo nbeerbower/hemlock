@@ -798,6 +798,7 @@ Value eval_expr(Expr *expr, Environment *env, ExecutionContext *ctx) {
         case EXPR_GET_PROPERTY: {
             Value object = eval_expr(expr->as.get_property.object, env, ctx);
             const char *property = expr->as.get_property.property;
+            Value result;
 
             if (object.type == VAL_STRING) {
                 String *str = object.as.as_string;
@@ -808,50 +809,59 @@ Value eval_expr(Expr *expr, Environment *env, ExecutionContext *ctx) {
                     if (str->char_length < 0) {
                         str->char_length = utf8_count_codepoints(str->data, str->length);
                     }
-                    return val_i32(str->char_length);
+                    result = val_i32(str->char_length);
+                } else if (strcmp(property, "byte_length") == 0) {
+                    // .byte_length property - returns byte count
+                    result = val_i32(str->length);
+                } else {
+                    runtime_error(ctx, "Unknown property '%s' for string", property);
                 }
-
-                // .byte_length property - returns byte count
-                if (strcmp(property, "byte_length") == 0) {
-                    return val_i32(str->length);
-                }
-
-                runtime_error(ctx, "Unknown property '%s' for string", property);
             } else if (object.type == VAL_BUFFER) {
                 if (strcmp(property, "length") == 0) {
-                    return val_int(object.as.as_buffer->length);
+                    result = val_int(object.as.as_buffer->length);
                 } else if (strcmp(property, "capacity") == 0) {
-                    return val_int(object.as.as_buffer->capacity);
+                    result = val_int(object.as.as_buffer->capacity);
+                } else {
+                    runtime_error(ctx, "Unknown property '%s' for buffer", property);
                 }
-                runtime_error(ctx, "Unknown property '%s' for buffer", property);
             } else if (object.type == VAL_FILE) {
                 FileHandle *file = object.as.as_file;
                 if (strcmp(property, "path") == 0) {
-                    return val_string(file->path);
+                    result = val_string(file->path);
                 } else if (strcmp(property, "mode") == 0) {
-                    return val_string(file->mode);
+                    result = val_string(file->mode);
                 } else if (strcmp(property, "closed") == 0) {
-                    return val_bool(file->closed);
+                    result = val_bool(file->closed);
+                } else {
+                    runtime_error(ctx, "Unknown property '%s' for file", property);
                 }
-                runtime_error(ctx, "Unknown property '%s' for file", property);
             } else if (object.type == VAL_ARRAY) {
                 // Array properties
                 if (strcmp(property, "length") == 0) {
-                    return val_i32(object.as.as_array->length);
+                    result = val_i32(object.as.as_array->length);
+                } else {
+                    runtime_error(ctx, "Array has no property '%s'", property);
                 }
-                runtime_error(ctx, "Array has no property '%s'", property);
             } else if (object.type == VAL_OBJECT) {
                 // Look up field in object
                 Object *obj = object.as.as_object;
                 for (int i = 0; i < obj->num_fields; i++) {
                     if (strcmp(obj->field_names[i], property) == 0) {
-                        return obj->field_values[i];
+                        result = obj->field_values[i];
+                        // Retain the field value so it survives object release
+                        value_retain(result);
+                        value_release(object);
+                        return result;
                     }
                 }
                 runtime_error(ctx, "Object has no field '%s'", property);
             } else {
                 runtime_error(ctx, "Only strings, buffers, arrays, and objects have properties");
             }
+
+            // Release object after accessing property
+            value_release(object);
+            return result;
         }
 
         case EXPR_INDEX: {
@@ -863,6 +873,7 @@ Value eval_expr(Expr *expr, Environment *env, ExecutionContext *ctx) {
             }
 
             int32_t index = value_to_int(index_val);
+            Value result;
 
             if (object.type == VAL_STRING) {
                 String *str = object.as.as_string;
@@ -883,7 +894,7 @@ Value eval_expr(Expr *expr, Environment *env, ExecutionContext *ctx) {
                 // Decode the codepoint at that position
                 uint32_t codepoint = utf8_decode_at(str->data, byte_pos);
 
-                return val_rune(codepoint);
+                result = val_rune(codepoint);  // New value, safe to release object
             } else if (object.type == VAL_BUFFER) {
                 Buffer *buf = object.as.as_buffer;
 
@@ -892,13 +903,20 @@ Value eval_expr(Expr *expr, Environment *env, ExecutionContext *ctx) {
                 }
 
                 // Return the byte as an integer (u8)
-                return val_u8(((unsigned char *)buf->data)[index]);
+                result = val_u8(((unsigned char *)buf->data)[index]);  // New value, safe to release object
             } else if (object.type == VAL_ARRAY) {
                 // Array indexing
-                return array_get(object.as.as_array, index);
+                result = array_get(object.as.as_array, index);
+                // Retain the element so it survives array release
+                value_retain(result);
             } else {
                 runtime_error(ctx, "Only strings, buffers, and arrays can be indexed");
             }
+
+            // Release the object and index after use
+            value_release(object);
+            value_release(index_val);
+            return result;
         }
 
         case EXPR_INDEX_ASSIGN: {
@@ -915,6 +933,8 @@ Value eval_expr(Expr *expr, Environment *env, ExecutionContext *ctx) {
             if (object.type == VAL_ARRAY) {
                 // Array assignment - value can be any type
                 array_set(object.as.as_array, index, value);
+                value_release(object);
+                value_release(index_val);
                 return value;
             }
 
@@ -932,6 +952,9 @@ Value eval_expr(Expr *expr, Environment *env, ExecutionContext *ctx) {
 
                 // Strings are mutable - set the byte
                 str->data[index] = (char)value_to_int(value);
+                value_release(object);
+                value_release(index_val);
+                // Don't release value - it's returned
                 return value;
             } else if (object.type == VAL_BUFFER) {
                 Buffer *buf = object.as.as_buffer;
@@ -942,6 +965,9 @@ Value eval_expr(Expr *expr, Environment *env, ExecutionContext *ctx) {
 
                 // Buffers are mutable - set the byte
                 ((unsigned char *)buf->data)[index] = (unsigned char)value_to_int(value);
+                value_release(object);
+                value_release(index_val);
+                // Don't release value - it's returned
                 return value;
             } else {
                 runtime_error(ctx, "Only strings, buffers, and arrays support index assignment");
