@@ -1,0 +1,4 @@
+// Test type mismatch when assigning to typed array
+
+let arr: array<i32> = [10, 20, 30];
+arr[0] = "wrong";  // Should error: type mismatch

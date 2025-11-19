@@ -1,0 +1,4 @@
+// Test type mismatch when inserting into typed array
+
+let arr: array<string> = ["hello", "world"];
+arr.insert(1, 123);  // Should error: type mismatch

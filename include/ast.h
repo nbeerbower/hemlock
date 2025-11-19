@@ -171,6 +171,7 @@ typedef enum {
     TYPE_RUNE,           // Unicode codepoint (U+0000 to U+10FFFF)
     TYPE_PTR,
     TYPE_BUFFER,
+    TYPE_ARRAY,          // Typed array (e.g., array<u8>)
     TYPE_NULL,
     TYPE_INFER,          // No annotation, infer from value
     TYPE_CUSTOM_OBJECT,  // Custom object type (Person, User, etc.)
@@ -180,7 +181,8 @@ typedef enum {
 
 struct Type {
     TypeKind kind;
-    char *type_name;  // For TYPE_CUSTOM_OBJECT (e.g., "Person")
+    char *type_name;      // For TYPE_CUSTOM_OBJECT (e.g., "Person")
+    struct Type *element_type;  // For TYPE_ARRAY (element type)
 };
 
 // ========== STATEMENT TYPES ==========

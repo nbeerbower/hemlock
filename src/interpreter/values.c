@@ -217,6 +217,7 @@ Array* array_new(void) {
     arr->capacity = 8;
     arr->length = 0;
     arr->ref_count = 1;  // Start with 1 - caller owns the first reference
+    arr->element_type = NULL;  // Untyped array
     arr->elements = malloc(sizeof(Value) * arr->capacity);
     if (!arr->elements) {
         free(arr);
@@ -269,7 +270,46 @@ static void array_grow(Array *arr) {
     arr->elements = new_elements;
 }
 
+// Helper function to check if value matches array element type
+static void check_array_element_type(Array *arr, Value val) {
+    if (!arr->element_type) {
+        return;  // Untyped array, allow any value
+    }
+
+    TypeKind expected = arr->element_type->kind;
+    int type_matches = 0;
+
+    switch (expected) {
+        case TYPE_I8:   type_matches = (val.type == VAL_I8); break;
+        case TYPE_I16:  type_matches = (val.type == VAL_I16); break;
+        case TYPE_I32:  type_matches = (val.type == VAL_I32); break;
+        case TYPE_I64:  type_matches = (val.type == VAL_I64); break;
+        case TYPE_U8:   type_matches = (val.type == VAL_U8); break;
+        case TYPE_U16:  type_matches = (val.type == VAL_U16); break;
+        case TYPE_U32:  type_matches = (val.type == VAL_U32); break;
+        case TYPE_U64:  type_matches = (val.type == VAL_U64); break;
+        case TYPE_F32:  type_matches = (val.type == VAL_F32); break;
+        case TYPE_F64:  type_matches = (val.type == VAL_F64); break;
+        case TYPE_BOOL: type_matches = (val.type == VAL_BOOL); break;
+        case TYPE_STRING: type_matches = (val.type == VAL_STRING); break;
+        case TYPE_RUNE: type_matches = (val.type == VAL_RUNE); break;
+        case TYPE_PTR:  type_matches = (val.type == VAL_PTR); break;
+        case TYPE_BUFFER: type_matches = (val.type == VAL_BUFFER); break;
+        default:
+            fprintf(stderr, "Runtime error: Unsupported array element type constraint\n");
+            exit(1);
+    }
+
+    if (!type_matches) {
+        fprintf(stderr, "Runtime error: Type mismatch in typed array - expected element of specific type\n");
+        exit(1);
+    }
+}
+
 void array_push(Array *arr, Value val) {
+    // Check type constraint
+    check_array_element_type(arr, val);
+
     if (arr->length >= arr->capacity) {
         array_grow(arr);
     }
@@ -299,6 +339,9 @@ void array_set(Array *arr, int index, Value val) {
         fprintf(stderr, "Runtime error: Negative array index not supported\n");
         exit(1);
     }
+
+    // Check type constraint
+    check_array_element_type(arr, val);
 
     // Extend array if needed, filling with nulls
     while (index >= arr->length) {
@@ -951,6 +994,12 @@ static void array_free_internal(Array *arr, VisitedSet *visited) {
         value_release(arr->elements[i]);
     }
     free(arr->elements);
+
+    // Free element type annotation if present
+    if (arr->element_type) {
+        type_free(arr->element_type);
+    }
+
     free(arr);
 }
 
