@@ -1,0 +1,4 @@
+// Test type mismatch when unshifting to typed array
+
+let arr: array<bool> = [true, false];
+arr.unshift(42);  // Should error: type mismatch

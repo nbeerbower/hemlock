@@ -1,0 +1,23 @@
+// Test: Explicit untyped array annotation with mixed types
+// Using 'array' without '<type>' should allow any element types
+
+let arr: array = ["yo", 3.14, 42, true, null];
+
+print("Length: " + typeof(arr.length));  // 5
+print("First: " + arr[0]);               // "yo"
+print("Second: " + typeof(arr[1]));      // 3.14
+print("Third: " + typeof(arr[2]));       // 42
+print("Fourth: " + typeof(arr[3]));      // true
+print("Fifth: " + typeof(arr[4]));       // null
+
+// Should allow any type to be pushed
+arr.push("another string");
+arr.push(999);
+arr.push(false);
+
+print("After push, length: " + typeof(arr.length));  // 8
+print("Sixth: " + arr[5]);    // "another string"
+print("Seventh: " + typeof(arr[6]));  // 999
+print("Eighth: " + typeof(arr[7]));   // false
+
+print("SUCCESS");

@@ -63,6 +63,7 @@ typedef struct {
     int length;
     int capacity;
     int ref_count;       // Reference count for memory management
+    Type *element_type;  // Optional: type constraint for array elements (NULL = untyped)
 } Array;
 
 // File handle struct

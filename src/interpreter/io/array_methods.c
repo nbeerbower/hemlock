@@ -2,6 +2,42 @@
 
 // ========== ARRAY METHOD HANDLING ==========
 
+// Helper function to check if value matches array element type
+static void check_array_element_type_for_method(Array *arr, Value val) {
+    if (!arr->element_type) {
+        return;  // Untyped array, allow any value
+    }
+
+    TypeKind expected = arr->element_type->kind;
+    int type_matches = 0;
+
+    switch (expected) {
+        case TYPE_I8:   type_matches = (val.type == VAL_I8); break;
+        case TYPE_I16:  type_matches = (val.type == VAL_I16); break;
+        case TYPE_I32:  type_matches = (val.type == VAL_I32); break;
+        case TYPE_I64:  type_matches = (val.type == VAL_I64); break;
+        case TYPE_U8:   type_matches = (val.type == VAL_U8); break;
+        case TYPE_U16:  type_matches = (val.type == VAL_U16); break;
+        case TYPE_U32:  type_matches = (val.type == VAL_U32); break;
+        case TYPE_U64:  type_matches = (val.type == VAL_U64); break;
+        case TYPE_F32:  type_matches = (val.type == VAL_F32); break;
+        case TYPE_F64:  type_matches = (val.type == VAL_F64); break;
+        case TYPE_BOOL: type_matches = (val.type == VAL_BOOL); break;
+        case TYPE_STRING: type_matches = (val.type == VAL_STRING); break;
+        case TYPE_RUNE: type_matches = (val.type == VAL_RUNE); break;
+        case TYPE_PTR:  type_matches = (val.type == VAL_PTR); break;
+        case TYPE_BUFFER: type_matches = (val.type == VAL_BUFFER); break;
+        default:
+            fprintf(stderr, "Runtime error: Unsupported array element type constraint\n");
+            exit(1);
+    }
+
+    if (!type_matches) {
+        fprintf(stderr, "Runtime error: Type mismatch in typed array - expected element of specific type\n");
+        exit(1);
+    }
+}
+
 // Helper: Compare two values for equality
 int values_equal(Value a, Value b) {
     if (a.type != b.type) {
@@ -72,6 +108,9 @@ Value call_array_method(Array *arr, const char *method, Value *args, int num_arg
             fprintf(stderr, "Runtime error: unshift() expects 1 argument\n");
             exit(1);
         }
+        // Check type constraint
+        check_array_element_type_for_method(arr, args[0]);
+
         // Ensure capacity
         if (arr->length >= arr->capacity) {
             arr->capacity *= 2;
@@ -102,6 +141,9 @@ Value call_array_method(Array *arr, const char *method, Value *args, int num_arg
             fprintf(stderr, "Runtime error: insert() index out of bounds\n");
             exit(1);
         }
+        // Check type constraint
+        check_array_element_type_for_method(arr, args[1]);
+
         // Ensure capacity
         if (arr->length >= arr->capacity) {
             arr->capacity *= 2;

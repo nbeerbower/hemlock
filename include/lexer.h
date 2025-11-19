@@ -66,6 +66,7 @@ typedef enum {
     TOK_TYPE_RUNE,     // Unicode codepoint type
     TOK_TYPE_PTR,
     TOK_TYPE_BUFFER,
+    TOK_TYPE_ARRAY,    // array type keyword
     TOK_TYPE_VOID,
 
     // Operators

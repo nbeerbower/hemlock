@@ -21,6 +21,25 @@ Expr* postfix(Parser *p);
 Expr* primary(Parser *p);
 Type* parse_type(Parser *p);
 
+// Helper: Check if current token is a type keyword and can be used as identifier
+static int is_type_keyword(TokenType type) {
+    return type == TOK_TYPE_I8 || type == TOK_TYPE_I16 || type == TOK_TYPE_I32 || type == TOK_TYPE_I64 ||
+           type == TOK_TYPE_U8 || type == TOK_TYPE_U16 || type == TOK_TYPE_U32 || type == TOK_TYPE_U64 ||
+           type == TOK_TYPE_F32 || type == TOK_TYPE_F64 || type == TOK_TYPE_BOOL || type == TOK_TYPE_STRING ||
+           type == TOK_TYPE_RUNE || type == TOK_TYPE_PTR || type == TOK_TYPE_BUFFER || type == TOK_TYPE_ARRAY ||
+           type == TOK_TYPE_INTEGER || type == TOK_TYPE_NUMBER || type == TOK_TYPE_BYTE || type == TOK_TYPE_VOID;
+}
+
+// Helper: Consume identifier or type keyword (for property/field names)
+static char* consume_identifier_or_type(Parser *p, const char *message) {
+    if (p->current.type == TOK_IDENT || is_type_keyword(p->current.type)) {
+        advance(p);
+        return token_text(&p->previous);
+    }
+    error_at_current(p, message);
+    return strdup("error");
+}
+
 Expr* primary(Parser *p) {
     if (match(p, TOK_TRUE)) {
         return expr_bool(1);
@@ -77,8 +96,7 @@ Expr* primary(Parser *p) {
         int num_fields = 0;
 
         while (!check(p, TOK_RBRACE) && !check(p, TOK_EOF)) {
-            consume(p, TOK_IDENT, "Expect field name");
-            field_names[num_fields] = token_text(&p->previous);
+            field_names[num_fields] = consume_identifier_or_type(p, "Expect field name");
 
             consume(p, TOK_COLON, "Expect ':' after field name");
             field_values[num_fields] = expression(p);
@@ -177,6 +195,7 @@ not_fn_expr:
     if (match(p, TOK_TYPE_NUMBER)) return expr_ident("number");
     if (match(p, TOK_TYPE_PTR)) return expr_ident("ptr");
     if (match(p, TOK_TYPE_BUFFER)) return expr_ident("buffer");
+    if (match(p, TOK_TYPE_ARRAY)) return expr_ident("array");
     if (match(p, TOK_TYPE_STRING)) return expr_ident("string");
     if (match(p, TOK_TYPE_RUNE)) return expr_ident("rune");
     if (match(p, TOK_TYPE_BOOL)) return expr_ident("bool");
@@ -192,8 +211,7 @@ Expr* postfix(Parser *p) {
     for (;;) {
         if (match(p, TOK_DOT)) {
             // Property access: obj.property
-            consume(p, TOK_IDENT, "Expect property name after '.'");
-            char *property = token_text(&p->previous);
+            char *property = consume_identifier_or_type(p, "Expect property name after '.'");
             expr = expr_get_property(expr, property);
             free(property);
         } else if (match(p, TOK_LBRACKET)) {
@@ -540,6 +558,25 @@ Expr* expression(Parser *p) {
 
 Type* parse_type(Parser *p) {
     TypeKind kind;
+
+    // Check for 'array' or 'array<type>' syntax
+    if (p->current.type == TOK_TYPE_ARRAY) {
+        advance(p);
+        Type *element_type = NULL;
+
+        // Optional: <type> syntax for typed arrays
+        if (p->current.type == TOK_LESS) {
+            advance(p);  // consume '<'
+            element_type = parse_type(p);
+            consume(p, TOK_GREATER, "Expect '>' after array element type");
+        }
+        // If no '<', element_type stays NULL (untyped array)
+
+        Type *type = type_new(TYPE_ARRAY);
+        type->type_name = NULL;
+        type->element_type = element_type;
+        return type;
+    }
 
     // Check for 'object' keyword (generic object type)
     if (p->current.type == TOK_OBJECT) {

@@ -1,0 +1,19 @@
+// Test different typed array types
+
+// i32 array
+let ints: array<i32> = [1, 2, 3, 4, 5];
+print(ints[0]);
+ints.push(6);
+print(ints.length);
+
+// string array
+let strings: array<string> = ["foo", "bar", "baz"];
+print(strings[1]);
+strings.push("qux");
+print(strings.length);
+
+// bool array
+let bools: array<bool> = [true, false, true];
+print(bools[2]);
+bools.push(false);
+print(bools.length);

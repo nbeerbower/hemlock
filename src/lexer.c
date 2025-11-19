@@ -270,6 +270,7 @@ static TokenType identifier_type(Lexer *lex) {
             if (len == 5) {
                 if (strncmp(lex->start, "async", 5) == 0) return TOK_ASYNC;
                 if (strncmp(lex->start, "await", 5) == 0) return TOK_AWAIT;
+                if (strncmp(lex->start, "array", 5) == 0) return TOK_TYPE_ARRAY;
             }
             break;
         case 'b':
@@ -278,6 +279,7 @@ static TokenType identifier_type(Lexer *lex) {
                 if (strncmp(lex->start, "bool", 4) == 0) return TOK_TYPE_BOOL;
             }
             if (len == 5) return check_keyword(lex->start, 5, "break", TOK_BREAK);
+            if (len == 6) return check_keyword(lex->start, 6, "buffer", TOK_TYPE_BUFFER);
             break;
         case 'c':
             if (len == 4) {
