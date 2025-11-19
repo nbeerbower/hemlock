@@ -541,6 +541,18 @@ Expr* expression(Parser *p) {
 Type* parse_type(Parser *p) {
     TypeKind kind;
 
+    // Check for 'array<type>' syntax
+    if (p->current.type == TOK_TYPE_ARRAY) {
+        advance(p);
+        consume(p, TOK_LESS, "Expect '<' after 'array'");
+        Type *element_type = parse_type(p);
+        consume(p, TOK_GREATER, "Expect '>' after array element type");
+        Type *type = type_new(TYPE_ARRAY);
+        type->type_name = NULL;
+        type->element_type = element_type;
+        return type;
+    }
+
     // Check for 'object' keyword (generic object type)
     if (p->current.type == TOK_OBJECT) {
         advance(p);

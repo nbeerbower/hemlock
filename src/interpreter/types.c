@@ -357,6 +357,41 @@ Value convert_to_type(Value value, Type *target_type, Environment *env, Executio
         return value;
     }
 
+    // Handle typed arrays
+    if (kind == TYPE_ARRAY) {
+        if (value.type != VAL_ARRAY) {
+            fprintf(stderr, "Runtime error: Expected array, got non-array\n");
+            exit(1);
+        }
+
+        Array *arr = value.as.as_array;
+
+        // If array already has element_type, validate compatibility
+        if (arr->element_type != NULL) {
+            // Check if existing type matches target type
+            if (arr->element_type->kind != target_type->element_type->kind) {
+                fprintf(stderr, "Runtime error: Array element type mismatch\n");
+                exit(1);
+            }
+        } else {
+            // Set the element type constraint on the array
+            // Clone the type to avoid lifetime issues
+            arr->element_type = malloc(sizeof(Type));
+            arr->element_type->kind = target_type->element_type->kind;
+            arr->element_type->type_name = target_type->element_type->type_name ? strdup(target_type->element_type->type_name) : NULL;
+            arr->element_type->element_type = NULL;  // Don't support nested typed arrays yet
+        }
+
+        // Validate all existing elements match the type constraint
+        for (int i = 0; i < arr->length; i++) {
+            Value elem = arr->elements[i];
+            // Convert/validate each element against the element type
+            arr->elements[i] = convert_to_type(elem, target_type->element_type, env, ctx);
+        }
+
+        return value;
+    }
+
     // Original function continues with TypeKind
     TypeKind target_kind = kind;
     // Get the source value as the widest type for range checking

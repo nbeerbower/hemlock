@@ -229,6 +229,7 @@ Type* type_new(TypeKind kind) {
     Type *type = malloc(sizeof(Type));
     type->kind = kind;
     type->type_name = NULL;
+    type->element_type = NULL;
     return type;
 }
 
@@ -236,6 +237,9 @@ void type_free(Type *type) {
     if (type) {
         if (type->type_name) {
             free(type->type_name);
+        }
+        if (type->element_type) {
+            type_free(type->element_type);
         }
         free(type);
     }

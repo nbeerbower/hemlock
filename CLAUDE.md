@@ -1487,9 +1487,70 @@ let mixed = [1, "hello", true, null];
 **Properties:**
 - Dynamic sizing (grow automatically)
 - Zero-indexed
-- Mixed types allowed
+- Mixed types allowed (unless using typed arrays)
 - `.length` property
 - Heap-allocated
+
+### Typed Arrays
+
+Hemlock supports **typed arrays** - arrays with element type constraints enforced at runtime:
+
+```hemlock
+// Declare a typed array
+let numbers: array<i32> = [1, 2, 3, 4, 5];
+let strings: array<string> = ["hello", "world"];
+let bools: array<bool> = [true, false, true];
+```
+
+**Type enforcement:**
+```hemlock
+let arr: array<i32> = [1, 2, 3];
+
+// OK: Adding correct type
+arr.push(4);         // ✓ i32
+arr[0] = 10;         // ✓ i32
+arr.unshift(0);      // ✓ i32
+arr.insert(2, 99);   // ✓ i32
+
+// ERROR: Type mismatch
+arr.push("string");  // ✗ Runtime error: Type mismatch in typed array
+arr[0] = 3.14;       // ✗ Runtime error: Type mismatch in typed array
+```
+
+**Supported element types:**
+- All primitive numeric types: `i8`, `i16`, `i32`, `i64`, `u8`, `u16`, `u32`, `u64`, `f32`, `f64`
+- `bool`, `string`, `rune`
+- `ptr`, `buffer`
+
+**Type checking applies to:**
+- Direct index assignment (`arr[i] = value`)
+- `push(value)` method
+- `unshift(value)` method
+- `insert(index, value)` method
+
+**Type checking behavior:**
+- Type constraints are enforced at runtime
+- All array operations that add elements validate the type
+- Mixed-type operations are not allowed in typed arrays
+- Untyped arrays (without `array<type>` annotation) remain fully dynamic
+
+**Example - type safety:**
+```hemlock
+let bytes: array<u8> = [255, 128, 64];
+bytes.push(200);     // ✓ OK
+bytes.push(-1);      // ✗ Error: u8 cannot be negative (enforced during array literal conversion)
+bytes.push(256);     // ✗ Error: out of range for u8
+
+let names: array<string> = ["Alice", "Bob"];
+names.push("Charlie");  // ✓ OK
+names.push(42);         // ✗ Error: expected string
+```
+
+**Implementation notes:**
+- Type constraint is stored in the array structure
+- Type checking happens at every mutation operation
+- No automatic type conversion (strict type matching)
+- Type validation uses exact type matching (i32 ≠ u8)
 
 ### Array Methods
 

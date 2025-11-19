@@ -1,0 +1,26 @@
+// Test basic typed array functionality with i32
+
+// Test 1: Create a typed array and assign it
+let arr: array<i32> = [1, 2, 3];
+print(arr[0]);  // 1
+print(arr[1]);  // 2
+print(arr[2]);  // 3
+print(arr.length);  // 3
+
+// Test 2: Push to typed array
+arr.push(4);
+print(arr[3]);  // 4
+print(arr.length);  // 4
+
+// Test 3: Array methods with typed arrays
+arr.unshift(0);
+print(arr[0]);  // 0
+print(arr.length);  // 5
+
+arr.insert(2, 10);
+print(arr[2]);  // 10
+print(arr.length);  // 6
+
+// Test 4: Index assignment
+arr[0] = 99;
+print(arr[0]);  // 99
