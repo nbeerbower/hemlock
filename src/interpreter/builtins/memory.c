@@ -71,20 +71,25 @@ Value builtin_free(Value *args, int num_args, ExecutionContext *ctx) {
     } else if (args[0].type == VAL_BUFFER) {
         Buffer *buf = args[0].as.as_buffer;
 
-        // Release once to drop the env_get() retain (caller's reference)
-        // After this, ref_count should be 1 (only environment reference)
+        // Release once to drop the env_get() retain
         value_release(args[0]);
 
-        // Safety check: don't allow free on shared references
-        // After releasing env_get() reference, should have ref_count == 1 (environment only)
-        if (buf->ref_count > 1) {
+        // After releasing env_get() reference, buffer should have ref_count == 2:
+        // - 1 from initial creation (val_buffer returns ref_count=1)
+        // - 1 from environment ownership (env_define/env_set retained)
+        // Both references point to the same buffer in the environment
+
+        // Safety check: don't allow free on buffers shared outside the environment
+        if (buf->ref_count > 2) {
             fprintf(stderr, "Runtime error: Cannot free buffer with %d active references. "
                     "Ensure exclusive ownership before calling free().\n", buf->ref_count);
             exit(1);
         }
 
-        // Mark as manually freed to prevent double-free from value_release
-        if (buf->ref_count == 1) {
+        // Release the environment's reference and the creation reference
+        // This brings ref_count to 0, allowing the free
+        if (buf->ref_count >= 1) {
+            buf->ref_count = 0;  // Force to 0 for manual free
             register_manually_freed_pointer(buf);
         }
 
@@ -97,10 +102,10 @@ Value builtin_free(Value *args, int num_args, ExecutionContext *ctx) {
         // Release once to drop the env_get() retain
         value_release(args[0]);
 
-        // Mark as manually freed to prevent double-free from value_release
-        // Note: We allow freeing objects even with ref_count > 1 to support circular references
-        // The manually_freed_pointer tracking prevents double-frees
+        // Force ref_count to 0 for manual free (similar to buffer/array handling)
+        // This handles the extra reference from creation + environment ownership
         if (obj->ref_count >= 1) {
+            obj->ref_count = 0;
             register_manually_freed_pointer(obj);
         }
 
@@ -121,10 +126,10 @@ Value builtin_free(Value *args, int num_args, ExecutionContext *ctx) {
         // Release once to drop the env_get() retain
         value_release(args[0]);
 
-        // Mark as manually freed to prevent double-free from value_release
-        // Note: We allow freeing arrays even with ref_count > 1 to support circular references
-        // The manually_freed_pointer tracking prevents double-frees
+        // Force ref_count to 0 for manual free (similar to buffer handling)
+        // This handles the extra reference from creation + environment ownership
         if (arr->ref_count >= 1) {
+            arr->ref_count = 0;
             register_manually_freed_pointer(arr);
         }
 

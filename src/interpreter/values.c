@@ -194,7 +194,7 @@ Value val_buffer(int size) {
     }
     buf->length = size;
     buf->capacity = size;
-    buf->ref_count = 0;  // Initialize reference count (first retain will bring to 1)
+    buf->ref_count = 1;  // Start with 1 - caller owns the first reference
     v.as.as_buffer = buf;
     return v;
 }
@@ -216,7 +216,7 @@ Array* array_new(void) {
     }
     arr->capacity = 8;
     arr->length = 0;
-    arr->ref_count = 0;  // Initialize reference count (first retain will bring to 1)
+    arr->ref_count = 1;  // Start with 1 - caller owns the first reference
     arr->elements = malloc(sizeof(Value) * arr->capacity);
     if (!arr->elements) {
         free(arr);
@@ -434,7 +434,7 @@ Object* object_new(char *type_name, int initial_capacity) {
     }
     obj->num_fields = 0;
     obj->capacity = initial_capacity;
-    obj->ref_count = 0;  // Initialize reference count (first retain will bring to 1)
+    obj->ref_count = 1;  // Start with 1 - caller owns the first reference
     return obj;
 }
 

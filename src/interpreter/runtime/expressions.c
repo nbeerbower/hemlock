@@ -673,7 +673,13 @@ Value eval_expr(Expr *expr, Environment *env, ExecutionContext *ctx) {
                     }
 
                     Value result = call_file_method(method_self.as.as_file, method, args, expr->as.call.num_args);
-                    if (args) free(args);
+                    // Release argument values (file methods don't retain them)
+                    if (args) {
+                        for (int i = 0; i < expr->as.call.num_args; i++) {
+                            value_release(args[i]);
+                        }
+                        free(args);
+                    }
                     return result;
                 }
 
@@ -691,7 +697,13 @@ Value eval_expr(Expr *expr, Environment *env, ExecutionContext *ctx) {
                     }
 
                     Value result = call_array_method(method_self.as.as_array, method, args, expr->as.call.num_args);
-                    if (args) free(args);
+                    // Release argument values (array methods don't retain them)
+                    if (args) {
+                        for (int i = 0; i < expr->as.call.num_args; i++) {
+                            value_release(args[i]);
+                        }
+                        free(args);
+                    }
                     return result;
                 }
 
@@ -709,7 +721,13 @@ Value eval_expr(Expr *expr, Environment *env, ExecutionContext *ctx) {
                     }
 
                     Value result = call_string_method(method_self.as.as_string, method, args, expr->as.call.num_args);
-                    if (args) free(args);
+                    // Release argument values (string methods don't retain them)
+                    if (args) {
+                        for (int i = 0; i < expr->as.call.num_args; i++) {
+                            value_release(args[i]);
+                        }
+                        free(args);
+                    }
                     return result;
                 }
 
@@ -727,7 +745,13 @@ Value eval_expr(Expr *expr, Environment *env, ExecutionContext *ctx) {
                     }
 
                     Value result = call_channel_method(method_self.as.as_channel, method, args, expr->as.call.num_args);
-                    if (args) free(args);
+                    // Release argument values (channel methods don't retain them)
+                    if (args) {
+                        for (int i = 0; i < expr->as.call.num_args; i++) {
+                            value_release(args[i]);
+                        }
+                        free(args);
+                    }
                     return result;
                 }
 
@@ -747,7 +771,13 @@ Value eval_expr(Expr *expr, Environment *env, ExecutionContext *ctx) {
                         }
 
                         Value result = call_object_method(method_self.as.as_object, method, args, expr->as.call.num_args);
-                        if (args) free(args);
+                        // Release argument values (object methods don't retain them)
+                        if (args) {
+                            for (int i = 0; i < expr->as.call.num_args; i++) {
+                                value_release(args[i]);
+                            }
+                            free(args);
+                        }
                         return result;
                     }
                     // For user-defined methods, fall through to normal function call handling
