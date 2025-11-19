@@ -120,11 +120,14 @@ Value eval_expr(Expr *expr, Environment *env, ExecutionContext *ctx) {
 
         case EXPR_TERNARY: {
             Value condition = eval_expr(expr->as.ternary.condition, env, ctx);
+            Value result;
             if (value_is_truthy(condition)) {
-                return eval_expr(expr->as.ternary.true_expr, env, ctx);
+                result = eval_expr(expr->as.ternary.true_expr, env, ctx);
             } else {
-                return eval_expr(expr->as.ternary.false_expr, env, ctx);
+                result = eval_expr(expr->as.ternary.false_expr, env, ctx);
             }
+            value_release(condition);  // Release condition after checking
+            return result;
         }
 
         case EXPR_IDENT:
@@ -140,28 +143,42 @@ Value eval_expr(Expr *expr, Environment *env, ExecutionContext *ctx) {
             // Handle && and || with short-circuit evaluation
             if (expr->as.binary.op == OP_AND) {
                 Value left = eval_expr(expr->as.binary.left, env, ctx);
-                if (!value_is_truthy(left)) return val_bool(0);
+                if (!value_is_truthy(left)) {
+                    value_release(left);  // Release left before returning
+                    return val_bool(0);
+                }
 
+                value_release(left);  // Release left after checking
                 Value right = eval_expr(expr->as.binary.right, env, ctx);
-                return val_bool(value_is_truthy(right));
+                int result = value_is_truthy(right);
+                value_release(right);  // Release right before returning
+                return val_bool(result);
             }
 
             if (expr->as.binary.op == OP_OR) {
                 Value left = eval_expr(expr->as.binary.left, env, ctx);
-                if (value_is_truthy(left)) return val_bool(1);
+                if (value_is_truthy(left)) {
+                    value_release(left);  // Release left before returning
+                    return val_bool(1);
+                }
 
+                value_release(left);  // Release left after checking
                 Value right = eval_expr(expr->as.binary.right, env, ctx);
-                return val_bool(value_is_truthy(right));
+                int result = value_is_truthy(right);
+                value_release(right);  // Release right before returning
+                return val_bool(result);
             }
 
             // Evaluate both operands
             Value left = eval_expr(expr->as.binary.left, env, ctx);
             Value right = eval_expr(expr->as.binary.right, env, ctx);
+            Value binary_result = val_null();  // Initialize to avoid undefined behavior
 
             // String concatenation
             if (expr->as.binary.op == OP_ADD && left.type == VAL_STRING && right.type == VAL_STRING) {
                 String *result = string_concat(left.as.as_string, right.as.as_string);
-                return (Value){ .type = VAL_STRING, .as.as_string = result };
+                binary_result = (Value){ .type = VAL_STRING, .as.as_string = result };
+                goto binary_cleanup;
             }
 
             // String + rune concatenation
@@ -175,7 +192,8 @@ Value eval_expr(Expr *expr, Environment *env, ExecutionContext *ctx) {
                 String *rune_str = string_new(rune_bytes);
                 String *result = string_concat(left.as.as_string, rune_str);
                 free(rune_str);  // Free temporary string
-                return (Value){ .type = VAL_STRING, .as.as_string = result };
+                binary_result = (Value){ .type = VAL_STRING, .as.as_string = result };
+                goto binary_cleanup;
             }
 
             // Rune + string concatenation
@@ -189,7 +207,8 @@ Value eval_expr(Expr *expr, Environment *env, ExecutionContext *ctx) {
                 String *rune_str = string_new(rune_bytes);
                 String *result = string_concat(rune_str, right.as.as_string);
                 free(rune_str);  // Free temporary string
-                return (Value){ .type = VAL_STRING, .as.as_string = result };
+                binary_result = (Value){ .type = VAL_STRING, .as.as_string = result };
+                goto binary_cleanup;
             }
 
             // Pointer arithmetic
@@ -197,11 +216,13 @@ Value eval_expr(Expr *expr, Environment *env, ExecutionContext *ctx) {
                 if (expr->as.binary.op == OP_ADD) {
                     void *ptr = left.as.as_ptr;
                     int32_t offset = value_to_int(right);
-                    return val_ptr((char *)ptr + offset);
+                    binary_result = val_ptr((char *)ptr + offset);
+                    goto binary_cleanup;
                 } else if (expr->as.binary.op == OP_SUB) {
                     void *ptr = left.as.as_ptr;
                     int32_t offset = value_to_int(right);
-                    return val_ptr((char *)ptr - offset);
+                    binary_result = val_ptr((char *)ptr - offset);
+                    goto binary_cleanup;
                 }
             }
 
@@ -209,16 +230,19 @@ Value eval_expr(Expr *expr, Environment *env, ExecutionContext *ctx) {
                 if (expr->as.binary.op == OP_ADD) {
                     int32_t offset = value_to_int(left);
                     void *ptr = right.as.as_ptr;
-                    return val_ptr((char *)ptr + offset);
+                    binary_result = val_ptr((char *)ptr + offset);
+                    goto binary_cleanup;
                 }
             }
 
             // Boolean comparisons
             if (left.type == VAL_BOOL && right.type == VAL_BOOL) {
                 if (expr->as.binary.op == OP_EQUAL) {
-                    return val_bool(left.as.as_bool == right.as.as_bool);
+                    binary_result = val_bool(left.as.as_bool == right.as.as_bool);
+                    goto binary_cleanup;
                 } else if (expr->as.binary.op == OP_NOT_EQUAL) {
-                    return val_bool(left.as.as_bool != right.as.as_bool);
+                    binary_result = val_bool(left.as.as_bool != right.as.as_bool);
+                    goto binary_cleanup;
                 }
             }
 
@@ -228,18 +252,22 @@ Value eval_expr(Expr *expr, Environment *env, ExecutionContext *ctx) {
                     String *left_str = left.as.as_string;
                     String *right_str = right.as.as_string;
                     if (left_str->length != right_str->length) {
-                        return val_bool(0);
+                        binary_result = val_bool(0);
+                        goto binary_cleanup;
                     }
                     int cmp = memcmp(left_str->data, right_str->data, left_str->length);
-                    return val_bool(cmp == 0);
+                    binary_result = val_bool(cmp == 0);
+                    goto binary_cleanup;
                 } else if (expr->as.binary.op == OP_NOT_EQUAL) {
                     String *left_str = left.as.as_string;
                     String *right_str = right.as.as_string;
                     if (left_str->length != right_str->length) {
-                        return val_bool(1);
+                        binary_result = val_bool(1);
+                        goto binary_cleanup;
                     }
                     int cmp = memcmp(left_str->data, right_str->data, left_str->length);
-                    return val_bool(cmp != 0);
+                    binary_result = val_bool(cmp != 0);
+                    goto binary_cleanup;
                 }
             }
 
@@ -247,19 +275,23 @@ Value eval_expr(Expr *expr, Environment *env, ExecutionContext *ctx) {
             if (left.type == VAL_NULL || right.type == VAL_NULL) {
                 if (expr->as.binary.op == OP_EQUAL) {
                     // Both null -> true, one null -> false
-                    return val_bool(left.type == VAL_NULL && right.type == VAL_NULL);
+                    binary_result = val_bool(left.type == VAL_NULL && right.type == VAL_NULL);
+                    goto binary_cleanup;
                 } else if (expr->as.binary.op == OP_NOT_EQUAL) {
                     // Both null -> false, one null -> true
-                    return val_bool(!(left.type == VAL_NULL && right.type == VAL_NULL));
+                    binary_result = val_bool(!(left.type == VAL_NULL && right.type == VAL_NULL));
+                    goto binary_cleanup;
                 }
             }
 
             // Object comparisons (reference equality)
             if (left.type == VAL_OBJECT && right.type == VAL_OBJECT) {
                 if (expr->as.binary.op == OP_EQUAL) {
-                    return val_bool(left.as.as_object == right.as.as_object);
+                    binary_result = val_bool(left.as.as_object == right.as.as_object);
+                    goto binary_cleanup;
                 } else if (expr->as.binary.op == OP_NOT_EQUAL) {
-                    return val_bool(left.as.as_object != right.as.as_object);
+                    binary_result = val_bool(left.as.as_object != right.as.as_object);
+                    goto binary_cleanup;
                 }
             }
 
@@ -271,13 +303,15 @@ Value eval_expr(Expr *expr, Environment *env, ExecutionContext *ctx) {
 
                 // If one is numeric and the other is not, types don't match
                 if (left_is_numeric != right_is_numeric) {
-                    return val_bool(expr->as.binary.op == OP_NOT_EQUAL);
+                    binary_result = val_bool(expr->as.binary.op == OP_NOT_EQUAL);
+                    goto binary_cleanup;
                 }
 
                 // If both are non-numeric but types are different (handled above for strings/bools/runes)
                 // this handles any remaining cases
                 if (!left_is_numeric && !right_is_numeric && left.type != right.type) {
-                    return val_bool(expr->as.binary.op == OP_NOT_EQUAL);
+                    binary_result = val_bool(expr->as.binary.op == OP_NOT_EQUAL);
+                    goto binary_cleanup;
                 }
             }
 
@@ -299,22 +333,38 @@ Value eval_expr(Expr *expr, Environment *env, ExecutionContext *ctx) {
 
                 switch (expr->as.binary.op) {
                     case OP_ADD:
-                        return (result_type == VAL_F32) ? val_f32((float)(l + r)) : val_f64(l + r);
+                        binary_result = (result_type == VAL_F32) ? val_f32((float)(l + r)) : val_f64(l + r);
+                        goto binary_cleanup;
                     case OP_SUB:
-                        return (result_type == VAL_F32) ? val_f32((float)(l - r)) : val_f64(l - r);
+                        binary_result = (result_type == VAL_F32) ? val_f32((float)(l - r)) : val_f64(l - r);
+                        goto binary_cleanup;
                     case OP_MUL:
-                        return (result_type == VAL_F32) ? val_f32((float)(l * r)) : val_f64(l * r);
+                        binary_result = (result_type == VAL_F32) ? val_f32((float)(l * r)) : val_f64(l * r);
+                        goto binary_cleanup;
                     case OP_DIV:
                         if (r == 0.0) {
                             runtime_error(ctx, "Division by zero");
                         }
-                        return (result_type == VAL_F32) ? val_f32((float)(l / r)) : val_f64(l / r);
-                    case OP_EQUAL: return val_bool(l == r);
-                    case OP_NOT_EQUAL: return val_bool(l != r);
-                    case OP_LESS: return val_bool(l < r);
-                    case OP_LESS_EQUAL: return val_bool(l <= r);
-                    case OP_GREATER: return val_bool(l > r);
-                    case OP_GREATER_EQUAL: return val_bool(l >= r);
+                        binary_result = (result_type == VAL_F32) ? val_f32((float)(l / r)) : val_f64(l / r);
+                        goto binary_cleanup;
+                    case OP_EQUAL:
+                        binary_result = val_bool(l == r);
+                        goto binary_cleanup;
+                    case OP_NOT_EQUAL:
+                        binary_result = val_bool(l != r);
+                        goto binary_cleanup;
+                    case OP_LESS:
+                        binary_result = val_bool(l < r);
+                        goto binary_cleanup;
+                    case OP_LESS_EQUAL:
+                        binary_result = val_bool(l <= r);
+                        goto binary_cleanup;
+                    case OP_GREATER:
+                        binary_result = val_bool(l > r);
+                        goto binary_cleanup;
+                    case OP_GREATER_EQUAL:
+                        binary_result = val_bool(l >= r);
+                        goto binary_cleanup;
                     default: break;
                 }
             } else {
@@ -335,7 +385,8 @@ Value eval_expr(Expr *expr, Environment *env, ExecutionContext *ctx) {
                                 int8_t result = (expr->as.binary.op == OP_ADD) ? (l + r) :
                                                (expr->as.binary.op == OP_SUB) ? (l - r) :
                                                (expr->as.binary.op == OP_MUL) ? (l * r) : (l / r);
-                                return val_i8(result);
+                                binary_result = val_i8(result);
+                                goto binary_cleanup;
                             }
                             case VAL_I16: {
                                 int16_t l = left.as.as_i16;
@@ -346,7 +397,8 @@ Value eval_expr(Expr *expr, Environment *env, ExecutionContext *ctx) {
                                 int16_t result = (expr->as.binary.op == OP_ADD) ? (l + r) :
                                                 (expr->as.binary.op == OP_SUB) ? (l - r) :
                                                 (expr->as.binary.op == OP_MUL) ? (l * r) : (l / r);
-                                return val_i16(result);
+                                binary_result = val_i16(result);
+                                goto binary_cleanup;
                             }
                             case VAL_I32: {
                                 int32_t l = left.as.as_i32;
@@ -357,7 +409,8 @@ Value eval_expr(Expr *expr, Environment *env, ExecutionContext *ctx) {
                                 int32_t result = (expr->as.binary.op == OP_ADD) ? (l + r) :
                                                 (expr->as.binary.op == OP_SUB) ? (l - r) :
                                                 (expr->as.binary.op == OP_MUL) ? (l * r) : (l / r);
-                                return val_i32(result);
+                                binary_result = val_i32(result);
+                                goto binary_cleanup;
                             }
                             case VAL_I64: {
                                 int64_t l = left.as.as_i64;
@@ -368,7 +421,8 @@ Value eval_expr(Expr *expr, Environment *env, ExecutionContext *ctx) {
                                 int64_t result = (expr->as.binary.op == OP_ADD) ? (l + r) :
                                                 (expr->as.binary.op == OP_SUB) ? (l - r) :
                                                 (expr->as.binary.op == OP_MUL) ? (l * r) : (l / r);
-                                return val_i64(result);
+                                binary_result = val_i64(result);
+                                goto binary_cleanup;
                             }
                             case VAL_U8: {
                                 uint8_t l = left.as.as_u8;
@@ -379,7 +433,8 @@ Value eval_expr(Expr *expr, Environment *env, ExecutionContext *ctx) {
                                 uint8_t result = (expr->as.binary.op == OP_ADD) ? (l + r) :
                                                 (expr->as.binary.op == OP_SUB) ? (l - r) :
                                                 (expr->as.binary.op == OP_MUL) ? (l * r) : (l / r);
-                                return val_u8(result);
+                                binary_result = val_u8(result);
+                                goto binary_cleanup;
                             }
                             case VAL_U16: {
                                 uint16_t l = left.as.as_u16;
@@ -390,7 +445,8 @@ Value eval_expr(Expr *expr, Environment *env, ExecutionContext *ctx) {
                                 uint16_t result = (expr->as.binary.op == OP_ADD) ? (l + r) :
                                                  (expr->as.binary.op == OP_SUB) ? (l - r) :
                                                  (expr->as.binary.op == OP_MUL) ? (l * r) : (l / r);
-                                return val_u16(result);
+                                binary_result = val_u16(result);
+                                goto binary_cleanup;
                             }
                             case VAL_U32: {
                                 uint32_t l = left.as.as_u32;
@@ -401,7 +457,8 @@ Value eval_expr(Expr *expr, Environment *env, ExecutionContext *ctx) {
                                 uint32_t result = (expr->as.binary.op == OP_ADD) ? (l + r) :
                                                  (expr->as.binary.op == OP_SUB) ? (l - r) :
                                                  (expr->as.binary.op == OP_MUL) ? (l * r) : (l / r);
-                                return val_u32(result);
+                                binary_result = val_u32(result);
+                                goto binary_cleanup;
                             }
                             case VAL_U64: {
                                 uint64_t l = left.as.as_u64;
@@ -412,7 +469,8 @@ Value eval_expr(Expr *expr, Environment *env, ExecutionContext *ctx) {
                                 uint64_t result = (expr->as.binary.op == OP_ADD) ? (l + r) :
                                                  (expr->as.binary.op == OP_SUB) ? (l - r) :
                                                  (expr->as.binary.op == OP_MUL) ? (l * r) : (l / r);
-                                return val_u64(result);
+                                binary_result = val_u64(result);
+                                goto binary_cleanup;
                             }
                             default:
                                 runtime_error(ctx, "Invalid integer type for arithmetic");
@@ -440,12 +498,24 @@ Value eval_expr(Expr *expr, Environment *env, ExecutionContext *ctx) {
                                 default: l = r = 0; break;
                             }
                             switch (expr->as.binary.op) {
-                                case OP_EQUAL: return val_bool(l == r);
-                                case OP_NOT_EQUAL: return val_bool(l != r);
-                                case OP_LESS: return val_bool(l < r);
-                                case OP_LESS_EQUAL: return val_bool(l <= r);
-                                case OP_GREATER: return val_bool(l > r);
-                                case OP_GREATER_EQUAL: return val_bool(l >= r);
+                                case OP_EQUAL:
+                                    binary_result = val_bool(l == r);
+                                    goto binary_cleanup;
+                                case OP_NOT_EQUAL:
+                                    binary_result = val_bool(l != r);
+                                    goto binary_cleanup;
+                                case OP_LESS:
+                                    binary_result = val_bool(l < r);
+                                    goto binary_cleanup;
+                                case OP_LESS_EQUAL:
+                                    binary_result = val_bool(l <= r);
+                                    goto binary_cleanup;
+                                case OP_GREATER:
+                                    binary_result = val_bool(l > r);
+                                    goto binary_cleanup;
+                                case OP_GREATER_EQUAL:
+                                    binary_result = val_bool(l >= r);
+                                    goto binary_cleanup;
                                 default: break;
                             }
                         } else {
@@ -458,12 +528,24 @@ Value eval_expr(Expr *expr, Environment *env, ExecutionContext *ctx) {
                                 default: l = r = 0; break;
                             }
                             switch (expr->as.binary.op) {
-                                case OP_EQUAL: return val_bool(l == r);
-                                case OP_NOT_EQUAL: return val_bool(l != r);
-                                case OP_LESS: return val_bool(l < r);
-                                case OP_LESS_EQUAL: return val_bool(l <= r);
-                                case OP_GREATER: return val_bool(l > r);
-                                case OP_GREATER_EQUAL: return val_bool(l >= r);
+                                case OP_EQUAL:
+                                    binary_result = val_bool(l == r);
+                                    goto binary_cleanup;
+                                case OP_NOT_EQUAL:
+                                    binary_result = val_bool(l != r);
+                                    goto binary_cleanup;
+                                case OP_LESS:
+                                    binary_result = val_bool(l < r);
+                                    goto binary_cleanup;
+                                case OP_LESS_EQUAL:
+                                    binary_result = val_bool(l <= r);
+                                    goto binary_cleanup;
+                                case OP_GREATER:
+                                    binary_result = val_bool(l > r);
+                                    goto binary_cleanup;
+                                case OP_GREATER_EQUAL:
+                                    binary_result = val_bool(l >= r);
+                                    goto binary_cleanup;
                                 default: break;
                             }
                         }
@@ -503,10 +585,18 @@ Value eval_expr(Expr *expr, Environment *env, ExecutionContext *ctx) {
 
                             // Return with the original type
                             switch (result_type) {
-                                case VAL_I8: return val_i8((int8_t)result);
-                                case VAL_I16: return val_i16((int16_t)result);
-                                case VAL_I32: return val_i32((int32_t)result);
-                                case VAL_I64: return val_i64(result);
+                                case VAL_I8:
+                                    binary_result = val_i8((int8_t)result);
+                                    goto binary_cleanup;
+                                case VAL_I16:
+                                    binary_result = val_i16((int16_t)result);
+                                    goto binary_cleanup;
+                                case VAL_I32:
+                                    binary_result = val_i32((int32_t)result);
+                                    goto binary_cleanup;
+                                case VAL_I64:
+                                    binary_result = val_i64(result);
+                                    goto binary_cleanup;
                                 default: break;
                             }
                         } else {
@@ -532,10 +622,18 @@ Value eval_expr(Expr *expr, Environment *env, ExecutionContext *ctx) {
 
                             // Return with the original type
                             switch (result_type) {
-                                case VAL_U8: return val_u8((uint8_t)result);
-                                case VAL_U16: return val_u16((uint16_t)result);
-                                case VAL_U32: return val_u32((uint32_t)result);
-                                case VAL_U64: return val_u64(result);
+                                case VAL_U8:
+                                    binary_result = val_u8((uint8_t)result);
+                                    goto binary_cleanup;
+                                case VAL_U16:
+                                    binary_result = val_u16((uint16_t)result);
+                                    goto binary_cleanup;
+                                case VAL_U32:
+                                    binary_result = val_u32((uint32_t)result);
+                                    goto binary_cleanup;
+                                case VAL_U64:
+                                    binary_result = val_u64(result);
+                                    goto binary_cleanup;
                                 default: break;
                             }
                         }
@@ -545,7 +643,11 @@ Value eval_expr(Expr *expr, Environment *env, ExecutionContext *ctx) {
                 }
             }
 
-            runtime_error(ctx, "Unknown binary operator");
+        binary_cleanup:
+            // Release operands after binary operation completes
+            value_release(left);
+            value_release(right);
+            return binary_result;
         }
 
         case EXPR_CALL: {
@@ -571,7 +673,13 @@ Value eval_expr(Expr *expr, Environment *env, ExecutionContext *ctx) {
                     }
 
                     Value result = call_file_method(method_self.as.as_file, method, args, expr->as.call.num_args);
-                    if (args) free(args);
+                    // Release argument values (file methods don't retain them)
+                    if (args) {
+                        for (int i = 0; i < expr->as.call.num_args; i++) {
+                            value_release(args[i]);
+                        }
+                        free(args);
+                    }
                     return result;
                 }
 
@@ -589,7 +697,13 @@ Value eval_expr(Expr *expr, Environment *env, ExecutionContext *ctx) {
                     }
 
                     Value result = call_array_method(method_self.as.as_array, method, args, expr->as.call.num_args);
-                    if (args) free(args);
+                    // Release argument values (array methods don't retain them)
+                    if (args) {
+                        for (int i = 0; i < expr->as.call.num_args; i++) {
+                            value_release(args[i]);
+                        }
+                        free(args);
+                    }
                     return result;
                 }
 
@@ -607,7 +721,13 @@ Value eval_expr(Expr *expr, Environment *env, ExecutionContext *ctx) {
                     }
 
                     Value result = call_string_method(method_self.as.as_string, method, args, expr->as.call.num_args);
-                    if (args) free(args);
+                    // Release argument values (string methods don't retain them)
+                    if (args) {
+                        for (int i = 0; i < expr->as.call.num_args; i++) {
+                            value_release(args[i]);
+                        }
+                        free(args);
+                    }
                     return result;
                 }
 
@@ -625,7 +745,13 @@ Value eval_expr(Expr *expr, Environment *env, ExecutionContext *ctx) {
                     }
 
                     Value result = call_channel_method(method_self.as.as_channel, method, args, expr->as.call.num_args);
-                    if (args) free(args);
+                    // Release argument values (channel methods don't retain them)
+                    if (args) {
+                        for (int i = 0; i < expr->as.call.num_args; i++) {
+                            value_release(args[i]);
+                        }
+                        free(args);
+                    }
                     return result;
                 }
 
@@ -645,7 +771,13 @@ Value eval_expr(Expr *expr, Environment *env, ExecutionContext *ctx) {
                         }
 
                         Value result = call_object_method(method_self.as.as_object, method, args, expr->as.call.num_args);
-                        if (args) free(args);
+                        // Release argument values (object methods don't retain them)
+                        if (args) {
+                            for (int i = 0; i < expr->as.call.num_args; i++) {
+                                value_release(args[i]);
+                            }
+                            free(args);
+                        }
                         return result;
                     }
                     // For user-defined methods, fall through to normal function call handling
@@ -665,11 +797,14 @@ Value eval_expr(Expr *expr, Environment *env, ExecutionContext *ctx) {
             }
 
             Value result;
+            int should_release_args = 1;  // Track whether we need to release args
 
             if (func.type == VAL_BUILTIN_FN) {
                 // Call builtin function
                 BuiltinFn fn = func.as.as_builtin_fn;
                 result = fn(args, expr->as.call.num_args, ctx);
+                // Builtin functions don't retain args, so we must release them
+                should_release_args = 1;
             } else if (func.type == VAL_FUNCTION) {
                 // Call user-defined function
                 Function *fn = func.as.as_function;
@@ -761,21 +896,36 @@ Value eval_expr(Expr *expr, Environment *env, ExecutionContext *ctx) {
 
                 // Release call environment (reference counted - will be freed when no longer used)
                 env_release(call_env);
+                // User-defined functions retained args via env_set, so don't release them again
+                should_release_args = 0;
             } else if (func.type == VAL_FFI_FUNCTION) {
                 // Call FFI function
                 FFIFunction *ffi_func = (FFIFunction*)func.as.as_ffi_function;
                 result = ffi_call_function(ffi_func, args, expr->as.call.num_args, ctx);
+                // FFI functions don't retain args, so we must release them
+                should_release_args = 1;
             } else {
                 runtime_error(ctx, "Value is not a function");
             }
 
-            if (args) free(args);
+            // Release args if needed (for builtin/FFI functions)
+            if (args && should_release_args) {
+                for (int i = 0; i < expr->as.call.num_args; i++) {
+                    value_release(args[i]);
+                }
+            }
+
+            // Free args array
+            if (args) {
+                free(args);
+            }
             return result;
         }
 
         case EXPR_GET_PROPERTY: {
             Value object = eval_expr(expr->as.get_property.object, env, ctx);
             const char *property = expr->as.get_property.property;
+            Value result;
 
             if (object.type == VAL_STRING) {
                 String *str = object.as.as_string;
@@ -786,50 +936,59 @@ Value eval_expr(Expr *expr, Environment *env, ExecutionContext *ctx) {
                     if (str->char_length < 0) {
                         str->char_length = utf8_count_codepoints(str->data, str->length);
                     }
-                    return val_i32(str->char_length);
+                    result = val_i32(str->char_length);
+                } else if (strcmp(property, "byte_length") == 0) {
+                    // .byte_length property - returns byte count
+                    result = val_i32(str->length);
+                } else {
+                    runtime_error(ctx, "Unknown property '%s' for string", property);
                 }
-
-                // .byte_length property - returns byte count
-                if (strcmp(property, "byte_length") == 0) {
-                    return val_i32(str->length);
-                }
-
-                runtime_error(ctx, "Unknown property '%s' for string", property);
             } else if (object.type == VAL_BUFFER) {
                 if (strcmp(property, "length") == 0) {
-                    return val_int(object.as.as_buffer->length);
+                    result = val_int(object.as.as_buffer->length);
                 } else if (strcmp(property, "capacity") == 0) {
-                    return val_int(object.as.as_buffer->capacity);
+                    result = val_int(object.as.as_buffer->capacity);
+                } else {
+                    runtime_error(ctx, "Unknown property '%s' for buffer", property);
                 }
-                runtime_error(ctx, "Unknown property '%s' for buffer", property);
             } else if (object.type == VAL_FILE) {
                 FileHandle *file = object.as.as_file;
                 if (strcmp(property, "path") == 0) {
-                    return val_string(file->path);
+                    result = val_string(file->path);
                 } else if (strcmp(property, "mode") == 0) {
-                    return val_string(file->mode);
+                    result = val_string(file->mode);
                 } else if (strcmp(property, "closed") == 0) {
-                    return val_bool(file->closed);
+                    result = val_bool(file->closed);
+                } else {
+                    runtime_error(ctx, "Unknown property '%s' for file", property);
                 }
-                runtime_error(ctx, "Unknown property '%s' for file", property);
             } else if (object.type == VAL_ARRAY) {
                 // Array properties
                 if (strcmp(property, "length") == 0) {
-                    return val_i32(object.as.as_array->length);
+                    result = val_i32(object.as.as_array->length);
+                } else {
+                    runtime_error(ctx, "Array has no property '%s'", property);
                 }
-                runtime_error(ctx, "Array has no property '%s'", property);
             } else if (object.type == VAL_OBJECT) {
                 // Look up field in object
                 Object *obj = object.as.as_object;
                 for (int i = 0; i < obj->num_fields; i++) {
                     if (strcmp(obj->field_names[i], property) == 0) {
-                        return obj->field_values[i];
+                        result = obj->field_values[i];
+                        // Retain the field value so it survives object release
+                        value_retain(result);
+                        value_release(object);
+                        return result;
                     }
                 }
                 runtime_error(ctx, "Object has no field '%s'", property);
             } else {
                 runtime_error(ctx, "Only strings, buffers, arrays, and objects have properties");
             }
+
+            // Release object after accessing property
+            value_release(object);
+            return result;
         }
 
         case EXPR_INDEX: {
@@ -841,6 +1000,7 @@ Value eval_expr(Expr *expr, Environment *env, ExecutionContext *ctx) {
             }
 
             int32_t index = value_to_int(index_val);
+            Value result;
 
             if (object.type == VAL_STRING) {
                 String *str = object.as.as_string;
@@ -861,7 +1021,7 @@ Value eval_expr(Expr *expr, Environment *env, ExecutionContext *ctx) {
                 // Decode the codepoint at that position
                 uint32_t codepoint = utf8_decode_at(str->data, byte_pos);
 
-                return val_rune(codepoint);
+                result = val_rune(codepoint);  // New value, safe to release object
             } else if (object.type == VAL_BUFFER) {
                 Buffer *buf = object.as.as_buffer;
 
@@ -870,13 +1030,20 @@ Value eval_expr(Expr *expr, Environment *env, ExecutionContext *ctx) {
                 }
 
                 // Return the byte as an integer (u8)
-                return val_u8(((unsigned char *)buf->data)[index]);
+                result = val_u8(((unsigned char *)buf->data)[index]);  // New value, safe to release object
             } else if (object.type == VAL_ARRAY) {
                 // Array indexing
-                return array_get(object.as.as_array, index);
+                result = array_get(object.as.as_array, index);
+                // Retain the element so it survives array release
+                value_retain(result);
             } else {
                 runtime_error(ctx, "Only strings, buffers, and arrays can be indexed");
             }
+
+            // Release the object and index after use
+            value_release(object);
+            value_release(index_val);
+            return result;
         }
 
         case EXPR_INDEX_ASSIGN: {
@@ -893,6 +1060,8 @@ Value eval_expr(Expr *expr, Environment *env, ExecutionContext *ctx) {
             if (object.type == VAL_ARRAY) {
                 // Array assignment - value can be any type
                 array_set(object.as.as_array, index, value);
+                value_release(object);
+                value_release(index_val);
                 return value;
             }
 
@@ -910,6 +1079,9 @@ Value eval_expr(Expr *expr, Environment *env, ExecutionContext *ctx) {
 
                 // Strings are mutable - set the byte
                 str->data[index] = (char)value_to_int(value);
+                value_release(object);
+                value_release(index_val);
+                // Don't release value - it's returned
                 return value;
             } else if (object.type == VAL_BUFFER) {
                 Buffer *buf = object.as.as_buffer;
@@ -920,6 +1092,9 @@ Value eval_expr(Expr *expr, Environment *env, ExecutionContext *ctx) {
 
                 // Buffers are mutable - set the byte
                 ((unsigned char *)buf->data)[index] = (unsigned char)value_to_int(value);
+                value_release(object);
+                value_release(index_val);
+                // Don't release value - it's returned
                 return value;
             } else {
                 runtime_error(ctx, "Only strings, buffers, and arrays support index assignment");
@@ -1049,8 +1224,9 @@ Value eval_expr(Expr *expr, Environment *env, ExecutionContext *ctx) {
 
             if (operand->type == EXPR_IDENT) {
                 // Simple variable: ++x
-                Value old_val = env_get(env, operand->as.ident, ctx);
+                Value old_val = env_get(env, operand->as.ident, ctx);  // Retains old value
                 Value new_val = value_add_one(old_val, ctx);
+                value_release(old_val);  // Release old value after incrementing
                 env_set(env, operand->as.ident, new_val, ctx);
                 return new_val;
             } else if (operand->type == EXPR_INDEX) {
@@ -1099,8 +1275,9 @@ Value eval_expr(Expr *expr, Environment *env, ExecutionContext *ctx) {
             Expr *operand = expr->as.prefix_dec.operand;
 
             if (operand->type == EXPR_IDENT) {
-                Value old_val = env_get(env, operand->as.ident, ctx);
+                Value old_val = env_get(env, operand->as.ident, ctx);  // Retains old value
                 Value new_val = value_sub_one(old_val, ctx);
+                value_release(old_val);  // Release old value after decrementing
                 env_set(env, operand->as.ident, new_val, ctx);
                 return new_val;
             } else if (operand->type == EXPR_INDEX) {
@@ -1147,10 +1324,11 @@ Value eval_expr(Expr *expr, Environment *env, ExecutionContext *ctx) {
             Expr *operand = expr->as.postfix_inc.operand;
 
             if (operand->type == EXPR_IDENT) {
-                Value old_val = env_get(env, operand->as.ident, ctx);
+                Value old_val = env_get(env, operand->as.ident, ctx);  // Retains old value
                 Value new_val = value_add_one(old_val, ctx);
                 env_set(env, operand->as.ident, new_val, ctx);
-                return old_val;  // Return old value!
+                // Return old value (still retained from env_get, caller now owns it)
+                return old_val;
             } else if (operand->type == EXPR_INDEX) {
                 Value object = eval_expr(operand->as.index.object, env, ctx);
                 Value index_val = eval_expr(operand->as.index.index, env, ctx);
@@ -1195,9 +1373,10 @@ Value eval_expr(Expr *expr, Environment *env, ExecutionContext *ctx) {
             Expr *operand = expr->as.postfix_dec.operand;
 
             if (operand->type == EXPR_IDENT) {
-                Value old_val = env_get(env, operand->as.ident, ctx);
+                Value old_val = env_get(env, operand->as.ident, ctx);  // Retains old value
                 Value new_val = value_sub_one(old_val, ctx);
                 env_set(env, operand->as.ident, new_val, ctx);
+                // Return old value (still retained from env_get, caller now owns it)
                 return old_val;
             } else if (operand->type == EXPR_INDEX) {
                 Value object = eval_expr(operand->as.index.object, env, ctx);

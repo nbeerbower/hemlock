@@ -34,8 +34,10 @@ void string_retain(String *str) {
 }
 
 void string_release(String *str) {
-    if (str && str->ref_count > 0) {
-        str->ref_count--;
+    if (str) {
+        if (str->ref_count > 0) {
+            str->ref_count--;
+        }
         if (str->ref_count == 0) {
             string_free(str);
         }
@@ -52,7 +54,7 @@ String* string_new(const char *cstr) {
     str->length = len;
     str->char_length = -1;  // Cache not yet computed
     str->capacity = len + 1;
-    str->ref_count = 0;  // Initialize reference count (first retain will bring to 1)
+    str->ref_count = 1;  // Start with 1 - caller owns the first reference
     str->data = malloc(str->capacity);
     if (!str->data) {
         free(str);
@@ -73,7 +75,7 @@ String* string_copy(String *str) {
     copy->length = str->length;
     copy->char_length = str->char_length;  // Copy cached value
     copy->capacity = str->capacity;
-    copy->ref_count = 0;  // Initialize reference count (first retain will bring to 1)
+    copy->ref_count = 1;  // Start with 1 - caller owns the first reference
     copy->data = malloc(copy->capacity);
     if (!copy->data) {
         free(copy);
@@ -94,7 +96,7 @@ String* string_concat(String *a, String *b) {
     result->length = new_len;
     result->char_length = -1;  // Cache invalidated after concatenation
     result->capacity = new_len + 1;
-    result->ref_count = 0;  // Initialize reference count (first retain will bring to 1)
+    result->ref_count = 1;  // Start with 1 - caller owns the first reference
     result->data = malloc(result->capacity);
     if (!result->data) {
         free(result);
@@ -128,7 +130,7 @@ Value val_string_take(char *data, int length, int capacity) {
     str->length = length;
     str->char_length = -1;  // Cache not yet computed
     str->capacity = capacity;
-    str->ref_count = 0;  // Initialize reference count (first retain will bring to 1)
+    str->ref_count = 1;  // Start with 1 - caller owns the first reference
     v.as.as_string = str;
     return v;
 }
@@ -165,9 +167,9 @@ void buffer_release(Buffer *buf) {
     if (is_manually_freed_pointer(buf)) return;
     if (buf->ref_count > 0) {
         buf->ref_count--;
-        if (buf->ref_count == 0) {
-            buffer_free(buf);
-        }
+    }
+    if (buf->ref_count == 0) {
+        buffer_free(buf);
     }
 }
 
@@ -192,7 +194,7 @@ Value val_buffer(int size) {
     }
     buf->length = size;
     buf->capacity = size;
-    buf->ref_count = 0;  // Initialize reference count (first retain will bring to 1)
+    buf->ref_count = 1;  // Start with 1 - caller owns the first reference
     v.as.as_buffer = buf;
     return v;
 }
@@ -214,7 +216,7 @@ Array* array_new(void) {
     }
     arr->capacity = 8;
     arr->length = 0;
-    arr->ref_count = 0;  // Initialize reference count (first retain will bring to 1)
+    arr->ref_count = 1;  // Start with 1 - caller owns the first reference
     arr->elements = malloc(sizeof(Value) * arr->capacity);
     if (!arr->elements) {
         free(arr);
@@ -251,9 +253,9 @@ void array_release(Array *arr) {
     if (is_manually_freed_pointer(arr)) return;
     if (arr->ref_count > 0) {
         arr->ref_count--;
-        if (arr->ref_count == 0) {
-            array_free(arr);
-        }
+    }
+    if (arr->ref_count == 0) {
+        array_free(arr);
     }
 }
 
@@ -358,9 +360,9 @@ void object_release(Object *obj) {
     if (is_manually_freed_pointer(obj)) return;
     if (obj->ref_count > 0) {
         obj->ref_count--;
-        if (obj->ref_count == 0) {
-            object_free(obj);
-        }
+    }
+    if (obj->ref_count == 0) {
+        object_free(obj);
     }
 }
 
@@ -400,8 +402,10 @@ void function_retain(Function *fn) {
 }
 
 void function_release(Function *fn) {
-    if (fn && fn->ref_count > 0) {
-        fn->ref_count--;
+    if (fn) {
+        if (fn->ref_count > 0) {
+            fn->ref_count--;
+        }
         if (fn->ref_count == 0) {
             function_free(fn);
         }
@@ -430,7 +434,7 @@ Object* object_new(char *type_name, int initial_capacity) {
     }
     obj->num_fields = 0;
     obj->capacity = initial_capacity;
-    obj->ref_count = 0;  // Initialize reference count (first retain will bring to 1)
+    obj->ref_count = 1;  // Start with 1 - caller owns the first reference
     return obj;
 }
 
@@ -463,7 +467,7 @@ Task* task_new(int id, Function *function, Value *args, int num_args, Environmen
     task->waiting_on = NULL;
     task->thread = NULL;
     task->detached = 0;
-    task->ref_count = 0;  // Initialize reference count (first retain will bring to 1) to 1
+    task->ref_count = 1;  // Start with 1 - caller owns the first reference
 
     // Initialize task mutex for thread-safe state access
     task->task_mutex = malloc(sizeof(pthread_mutex_t));
@@ -546,7 +550,7 @@ Channel* channel_new(int capacity) {
     ch->tail = 0;
     ch->count = 0;
     ch->closed = 0;
-    ch->ref_count = 0;
+    ch->ref_count = 1;  // Start with 1 - caller owns the first reference
 
     if (capacity > 0) {
         ch->buffer = malloc(sizeof(Value) * capacity);

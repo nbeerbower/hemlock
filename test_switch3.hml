@@ -1,0 +1,12 @@
+let grade = 85;
+let letter = "";
+
+switch (grade) {
+    case 100:
+    case 90:
+    case 85:
+        letter = "A";
+        break;
+}
+
+print(letter);

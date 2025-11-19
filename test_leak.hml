@@ -1,0 +1,5 @@
+// Simple test for memory leak analysis
+let x = 42;
+let s = "hello";
+let arr = [1, 2, 3];
+print("done");

@@ -1,0 +1,12 @@
+let buf = buffer(10);
+print("After buffer creation");
+
+let fw = open("tests/temp/test_binary.dat", "w");
+print("Before write_bytes");
+fw.write_bytes(buf);
+print("After write_bytes");
+fw.close();
+
+print("Before free");
+free(buf);
+print("After free");

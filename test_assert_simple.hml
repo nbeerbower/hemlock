@@ -1,0 +1,10 @@
+// Minimal test for assert
+assert(true);
+print("assert(true) passed");
+
+try {
+    assert(false);
+    print("Should not print");
+} catch (e) {
+    print("Caught: " + e);
+}

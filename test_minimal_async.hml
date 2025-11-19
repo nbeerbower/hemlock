@@ -1,0 +1,21 @@
+async fn simple_task(id: i32): i32 {
+    return id * 2;
+}
+
+let tasks = [];
+let i = 0;
+while (i < 5) {
+    tasks.push(spawn(simple_task, i));
+    i = i + 1;
+}
+
+print("Spawned 5 tasks");
+
+i = 0;
+while (i < tasks.length) {
+    let result = join(tasks[i]);
+    print("Task " + typeof(i) + " result: " + typeof(result));
+    i = i + 1;
+}
+
+print("All done!");

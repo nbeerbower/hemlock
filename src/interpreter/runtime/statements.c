@@ -33,9 +33,13 @@ void eval_stmt(Stmt *stmt, Environment *env, ExecutionContext *ctx) {
             Value condition = eval_expr(stmt->as.if_stmt.condition, env, ctx);
 
             if (value_is_truthy(condition)) {
+                value_release(condition);  // Release condition before branching
                 eval_stmt(stmt->as.if_stmt.then_branch, env, ctx);
             } else if (stmt->as.if_stmt.else_branch != NULL) {
+                value_release(condition);  // Release condition before branching
                 eval_stmt(stmt->as.if_stmt.else_branch, env, ctx);
+            } else {
+                value_release(condition);  // Release condition if no else branch
             }
             // No need to check return here, it propagates automatically
             break;
@@ -45,7 +49,12 @@ void eval_stmt(Stmt *stmt, Environment *env, ExecutionContext *ctx) {
             for (;;) {
                 Value condition = eval_expr(stmt->as.while_stmt.condition, env, ctx);
 
-                if (!value_is_truthy(condition)) break;
+                if (!value_is_truthy(condition)) {
+                    value_release(condition);  // Release condition before breaking
+                    break;
+                }
+
+                value_release(condition);  // Release condition after checking
 
                 // Create new environment for this iteration
                 Environment *iter_env = env_new(env);
@@ -89,11 +98,14 @@ void eval_stmt(Stmt *stmt, Environment *env, ExecutionContext *ctx) {
                     Value cond = eval_expr(stmt->as.for_loop.condition, loop_env, ctx);
                     // Check for exception after condition evaluation
                     if (ctx->exception_state.is_throwing) {
+                        value_release(cond);  // Release condition before breaking
                         break;
                     }
                     if (!value_is_truthy(cond)) {
+                        value_release(cond);  // Release condition before breaking
                         break;
                     }
+                    value_release(cond);  // Release condition after checking
                 }
 
                 // Execute body (create new environment for this iteration)
@@ -116,7 +128,8 @@ void eval_stmt(Stmt *stmt, Environment *env, ExecutionContext *ctx) {
 
                 // Execute increment
                 if (stmt->as.for_loop.increment) {
-                    eval_expr(stmt->as.for_loop.increment, loop_env, ctx);
+                    Value incr_result = eval_expr(stmt->as.for_loop.increment, loop_env, ctx);
+                    value_release(incr_result);  // Release increment expression result
                     // Check for exception after increment
                     if (ctx->exception_state.is_throwing) {
                         break;
@@ -133,11 +146,13 @@ void eval_stmt(Stmt *stmt, Environment *env, ExecutionContext *ctx) {
 
             // Check for exception after evaluating iterable
             if (ctx->exception_state.is_throwing) {
+                value_release(iterable);  // Release iterable before breaking
                 break;
             }
 
             // Validate iterable type before creating loop environment
             if (iterable.type != VAL_ARRAY && iterable.type != VAL_OBJECT) {
+                value_release(iterable);  // Release iterable before breaking
                 ctx->exception_state.exception_value = val_string("for-in requires array or object");
                 ctx->exception_state.is_throwing = 1;
                 break;
@@ -228,6 +243,7 @@ void eval_stmt(Stmt *stmt, Environment *env, ExecutionContext *ctx) {
             }
 
             env_release(loop_env);
+            value_release(iterable);  // Release iterable after loop completes
             break;
         }
 
@@ -369,9 +385,11 @@ void eval_stmt(Stmt *stmt, Environment *env, ExecutionContext *ctx) {
                     Value case_value = eval_expr(stmt->as.switch_stmt.case_values[i], env, ctx);
 
                     if (values_equal(switch_value, case_value)) {
+                        value_release(case_value);  // Release case value after comparison
                         matched_case = i;
                         break;
                     }
+                    value_release(case_value);  // Release case value after comparison
                 }
             }
 
@@ -399,6 +417,8 @@ void eval_stmt(Stmt *stmt, Environment *env, ExecutionContext *ctx) {
                     }
                 }
             }
+
+            value_release(switch_value);  // Release switch value after switch completes
             break;
         }
 

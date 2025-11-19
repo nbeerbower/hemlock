@@ -393,13 +393,15 @@ Value env_get(Environment *env, const char *name, ExecutionContext *ctx) {
     // Search current scope
     for (int i = 0; i < env->count; i++) {
         if (strcmp(env->names[i], name) == 0) {
-            return env->values[i];
+            Value val = env->values[i];
+            value_retain(val);  // Retain for the caller (caller now owns a reference)
+            return val;
         }
     }
 
     // Search parent scope
     if (env->parent != NULL) {
-        return env_get(env->parent, name, ctx);
+        return env_get(env->parent, name, ctx);  // Recursive call will retain
     }
 
     // Variable not found - throw exception instead of exiting

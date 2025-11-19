@@ -1,0 +1,7 @@
+let x = 85;
+switch (x) {
+    case 85:
+        print("matched");
+        break;
+}
+print("done");
