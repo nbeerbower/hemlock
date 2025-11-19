@@ -559,12 +559,19 @@ Expr* expression(Parser *p) {
 Type* parse_type(Parser *p) {
     TypeKind kind;
 
-    // Check for 'array<type>' syntax
+    // Check for 'array' or 'array<type>' syntax
     if (p->current.type == TOK_TYPE_ARRAY) {
         advance(p);
-        consume(p, TOK_LESS, "Expect '<' after 'array'");
-        Type *element_type = parse_type(p);
-        consume(p, TOK_GREATER, "Expect '>' after array element type");
+        Type *element_type = NULL;
+
+        // Optional: <type> syntax for typed arrays
+        if (p->current.type == TOK_LESS) {
+            advance(p);  // consume '<'
+            element_type = parse_type(p);
+            consume(p, TOK_GREATER, "Expect '>' after array element type");
+        }
+        // If no '<', element_type stays NULL (untyped array)
+
         Type *type = type_new(TYPE_ARRAY);
         type->type_name = NULL;
         type->element_type = element_type;

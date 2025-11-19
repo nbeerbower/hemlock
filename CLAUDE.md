@@ -1496,10 +1496,16 @@ let mixed = [1, "hello", true, null];
 Hemlock supports **typed arrays** - arrays with element type constraints enforced at runtime:
 
 ```hemlock
-// Declare a typed array
+// Declare a typed array with element type constraint
 let numbers: array<i32> = [1, 2, 3, 4, 5];
 let strings: array<string> = ["hello", "world"];
 let bools: array<bool> = [true, false, true];
+
+// Declare an explicitly untyped array (allows mixed types)
+let mixed: array = ["hello", 42, 3.14, true];
+
+// Fully dynamic array (no type annotation)
+let dynamic = [1, "two", 3.0];  // Same as untyped, but not annotated
 ```
 
 **Type enforcement:**
@@ -1532,7 +1538,10 @@ arr[0] = 3.14;       // ✗ Runtime error: Type mismatch in typed array
 - Type constraints are enforced at runtime
 - All array operations that add elements validate the type
 - Mixed-type operations are not allowed in typed arrays
-- Untyped arrays (without `array<type>` annotation) remain fully dynamic
+- Three syntaxes for arrays:
+  - `let arr: array<type> = [...]` - Typed array (strict element type checking)
+  - `let arr: array = [...]` - Explicitly untyped array (allows mixed types)
+  - `let arr = [...]` - Implicitly untyped array (allows mixed types, no annotation)
 
 **Example - type safety:**
 ```hemlock

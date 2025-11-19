@@ -366,6 +366,13 @@ Value convert_to_type(Value value, Type *target_type, Environment *env, Executio
 
         Array *arr = value.as.as_array;
 
+        // If target_type has no element_type, it's an untyped array (let arr: array = ...)
+        if (target_type->element_type == NULL) {
+            // No type constraint, just verify it's an array (already done above)
+            return value;
+        }
+
+        // Target has element type constraint - apply it to the array
         // If array already has element_type, validate compatibility
         if (arr->element_type != NULL) {
             // Check if existing type matches target type
