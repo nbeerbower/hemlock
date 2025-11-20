@@ -40,12 +40,14 @@ let map = HashMap();
 **Methods:**
 - `map.set(key, value)` - Set a key-value pair
 - `map.get(key)` - Get value for key (returns null if not found)
+- `map.get_or_default(key, default_value)` - Get value for key, or return default if not found
 - `map.has(key)` - Check if key exists (returns boolean)
 - `map.delete(key)` - Remove key-value pair (returns boolean)
 - `map.clear()` - Remove all entries
 - `map.keys()` - Get array of all keys
 - `map.values()` - Get array of all values
 - `map.entries()` - Get array of [key, value] pairs
+- `map.each(callback)` - Iterate over entries with callback(key, value)
 
 **Properties:**
 - `map.size` - Number of entries
@@ -102,6 +104,7 @@ let q = Queue();
 - `q.is_empty()` - Check if queue is empty (returns boolean)
 - `q.clear()` - Remove all items
 - `q.to_array()` - Get copy of queue as array
+- `q.each(callback)` - Iterate over items with callback(item, index)
 
 **Properties:**
 - `q.size` - Number of items in queue
@@ -151,6 +154,7 @@ let s = Stack();
 - `s.is_empty()` - Check if stack is empty (returns boolean)
 - `s.clear()` - Remove all items
 - `s.to_array()` - Get copy of stack as array
+- `s.each(callback)` - Iterate over items with callback(item, index)
 
 **Properties:**
 - `s.size` - Number of items in stack
@@ -202,6 +206,7 @@ let s = Set();
 - `s.union(other_set)` - Return new set with values from both sets
 - `s.intersection(other_set)` - Return new set with common values
 - `s.difference(other_set)` - Return new set with values in this but not other
+- `s.each(callback)` - Iterate over values with callback(value, index)
 
 **Properties:**
 - `s.size` - Number of values in set
@@ -266,6 +271,7 @@ let list = LinkedList();
 - `list.is_empty()` - Check if list is empty
 - `list.to_array()` - Convert to array
 - `list.reverse()` - Reverse the list in-place
+- `list.each(callback)` - Iterate over values with callback(value, index)
 
 **Properties:**
 - `list.size` - Number of values in list
@@ -298,8 +304,8 @@ let list = LinkedList();
 
 ### LinkedList
 - Append/Prepend: O(1)
-- Insert/Remove: O(n) (traversal to index)
-- Get/Set: O(n) (traversal to index)
+- Insert/Remove: O(n) worst case, O(n/2) average (bidirectional traversal)
+- Get/Set: O(n) worst case, O(n/2) average (bidirectional traversal)
 
 ---
 
@@ -313,23 +319,23 @@ let list = LinkedList();
 - **Type Casting:** Efficient native type conversion for float-to-int operations
 - **Set Implementation:** Uses HashMap internally for O(1) operations
 - **Queue Implementation:** Circular buffer with automatic resizing for O(1) enqueue/dequeue
+- **LinkedList Optimization:** Bidirectional traversal - chooses head or tail based on proximity to target index
+- **Iterator Support:** All collections support `.each(callback)` for functional-style iteration
 
 ---
 
 ## Known Limitations
 
 1. **No automatic memory cleanup** - users must manually manage collection lifecycle
-2. **LinkedList traversal** - get/set operations traverse from head only (could optimize with bidirectional traversal)
 
 ---
 
 ## Future Improvements
 
 - Add PriorityQueue, Deque, TreeMap, and other data structures
-- Implement iterators for all collections
-- Optimize LinkedList with bidirectional traversal
-- Add convenience methods (get_or_default, bounded collections, etc.)
-- Add forEach/map/filter methods for functional programming patterns
+- Add map/filter/reduce methods for functional programming patterns
+- Add bounded collections (max size enforcement)
+- Add more convenience methods (compute_if_absent, put_if_absent, etc.)
 
 ---
 

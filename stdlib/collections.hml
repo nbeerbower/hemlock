@@ -199,6 +199,14 @@ export fn HashMap() {
             return null;
         },
 
+        get_or_default: fn(key, default_value) {
+            let value = self.get(key);
+            if (value == null) {
+                return default_value;
+            }
+            return value;
+        },
+
         has: fn(key) {
             let idx = get_bucket_index(key);
             let bucket = buckets[idx];
@@ -293,6 +301,22 @@ export fn HashMap() {
                 i = i + 1;
             }
             return result;
+        },
+
+        each: fn(callback) {
+            let i = 0;
+            let bucket = null;
+            let j = 0;
+            while (i < buckets.length) {
+                bucket = buckets[i];
+                j = 0;
+                while (j < bucket.length) {
+                    callback(bucket[j].key, bucket[j].value);
+                    j = j + 1;
+                }
+                i = i + 1;
+            }
+            return null;
         }
     };
 }
@@ -403,6 +427,15 @@ export fn Queue() {
                 i = i + 1;
             }
             return result;
+        },
+
+        each: fn(callback) {
+            let i = 0;
+            while (i < count) {
+                callback(items[(head + i) % capacity], i);
+                i = i + 1;
+            }
+            return null;
         }
     };
 }
@@ -451,6 +484,15 @@ export fn Stack() {
 
         to_array: fn() {
             return items.slice(0, items.length);
+        },
+
+        each: fn(callback) {
+            let i = 0;
+            while (i < items.length) {
+                callback(items[i], i);
+                i = i + 1;
+            }
+            return null;
         }
     };
 }
@@ -538,6 +580,16 @@ export fn Set() {
                 i = i + 1;
             }
             return result;
+        },
+
+        each: fn(callback) {
+            let my_values = map.keys();
+            let i = 0;
+            while (i < my_values.length) {
+                callback(my_values[i], i);
+                i = i + 1;
+            }
+            return null;
         }
     };
 }
@@ -560,7 +612,7 @@ export fn LinkedList() {
         };
     }
 
-    // Get node at index
+    // Get node at index (optimized with bidirectional traversal)
     fn get_node(index) {
         let zero = 0;
         if (index < zero) {
@@ -570,13 +622,27 @@ export fn LinkedList() {
             return null;
         }
 
-        let current = head;
-        let i = 0;
-        while (i < index) {
-            current = current.next;
-            i = i + 1;
+        // Choose direction based on which end is closer
+        let half = count / 2;
+        if (index < half) {
+            // Traverse from head (closer to start)
+            let current = head;
+            let i = 0;
+            while (i < index) {
+                current = current.next;
+                i = i + 1;
+            }
+            return current;
+        } else {
+            // Traverse from tail (closer to end)
+            let current = tail;
+            let i = count - 1;
+            while (i > index) {
+                current = current.prev;
+                i = i - 1;
+            }
+            return current;
         }
-        return current;
     }
 
     return {
@@ -755,6 +821,17 @@ export fn LinkedList() {
             head = tail;
             tail = temp;
 
+            return null;
+        },
+
+        each: fn(callback) {
+            let current = head;
+            let i = 0;
+            while (current != null) {
+                callback(current.value, i);
+                current = current.next;
+                i = i + 1;
+            }
             return null;
         }
     };
