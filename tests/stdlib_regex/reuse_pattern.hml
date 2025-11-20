@@ -11,7 +11,7 @@ let test_cases = [
     "invalid.email",
     "test@domain.co",
     "@example.com",
-    "user@site.com",
+    "user@site.com"
 ];
 
 let i = 0;

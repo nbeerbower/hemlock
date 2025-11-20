@@ -65,19 +65,11 @@ export fn compile(pattern: string, flags): object {
 
     // Check for compilation errors
     if (result != 0) {
-        // Get error message
-        let errbuf = alloc(256);
-        regerror(result, preg, errbuf, 256);
-
-        // Read error message as string (manual conversion)
-        let err_msg = "Regex compilation failed: error code " + typeof(result);
-
-        // Clean up
-        free(errbuf);
-        regfree(preg);
+        // Clean up (note: do NOT call regfree on failed regcomp!)
         free(preg);
 
-        throw err_msg;
+        // Throw error (we can't easily extract the regerror message from the buffer)
+        throw "Regex compilation failed";
     }
 
     // Create regex object
