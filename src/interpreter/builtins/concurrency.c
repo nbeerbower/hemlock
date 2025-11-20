@@ -118,15 +118,15 @@ Value builtin_spawn(Value *args, int num_args, ExecutionContext *ctx) {
 
 Value builtin_join(Value *args, int num_args, ExecutionContext *ctx) {
     if (num_args != 1) {
-        fprintf(stderr, "Runtime error: join() expects 1 argument (task handle)\n");
-        exit(1);
+        runtime_error(ctx, "join() expects 1 argument (task handle)");
+        return val_null();
     }
 
     Value task_val = args[0];
 
     if (task_val.type != VAL_TASK) {
-        fprintf(stderr, "Runtime error: join() expects a task handle\n");
-        exit(1);
+        runtime_error(ctx, "join() expects a task handle");
+        return val_null();
     }
 
     Task *task = task_val.as.as_task;
@@ -136,14 +136,14 @@ Value builtin_join(Value *args, int num_args, ExecutionContext *ctx) {
 
     if (task->joined) {
         pthread_mutex_unlock((pthread_mutex_t*)task->task_mutex);
-        fprintf(stderr, "Runtime error: task handle already joined\n");
-        exit(1);
+        runtime_error(ctx, "task handle already joined");
+        return val_null();
     }
 
     if (task->detached) {
         pthread_mutex_unlock((pthread_mutex_t*)task->task_mutex);
-        fprintf(stderr, "Runtime error: cannot join detached task\n");
-        exit(1);
+        runtime_error(ctx, "cannot join detached task");
+        return val_null();
     }
 
     // Mark as joined
@@ -155,8 +155,8 @@ Value builtin_join(Value *args, int num_args, ExecutionContext *ctx) {
     if (task->thread) {
         int rc = pthread_join(*(pthread_t*)task->thread, NULL);
         if (rc != 0) {
-            fprintf(stderr, "Runtime error: pthread_join failed: %d\n", rc);
-            exit(1);
+            runtime_error(ctx, "pthread_join failed: %d", rc);
+            return val_null();
         }
     }
 
@@ -187,25 +187,52 @@ Value builtin_join(Value *args, int num_args, ExecutionContext *ctx) {
 }
 
 Value builtin_detach(Value *args, int num_args, ExecutionContext *ctx) {
-    // detach() is like spawn() but detaches the thread
-    Value task = builtin_spawn(args, num_args, ctx);
-
-    // Detach the thread (fire and forget)
-    if (task.type == VAL_TASK) {
-        Task *t = task.as.as_task;
-        t->detached = 1;
-
-        if (t->thread) {
-            int rc = pthread_detach(*(pthread_t*)t->thread);
-            if (rc != 0) {
-                fprintf(stderr, "Runtime error: pthread_detach failed: %d\n", rc);
-                exit(1);
-            }
-        }
-
-        // Note: We don't free the task here - it will clean itself up
-        // when the thread completes (see task_thread_wrapper cleanup).
+    // detach() takes an existing task handle and detaches it
+    if (num_args != 1) {
+        runtime_error(ctx, "detach() expects 1 argument (task handle)");
+        return val_null();
     }
+
+    Value task_val = args[0];
+
+    if (task_val.type != VAL_TASK) {
+        runtime_error(ctx, "detach() expects a task handle");
+        return val_null();
+    }
+
+    Task *t = task_val.as.as_task;
+
+    // Check if already detached or joined (thread-safe)
+    pthread_mutex_lock((pthread_mutex_t*)t->task_mutex);
+
+    if (t->joined) {
+        pthread_mutex_unlock((pthread_mutex_t*)t->task_mutex);
+        runtime_error(ctx, "cannot detach already joined task");
+        return val_null();
+    }
+
+    if (t->detached) {
+        pthread_mutex_unlock((pthread_mutex_t*)t->task_mutex);
+        runtime_error(ctx, "task already detached");
+        return val_null();
+    }
+
+    // Mark as detached
+    t->detached = 1;
+
+    pthread_mutex_unlock((pthread_mutex_t*)t->task_mutex);
+
+    // Detach the pthread (fire and forget)
+    if (t->thread) {
+        int rc = pthread_detach(*(pthread_t*)t->thread);
+        if (rc != 0) {
+            runtime_error(ctx, "pthread_detach failed: %d", rc);
+            return val_null();
+        }
+    }
+
+    // Note: We don't free the task here - it will clean itself up
+    // when the thread completes (see task_thread_wrapper cleanup).
 
     return val_null();
 }

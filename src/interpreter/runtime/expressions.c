@@ -822,6 +822,15 @@ Value eval_expr(Expr *expr, Environment *env, ExecutionContext *ctx) {
                 if (expr->as.call.num_args != fn->num_params) {
                     runtime_error(ctx, "Function expects %d arguments, got %d",
                             fn->num_params, expr->as.call.num_args);
+                    // Release function and args before returning
+                    value_release(func);
+                    if (args) {
+                        for (int i = 0; i < expr->as.call.num_args; i++) {
+                            value_release(args[i]);
+                        }
+                        free(args);
+                    }
+                    return val_null();
                 }
 
                 // Determine function name for stack trace
@@ -830,6 +839,21 @@ Value eval_expr(Expr *expr, Environment *env, ExecutionContext *ctx) {
                     fn_name = expr->as.call.func->as.get_property.property;
                 } else if (expr->as.call.func->type == EXPR_IDENT) {
                     fn_name = expr->as.call.func->as.ident;
+                }
+
+                // Check for stack overflow (prevent infinite recursion)
+                #define MAX_CALL_STACK_DEPTH 1000
+                if (ctx->call_stack.count >= MAX_CALL_STACK_DEPTH) {
+                    runtime_error(ctx, "Maximum call stack depth exceeded (infinite recursion?)");
+                    // Release function and args before returning
+                    value_release(func);
+                    if (args) {
+                        for (int i = 0; i < expr->as.call.num_args; i++) {
+                            value_release(args[i]);
+                        }
+                        free(args);
+                    }
+                    return val_null();
                 }
 
                 // Push call onto stack trace (with line number from function body)
