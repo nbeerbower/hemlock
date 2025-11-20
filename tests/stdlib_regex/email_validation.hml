@@ -1,0 +1,21 @@
+// Test: Email validation example
+import { compile } from "@stdlib/regex";
+
+fn is_valid_email(email: string): bool {
+    // Simplified email regex
+    let pattern = compile("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$");
+    let valid = pattern.test(email);
+    pattern.free();
+    return valid;
+}
+
+// Valid emails
+print(is_valid_email("user@example.com"));         // true
+print(is_valid_email("test.user@domain.org"));     // true
+print(is_valid_email("admin+tag@site.co.uk"));     // true
+
+// Invalid emails
+print(is_valid_email("invalid.email"));            // false
+print(is_valid_email("@domain.com"));              // false
+print(is_valid_email("user@"));                    // false
+print(is_valid_email("user@domain"));              // false

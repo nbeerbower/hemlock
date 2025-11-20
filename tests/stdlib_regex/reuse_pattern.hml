@@ -1,0 +1,27 @@
+// Test: Reusing compiled patterns
+import { compile } from "@stdlib/regex";
+
+// Compile once, use many times
+let pattern = compile("^[a-z]+@[a-z]+\\.[a-z]+$");
+
+// Test multiple strings
+let test_cases = [
+    "user@example.com",
+    "admin@test.org",
+    "invalid.email",
+    "test@domain.co",
+    "@example.com",
+    "user@site.com",
+];
+
+let i = 0;
+while (i < test_cases.length) {
+    let result = pattern.test(test_cases[i]);
+    print(result);
+    i = i + 1;
+}
+
+// Free once when done
+pattern.free();
+
+print("Reuse pattern test passed");

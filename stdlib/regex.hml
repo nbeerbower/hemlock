@@ -1,0 +1,148 @@
+// Hemlock Standard Library: Regular Expressions
+// This module provides regex pattern matching using POSIX regex via FFI
+
+// Import libc for POSIX regex functions
+import "libc.so.6";
+
+// ========== FFI DECLARATIONS ==========
+
+// POSIX regex functions
+// int regcomp(regex_t *preg, const char *regex, int cflags)
+extern fn regcomp(preg: ptr, pattern: string, cflags: i32): i32;
+
+// int regexec(const regex_t *preg, const char *string, size_t nmatch, regmatch_t pmatch[], int eflags)
+extern fn regexec(preg: ptr, text: string, nmatch: i64, pmatch: ptr, eflags: i32): i32;
+
+// void regfree(regex_t *preg)
+extern fn regfree(preg: ptr): null;
+
+// size_t regerror(int errcode, const regex_t *preg, char *errbuf, size_t errbuf_size)
+extern fn regerror(errcode: i32, preg: ptr, errbuf: ptr, errbuf_size: i64): i64;
+
+// ========== CONSTANTS ==========
+
+// regcomp() flags
+export let REG_EXTENDED = 1;   // Use extended regex syntax
+export let REG_ICASE = 2;       // Case-insensitive matching
+export let REG_NOSUB = 4;       // Don't report match positions
+export let REG_NEWLINE = 8;     // Treat newline as special
+
+// regexec() flags
+export let REG_NOTBOL = 1;      // String is not beginning of line
+export let REG_NOTEOL = 2;      // String is not end of line
+
+// Error codes
+export let REG_NOMATCH = 1;     // No match found
+export let REG_BADPAT = 2;      // Invalid regex pattern
+export let REG_ECOLLATE = 3;    // Invalid collation element
+export let REG_ECTYPE = 4;      // Invalid character class
+export let REG_EESCAPE = 5;     // Trailing backslash
+export let REG_ESUBREG = 6;     // Invalid back reference
+export let REG_EBRACK = 7;      // Brackets [] not balanced
+export let REG_EPAREN = 8;      // Parentheses () not balanced
+export let REG_EBRACE = 9;      // Braces {} not balanced
+export let REG_BADBR = 10;      // Invalid repetition count
+export let REG_ERANGE = 11;     // Invalid range in []
+export let REG_ESPACE = 12;     // Out of memory
+export let REG_BADRPT = 13;     // Invalid use of repetition operator
+
+// ========== REGEX OBJECT ==========
+
+// Create a new compiled regex object
+export fn compile(pattern: string, flags?: i32): object {
+    // Default to extended regex
+    if (flags == null) {
+        flags = REG_EXTENDED;
+    }
+
+    // Allocate regex_t struct (typical size is 56-64 bytes, use 128 to be safe)
+    let preg = alloc(128);
+    memset(preg, 0, 128);
+
+    // Compile the pattern
+    let result = regcomp(preg, pattern, flags);
+
+    // Check for compilation errors
+    if (result != 0) {
+        // Get error message
+        let errbuf = alloc(256);
+        regerror(result, preg, errbuf, 256);
+
+        // Read error message as string (manual conversion)
+        let err_msg = "Regex compilation failed: error code " + typeof(result);
+
+        // Clean up
+        free(errbuf);
+        regfree(preg);
+        free(preg);
+
+        throw err_msg;
+    }
+
+    // Create regex object
+    let regex = {
+        // Private fields
+        _preg: preg,
+        _pattern: pattern,
+        _flags: flags,
+        _freed: false,
+
+        // Public properties
+        pattern: pattern,
+
+        // Test if string matches pattern
+        test: fn(text: string): bool {
+            if (self._freed) {
+                throw "Regex has been freed";
+            }
+            let result = regexec(self._preg, text, 0, null, 0);
+            return result == 0;
+        },
+
+        // Match string and return true/false
+        matches: fn(text: string): bool {
+            return self.test(text);
+        },
+
+        // Find first match in string (returns true if found)
+        find: fn(text: string): bool {
+            if (self._freed) {
+                throw "Regex has been freed";
+            }
+            let result = regexec(self._preg, text, 0, null, 0);
+            return result == 0;
+        },
+
+        // Free the compiled regex (must be called manually)
+        free: fn(): null {
+            if (!self._freed) {
+                regfree(self._preg);
+                free(self._preg);
+                self._freed = true;
+            }
+            return null;
+        },
+    };
+
+    return regex;
+}
+
+// ========== CONVENIENCE FUNCTIONS ==========
+
+// Test if string matches pattern (one-shot, no compilation needed for reuse)
+export fn test(pattern: string, text: string, flags?: i32): bool {
+    let regex = compile(pattern, flags);
+    let result = regex.test(text);
+    regex.free();
+    return result;
+}
+
+// Match string against pattern (one-shot)
+export fn matches(pattern: string, text: string, flags?: i32): bool {
+    return test(pattern, text, flags);
+}
+
+// Find if pattern exists in string (one-shot)
+export fn find(pattern: string, text: string, flags?: i32): bool {
+    return test(pattern, text, flags);
+}

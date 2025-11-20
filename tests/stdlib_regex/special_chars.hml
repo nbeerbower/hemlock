@@ -1,0 +1,26 @@
+// Test: Special characters and escaping
+import { test } from "@stdlib/regex";
+
+// Dot matches any character (except newline)
+print(test("^a.c$", "abc"));        // true
+print(test("^a.c$", "a5c"));        // true
+print(test("^a.c$", "ac"));         // false
+
+// Escaped special characters
+print(test("^a\\.b$", "a.b"));      // true
+print(test("^a\\.b$", "axb"));      // false
+
+// Backslash escaping
+print(test("^a\\\\b$", "a\\b"));    // true
+
+// Parentheses
+print(test("^a\\(b\\)$", "a(b)"));  // true
+
+// Question mark
+print(test("^a\\?$", "a?"));        // true
+
+// Plus sign
+print(test("^a\\+$", "a+"));        // true
+
+// Asterisk
+print(test("^a\\*$", "a*"));        // true

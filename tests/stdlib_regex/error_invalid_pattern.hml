@@ -1,0 +1,11 @@
+// Test: Invalid regex pattern (should throw exception)
+import { compile } from "@stdlib/regex";
+
+// This should fail with unbalanced bracket error
+try {
+    let pattern = compile("[invalid");
+    print("ERROR: Should have thrown exception");
+} catch (e) {
+    print("Caught expected error");
+    print(typeof(e));
+}

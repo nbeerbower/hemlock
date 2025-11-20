@@ -1,0 +1,23 @@
+// Test: Character classes and ranges
+import { test } from "@stdlib/regex";
+
+// Character ranges
+print(test("^[a-z]+$", "hello"));            // true
+print(test("^[a-z]+$", "Hello"));            // false
+print(test("^[A-Z]+$", "HELLO"));            // true
+print(test("^[0-9]+$", "12345"));            // true
+print(test("^[a-zA-Z]+$", "HelloWorld"));    // true
+
+// Character classes
+print(test("^[abc]+$", "abcabc"));           // true
+print(test("^[abc]+$", "abcd"));             // false
+
+// Negation
+print(test("^[^0-9]+$", "hello"));           // true
+print(test("^[^0-9]+$", "hello123"));        // false
+
+// POSIX character classes
+print(test("^[[:digit:]]+$", "12345"));      // true
+print(test("^[[:alpha:]]+$", "Hello"));      // true
+print(test("^[[:alnum:]]+$", "Hello123"));   // true
+print(test("^[[:space:]]+$", "   "));        // true

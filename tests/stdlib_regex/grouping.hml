@@ -1,0 +1,21 @@
+// Test: Grouping and alternation
+import { test } from "@stdlib/regex";
+
+// Alternation
+print(test("^(cat|dog)$", "cat"));          // true
+print(test("^(cat|dog)$", "dog"));          // true
+print(test("^(cat|dog)$", "bird"));         // false
+
+// Grouping with quantifiers
+print(test("^(ab)+$", "ab"));               // true
+print(test("^(ab)+$", "abab"));             // true
+print(test("^(ab)+$", "aba"));              // false
+
+// Complex alternation
+print(test("^(http|https)://", "http://example.com"));   // true
+print(test("^(http|https)://", "https://example.com"));  // true
+print(test("^(http|https)://", "ftp://example.com"));    // false
+
+// Nested groups
+print(test("^((ab|cd)+)$", "abcdab"));      // true
+print(test("^((ab|cd)+)$", "abef"));        // false
