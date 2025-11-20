@@ -201,11 +201,11 @@ int utf8_is_ascii(const char *data, int byte_length);
 // Value comparison
 int values_equal(Value a, Value b);
 
-Value call_file_method(FileHandle *file, const char *method, Value *args, int num_args);
-Value call_array_method(Array *arr, const char *method, Value *args, int num_args);
-Value call_string_method(String *str, const char *method, Value *args, int num_args);
-Value call_channel_method(Channel *ch, const char *method, Value *args, int num_args);
-Value call_object_method(Object *obj, const char *method, Value *args, int num_args);
+Value call_file_method(FileHandle *file, const char *method, Value *args, int num_args, ExecutionContext *ctx);
+Value call_array_method(Array *arr, const char *method, Value *args, int num_args, ExecutionContext *ctx);
+Value call_string_method(String *str, const char *method, Value *args, int num_args, ExecutionContext *ctx);
+Value call_channel_method(Channel *ch, const char *method, Value *args, int num_args, ExecutionContext *ctx);
+Value call_object_method(Object *obj, const char *method, Value *args, int num_args, ExecutionContext *ctx);
 
 // I/O builtin functions
 Value builtin_read_line(Value *args, int num_args, ExecutionContext *ctx);
