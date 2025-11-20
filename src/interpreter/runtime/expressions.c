@@ -692,6 +692,30 @@ Value eval_expr(Expr *expr, Environment *env, ExecutionContext *ctx) {
                     return result;
                 }
 
+                // Special handling for socket methods
+                if (method_self.type == VAL_SOCKET) {
+                    const char *method = expr->as.call.func->as.get_property.property;
+
+                    // Evaluate arguments
+                    Value *args = NULL;
+                    if (expr->as.call.num_args > 0) {
+                        args = malloc(sizeof(Value) * expr->as.call.num_args);
+                        for (int i = 0; i < expr->as.call.num_args; i++) {
+                            args[i] = eval_expr(expr->as.call.args[i], env, ctx);
+                        }
+                    }
+
+                    Value result = call_socket_method(method_self.as.as_socket, method, args, expr->as.call.num_args, ctx);
+                    // Release argument values (socket methods don't retain them)
+                    if (args) {
+                        for (int i = 0; i < expr->as.call.num_args; i++) {
+                            value_release(args[i]);
+                        }
+                        free(args);
+                    }
+                    return result;
+                }
+
                 // Special handling for array methods
                 if (method_self.type == VAL_ARRAY) {
                     const char *method = expr->as.call.func->as.get_property.property;
@@ -995,6 +1019,9 @@ Value eval_expr(Expr *expr, Environment *env, ExecutionContext *ctx) {
                 } else {
                     runtime_error(ctx, "Unknown property '%s' for file", property);
                 }
+            } else if (object.type == VAL_SOCKET) {
+                // Socket properties (read-only)
+                result = get_socket_property(object.as.as_socket, property, ctx);
             } else if (object.type == VAL_ARRAY) {
                 // Array properties
                 if (strcmp(property, "length") == 0) {

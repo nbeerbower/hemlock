@@ -26,6 +26,7 @@ typedef enum {
     VAL_ARRAY,          // Dynamic array
     VAL_OBJECT,         // JavaScript-style object
     VAL_FILE,           // File handle
+    VAL_SOCKET,         // Socket handle
     VAL_TYPE,           // Represents a type (for sizeof, talloc, etc.)
     VAL_BUILTIN_FN,
     VAL_FUNCTION,       // User-defined function
@@ -73,6 +74,17 @@ typedef struct {
     char *mode;         // Mode string ("r", "w", etc.)
     int closed;         // 1 if closed, 0 if open
 } FileHandle;
+
+// Socket handle struct
+typedef struct {
+    int fd;              // File descriptor
+    char *address;       // Bound/connected address (nullable)
+    int port;            // Port number
+    int domain;          // AF_INET, AF_INET6
+    int type;            // SOCK_STREAM, SOCK_DGRAM
+    int closed;          // Whether socket is closed
+    int listening;       // Whether listening (server socket)
+} SocketHandle;
 
 // Object struct (JavaScript-style object)
 typedef struct {
@@ -160,6 +172,7 @@ typedef struct Value {
         Buffer *as_buffer;
         Array *as_array;
         FileHandle *as_file;
+        SocketHandle *as_socket;
         Object *as_object;
         TypeKind as_type;
         BuiltinFn as_builtin_fn;

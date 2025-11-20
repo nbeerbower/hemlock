@@ -147,6 +147,10 @@ void function_release(Function *fn);
 Value val_file(FileHandle *file);
 void file_free(FileHandle *file);
 
+// Socket operations
+Value val_socket(SocketHandle *sock);
+void socket_free(SocketHandle *sock);
+
 // Value cleanup and reference counting
 void value_free(Value val);
 void value_retain(Value val);
@@ -202,10 +206,14 @@ int utf8_is_ascii(const char *data, int byte_length);
 int values_equal(Value a, Value b);
 
 Value call_file_method(FileHandle *file, const char *method, Value *args, int num_args, ExecutionContext *ctx);
+Value call_socket_method(SocketHandle *sock, const char *method, Value *args, int num_args, ExecutionContext *ctx);
 Value call_array_method(Array *arr, const char *method, Value *args, int num_args, ExecutionContext *ctx);
 Value call_string_method(String *str, const char *method, Value *args, int num_args, ExecutionContext *ctx);
 Value call_channel_method(Channel *ch, const char *method, Value *args, int num_args, ExecutionContext *ctx);
 Value call_object_method(Object *obj, const char *method, Value *args, int num_args, ExecutionContext *ctx);
+
+// Property accessors
+Value get_socket_property(SocketHandle *sock, const char *property, ExecutionContext *ctx);
 
 // I/O builtin functions
 Value builtin_read_line(Value *args, int num_args, ExecutionContext *ctx);
