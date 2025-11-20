@@ -2,6 +2,34 @@
 
 The Hemlock standard library provides essential modules and data structures for Hemlock programs.
 
+## Installation
+
+### Core Modules
+Most stdlib modules are pure Hemlock and require no external dependencies.
+
+### Optional Dependencies
+
+Some modules require external C libraries:
+
+**For WebSocket support (future):**
+```bash
+# Ubuntu/Debian
+sudo apt-get install libwebsockets-dev
+
+# macOS
+brew install libwebsockets
+
+# Arch Linux
+sudo pacman -S libwebsockets
+```
+
+**Build stdlib C modules:**
+```bash
+make stdlib
+```
+
+This compiles optional C wrappers (currently: libwebsockets wrapper for future WebSocket module).
+
 ## Available Modules
 
 ### Collections (`@stdlib/collections`) ⭐
@@ -234,6 +262,10 @@ stdlib/
 ├── net.hml             # Networking module implementation
 ├── regex.hml           # Regular expressions module (via FFI)
 ├── http.hml            # HTTP client module (pure Hemlock)
+├── http_lws.hml        # HTTP client using libwebsockets (future)
+├── websocket.hml       # WebSocket client/server (future)
+├── c/                  # C FFI wrappers (compiled with 'make stdlib')
+│   └── lws_wrapper.c   # libwebsockets wrapper (future)
 └── docs/
     ├── collections.md  # Collections API reference
     ├── math.md         # Math API reference
@@ -260,10 +292,23 @@ let parsed = json.deserialize();
 print(parsed.name);  // "Alice"
 ```
 
+## Modules In Development
+
+### WebSocket (`@stdlib/websocket`)
+**Status:** Design complete, implementation pending
+
+WebSocket client/server using libwebsockets:
+- **Client:** WebSocket(url) - Connect to ws:// or wss:// endpoints
+- **Server:** WebSocketServer(host, port) - Accept WebSocket connections
+- **Message types:** Text, binary, ping, pong, close
+- **SSL/TLS support:** Secure WebSocket (wss://) built-in
+- **Requires:** `libwebsockets-dev` package (see installation below)
+
+See `WEBSOCKET_DESIGN.md` for detailed architecture.
+
 ## Future Modules
 
 Planned additions to the standard library:
-- **websocket** - WebSocket protocol (building on @stdlib/http)
 - **strings** - String utilities (pad, join, is_alpha, reverse, lines, words)
 - **path** - Path manipulation (join, basename, dirname, extname, normalize)
 - **json** - Formalized JSON module (wrapper around serialize/deserialize)
