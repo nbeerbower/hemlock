@@ -1,0 +1,16 @@
+// Test: Basic regex pattern matching
+import { test, matches, find } from "@stdlib/regex";
+
+// Basic string matching
+print(test("hello", "hello world", null));         // true
+print(test("hello", "goodbye world", null));       // false
+
+// Anchors
+print(test("^hello", "hello world", null));        // true
+print(test("^hello", "say hello", null));          // false
+print(test("world$", "hello world", null));        // true
+print(test("world$", "world hello", null));        // false
+
+// Test aliases
+print(matches("test", "testing", null));           // true
+print(find("error", "This is an error", null));    // true

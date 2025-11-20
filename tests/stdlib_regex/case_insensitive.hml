@@ -1,0 +1,17 @@
+// Test: Case-insensitive matching
+import { test, compile, REG_EXTENDED, REG_ICASE } from "@stdlib/regex";
+
+// Case-insensitive one-shot
+print(test("HELLO", "hello world", REG_ICASE));     // true
+print(test("hello", "HELLO WORLD", REG_ICASE));     // true
+print(test("WoRlD", "hello world", REG_ICASE));     // true
+
+// Case-insensitive compiled
+let pattern = compile("^[A-Z]+$", REG_EXTENDED | REG_ICASE);
+print(pattern.test("hello"));        // true
+print(pattern.test("HELLO"));        // true
+print(pattern.test("HeLLo"));        // true
+print(pattern.test("hello123"));     // false
+pattern.free();
+
+print("Case-insensitive test passed");

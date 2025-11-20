@@ -89,6 +89,7 @@ Value eval_expr(Expr *expr, Environment *env, ExecutionContext *ctx) {
                                     return val_i64(-(int64_t)operand.as.as_u64);
                                 } else {
                                     runtime_error(ctx, "Cannot negate u64 value larger than INT64_MAX");
+                                    return val_null();
                                 }
                             }
                             default:
@@ -96,6 +97,7 @@ Value eval_expr(Expr *expr, Environment *env, ExecutionContext *ctx) {
                         }
                     }
                     runtime_error(ctx, "Cannot negate non-numeric value");
+                    return val_null();
 
                 case UNARY_BIT_NOT:
                     if (is_integer(operand)) {
@@ -483,6 +485,7 @@ Value eval_expr(Expr *expr, Environment *env, ExecutionContext *ctx) {
                             }
                             default:
                                 runtime_error(ctx, "Invalid integer type for arithmetic");
+                                return val_null();
                         }
                     }
 
@@ -1158,6 +1161,7 @@ Value eval_expr(Expr *expr, Environment *env, ExecutionContext *ctx) {
                 return value;
             } else {
                 runtime_error(ctx, "Only strings, buffers, and arrays support index assignment");
+                return val_null();
             }
         }
 
