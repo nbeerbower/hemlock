@@ -13,6 +13,9 @@
 #include <pthread.h>
 #include <sys/stat.h>
 #include <sys/wait.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
 #include <dirent.h>
 #include <unistd.h>
 #include <limits.h>
@@ -134,5 +137,13 @@ Value builtin_strerror_fn(Value *args, int num_args, ExecutionContext *ctx);
 Value builtin_dirent_name(Value *args, int num_args, ExecutionContext *ctx);
 Value builtin_string_to_cstr(Value *args, int num_args, ExecutionContext *ctx);
 Value builtin_cstr_to_string(Value *args, int num_args, ExecutionContext *ctx);
+
+// Networking builtins (net.c)
+Value builtin_socket_create(Value *args, int num_args, ExecutionContext *ctx);
+Value builtin_dns_resolve(Value *args, int num_args, ExecutionContext *ctx);
+Value val_socket(SocketHandle *sock);
+void socket_free(SocketHandle *sock);
+Value get_socket_property(SocketHandle *sock, const char *property, ExecutionContext *ctx);
+Value call_socket_method(SocketHandle *sock, const char *method, Value *args, int num_args, ExecutionContext *ctx);
 
 #endif // BUILTINS_INTERNAL_H

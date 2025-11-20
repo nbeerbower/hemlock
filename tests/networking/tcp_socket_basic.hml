@@ -1,0 +1,19 @@
+// Test: Basic TCP socket creation and configuration
+// Should succeed without errors
+
+let sock = socket_create(AF_INET, SOCK_STREAM, 0);
+
+// Test socket properties
+print("Socket created with fd: " + typeof(sock.fd));
+print("Socket closed: " + typeof(sock.closed));
+
+// Test setting socket options
+sock.setsockopt(SOL_SOCKET, SO_REUSEADDR, 1);
+print("SO_REUSEADDR set");
+
+// Close the socket
+sock.close();
+print("Socket closed");
+print("Socket closed property: " + typeof(sock.closed));
+
+print("Basic TCP socket test passed");

@@ -1,0 +1,62 @@
+// Test: TCP echo server with async client
+// Server echoes back what client sends
+
+async fn echo_server(port: i32) {
+    let server = socket_create(AF_INET, SOCK_STREAM, 0);
+    defer server.close();
+
+    server.setsockopt(SOL_SOCKET, SO_REUSEADDR, 1);
+    server.bind("127.0.0.1", port);
+    server.listen(1);
+
+    print("Server listening on port " + typeof(port));
+
+    let client = server.accept();
+    defer client.close();
+
+    print("Client connected from " + client.address + ":" + typeof(client.port));
+
+    // Receive data
+    let data = client.recv(1024);
+    print("Server received: " + typeof(data.length) + " bytes");
+
+    // Echo back
+    let sent = client.send(data);
+    print("Server sent: " + typeof(sent) + " bytes");
+
+    return null;
+}
+
+async fn echo_client(port: i32) {
+    // Give server time to start
+    __sleep(0.1);
+
+    let sock = socket_create(AF_INET, SOCK_STREAM, 0);
+    defer sock.close();
+
+    sock.connect("127.0.0.1", port);
+    print("Client connected to port " + typeof(port));
+
+    // Send message
+    let message = "Hello, server!";
+    let sent = sock.send(message);
+    print("Client sent: " + typeof(sent) + " bytes");
+
+    // Receive echo
+    let received = sock.recv(1024);
+    print("Client received: " + typeof(received.length) + " bytes");
+
+    return null;
+}
+
+let port = 9999;
+
+// Spawn server and client
+let server_task = spawn(echo_server, port);
+let client_task = spawn(echo_client, port);
+
+// Wait for both to complete
+join(server_task);
+join(client_task);
+
+print("TCP echo test passed");

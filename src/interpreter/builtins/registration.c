@@ -30,6 +30,9 @@ static BuiltinInfo builtins[] = {
     {"task_debug_info", builtin_task_debug_info},
     {"signal", builtin_signal},
     {"raise", builtin_raise},
+    // Networking functions
+    {"socket_create", builtin_socket_create},
+    {"dns_resolve", builtin_dns_resolve},
     // Math functions (use stdlib/math.hml module for public API)
     {"__sin", builtin_sin},
     {"__cos", builtin_cos},
@@ -145,6 +148,23 @@ void register_builtins(Environment *env, int argc, char **argv, ExecutionContext
     env_set(env, "SIGTSTP", val_i32(SIGTSTP), ctx);    // Terminal stop (Ctrl+Z)
     env_set(env, "SIGTTIN", val_i32(SIGTTIN), ctx);    // Background read from terminal
     env_set(env, "SIGTTOU", val_i32(SIGTTOU), ctx);    // Background write to terminal
+
+    // Socket constants - Domain (address family)
+    env_set(env, "AF_INET", val_i32(AF_INET), ctx);    // IPv4
+    env_set(env, "AF_INET6", val_i32(AF_INET6), ctx);  // IPv6
+
+    // Socket constants - Type
+    env_set(env, "SOCK_STREAM", val_i32(SOCK_STREAM), ctx);  // TCP
+    env_set(env, "SOCK_DGRAM", val_i32(SOCK_DGRAM), ctx);    // UDP
+
+    // Socket constants - Socket options level
+    env_set(env, "SOL_SOCKET", val_i32(SOL_SOCKET), ctx);
+
+    // Socket constants - Socket options
+    env_set(env, "SO_REUSEADDR", val_i32(SO_REUSEADDR), ctx);  // Reuse address
+    env_set(env, "SO_KEEPALIVE", val_i32(SO_KEEPALIVE), ctx);  // Keep connections alive
+    env_set(env, "SO_RCVTIMEO", val_i32(SO_RCVTIMEO), ctx);    // Receive timeout
+    env_set(env, "SO_SNDTIMEO", val_i32(SO_SNDTIMEO), ctx);    // Send timeout
 
     // Register builtin functions (may overwrite some type names if there are conflicts)
     for (int i = 0; builtins[i].name != NULL; i++) {

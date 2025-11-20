@@ -860,6 +860,19 @@ void print_value(Value val) {
             }
             break;
         }
+        case VAL_SOCKET: {
+            SocketHandle *sock = val.as.as_socket;
+            if (sock->closed) {
+                printf("<socket (closed)>");
+            } else if (sock->address) {
+                printf("<socket %s:%d fd=%d%s>",
+                       sock->address, sock->port, sock->fd,
+                       sock->listening ? " listening" : "");
+            } else {
+                printf("<socket fd=%d>", sock->fd);
+            }
+            break;
+        }
         case VAL_OBJECT:
             if (val.as.as_object->type_name) {
                 printf("<object:%s>", val.as.as_object->type_name);
@@ -1024,6 +1037,11 @@ static void value_free_internal(Value val, VisitedSet *visited) {
         case VAL_FILE:
             if (val.as.as_file) {
                 file_free(val.as.as_file);
+            }
+            break;
+        case VAL_SOCKET:
+            if (val.as.as_socket) {
+                socket_free(val.as.as_socket);
             }
             break;
         case VAL_OBJECT:
