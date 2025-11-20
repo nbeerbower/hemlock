@@ -2,22 +2,22 @@
 import { test } from "@stdlib/regex";
 
 // Character ranges
-print(test("^[a-z]+$", "hello"));            // true
-print(test("^[a-z]+$", "Hello"));            // false
-print(test("^[A-Z]+$", "HELLO"));            // true
-print(test("^[0-9]+$", "12345"));            // true
-print(test("^[a-zA-Z]+$", "HelloWorld"));    // true
+print(test("^[a-z]+$", "hello", null));            // true
+print(test("^[a-z]+$", "Hello", null));            // false
+print(test("^[A-Z]+$", "HELLO", null));            // true
+print(test("^[0-9]+$", "12345", null));            // true
+print(test("^[a-zA-Z]+$", "HelloWorld", null));    // true
 
 // Character classes
-print(test("^[abc]+$", "abcabc"));           // true
-print(test("^[abc]+$", "abcd"));             // false
+print(test("^[abc]+$", "abcabc", null));           // true
+print(test("^[abc]+$", "abcd", null));             // false
 
 // Negation
-print(test("^[^0-9]+$", "hello"));           // true
-print(test("^[^0-9]+$", "hello123"));        // false
+print(test("^[^0-9]+$", "hello", null));           // true
+print(test("^[^0-9]+$", "hello123", null));        // false
 
 // POSIX character classes
-print(test("^[[:digit:]]+$", "12345"));      // true
-print(test("^[[:alpha:]]+$", "Hello"));      // true
-print(test("^[[:alnum:]]+$", "Hello123"));   // true
-print(test("^[[:space:]]+$", "   "));        // true
+print(test("^[[:digit:]]+$", "12345", null));      // true
+print(test("^[[:alpha:]]+$", "Hello", null));      // true
+print(test("^[[:alnum:]]+$", "Hello123", null));   // true
+print(test("^[[:space:]]+$", "   ", null));        // true

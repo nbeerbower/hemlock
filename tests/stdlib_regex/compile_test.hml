@@ -2,7 +2,7 @@
 import { compile } from "@stdlib/regex";
 
 // Create and use compiled regex
-let pattern = compile("^[0-9]+$");
+let pattern = compile("^[0-9]+$", null);
 
 print(pattern.test("12345"));        // true
 print(pattern.test("abc123"));       // false

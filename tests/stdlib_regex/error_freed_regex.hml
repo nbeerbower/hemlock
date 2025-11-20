@@ -1,7 +1,7 @@
 // Test: Using freed regex (should throw exception)
 import { compile } from "@stdlib/regex";
 
-let pattern = compile("test");
+let pattern = compile("test", null);
 pattern.free();
 
 // Attempting to use freed regex should throw

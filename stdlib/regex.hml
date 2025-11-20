@@ -49,7 +49,8 @@ export let REG_BADRPT = 13;     // Invalid use of repetition operator
 // ========== REGEX OBJECT ==========
 
 // Create a new compiled regex object
-export fn compile(pattern: string, flags?: i32): object {
+// flags: compilation flags (pass null for default REG_EXTENDED)
+export fn compile(pattern: string, flags): object {
     // Default to extended regex
     if (flags == null) {
         flags = REG_EXTENDED;
@@ -130,7 +131,8 @@ export fn compile(pattern: string, flags?: i32): object {
 // ========== CONVENIENCE FUNCTIONS ==========
 
 // Test if string matches pattern (one-shot, no compilation needed for reuse)
-export fn test(pattern: string, text: string, flags?: i32): bool {
+// flags: compilation flags (pass null for default REG_EXTENDED)
+export fn test(pattern: string, text: string, flags): bool {
     let regex = compile(pattern, flags);
     let result = regex.test(text);
     regex.free();
@@ -138,11 +140,13 @@ export fn test(pattern: string, text: string, flags?: i32): bool {
 }
 
 // Match string against pattern (one-shot)
-export fn matches(pattern: string, text: string, flags?: i32): bool {
+// flags: compilation flags (pass null for default REG_EXTENDED)
+export fn matches(pattern: string, text: string, flags): bool {
     return test(pattern, text, flags);
 }
 
 // Find if pattern exists in string (one-shot)
-export fn find(pattern: string, text: string, flags?: i32): bool {
+// flags: compilation flags (pass null for default REG_EXTENDED)
+export fn find(pattern: string, text: string, flags): bool {
     return test(pattern, text, flags);
 }

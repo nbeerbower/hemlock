@@ -2,7 +2,7 @@
 import { compile } from "@stdlib/regex";
 
 // Compile once, use many times
-let pattern = compile("^[a-z]+@[a-z]+\\.[a-z]+$");
+let pattern = compile("^[a-z]+@[a-z]+\\.[a-z]+$", null);
 
 // Test multiple strings
 let test_cases = [
