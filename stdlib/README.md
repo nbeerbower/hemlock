@@ -58,6 +58,18 @@ File and directory operations:
 
 See [docs/fs.md](docs/fs.md) for detailed documentation.
 
+### Regular Expressions (`@stdlib/regex`)
+**Status:** Basic (via FFI)
+
+POSIX Extended Regular Expression pattern matching:
+- `compile(pattern, flags)` - Compile reusable regex object
+- `test(pattern, text, flags)` - One-shot pattern matching
+- `matches()`, `find()` - Convenience aliases
+- Case-insensitive matching with `REG_ICASE` flag
+- Manual memory management (explicit `.free()` required)
+
+See [docs/regex.md](docs/regex.md) for detailed documentation.
+
 ## Usage
 
 Import modules using the `@stdlib/` prefix:
@@ -69,15 +81,18 @@ import { sin, cos, PI } from "@stdlib/math";
 import { now, sleep } from "@stdlib/time";
 import { getenv, exit } from "@stdlib/env";
 import { read_file, write_file, exists } from "@stdlib/fs";
+import { compile, test, REG_ICASE } from "@stdlib/regex";
 
 // Import all as namespace
 import * as math from "@stdlib/math";
 import * as fs from "@stdlib/fs";
+import * as regex from "@stdlib/regex";
 
 // Use imported functions
 let angle = math.PI / 4.0;
 let result = math.sin(angle);
 let content = fs.read_file("data.txt");
+let is_valid = regex.test("^[a-z]+$", "hello", null);
 ```
 
 ## Quick Examples
@@ -132,6 +147,21 @@ if (exists("config.json")) {
 }
 ```
 
+### Regular Expressions
+```hemlock
+import { compile, test } from "@stdlib/regex";
+
+// One-shot pattern matching
+if (test("^[a-z]+$", "hello", null)) {
+    print("Valid lowercase string");
+}
+
+// Compiled regex for reuse
+let email_pattern = compile("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$", null);
+print(email_pattern.test("user@example.com"));  // true
+email_pattern.free();  // Manual cleanup required
+```
+
 ## Directory Structure
 
 ```
@@ -142,12 +172,14 @@ stdlib/
 ├── time.hml            # Time module implementation
 ├── env.hml             # Environment module implementation
 ├── fs.hml              # Filesystem module implementation
+├── regex.hml           # Regular expressions module (via FFI)
 └── docs/
     ├── collections.md  # Collections API reference
     ├── math.md         # Math API reference
     ├── time.md         # Time API reference
     ├── env.md          # Environment API reference
-    └── fs.md           # Filesystem API reference
+    ├── fs.md           # Filesystem API reference
+    └── regex.md        # Regex API reference
 ```
 
 ## JSON Serialization
@@ -175,7 +207,6 @@ Planned additions to the standard library:
 - **testing** - Test framework with describe/test/expect/assertions
 - **datetime** - Date/time formatting and parsing
 - **http** - HTTP client (via FFI + libcurl)
-- **regex** - Regular expressions (via FFI + PCRE)
 - **crypto** - Cryptographic functions (via FFI + OpenSSL)
 - **compression** - zlib/gzip compression (via FFI)
 
@@ -190,6 +221,7 @@ See `STDLIB_ANALYSIS_UPDATED.md` for detailed roadmap and implementation plan.
 | time | ⚠️ Basic | ✅ Complete | ✅ Good | 13 | Good |
 | env | ✅ Complete | ✅ Complete | ✅ Good | 14 | High |
 | fs | ✅ Comprehensive | ✅ Complete | ⚠️ Partial | 31 | High |
+| regex | ⚠️ Basic (FFI) | ✅ Complete | ✅ Good | 152 | Good |
 
 **Legend:**
 - ✅ Complete/Excellent
@@ -219,11 +251,13 @@ make test | grep stdlib_collections
 make test | grep stdlib_math
 make test | grep stdlib_time
 make test | grep stdlib_env
+make test | grep stdlib_regex
 
 # Or run individual test files
 ./hemlock tests/stdlib_collections/test_hashmap.hml
 ./hemlock tests/stdlib_math/test_math_constants.hml
 ./hemlock tests/stdlib_time/test_time.hml
+./hemlock tests/stdlib_regex/basic_test.hml
 ```
 
 **Current test statistics:**

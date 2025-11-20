@@ -1,0 +1,13 @@
+// Test: Using freed regex (should throw exception)
+import { compile } from "@stdlib/regex";
+
+let pattern = compile("test", null);
+pattern.free();
+
+// Attempting to use freed regex should throw
+try {
+    pattern.test("testing");
+    print("ERROR: Should have thrown exception");
+} catch (e) {
+    print("Caught expected error: Regex has been freed");
+}

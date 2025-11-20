@@ -1,0 +1,21 @@
+// Test: Compiled regex objects
+import { compile } from "@stdlib/regex";
+
+// Create and use compiled regex
+let pattern = compile("^[0-9]+$", null);
+
+print(pattern.test("12345"));        // true
+print(pattern.test("abc123"));       // false
+print(pattern.test("123"));          // true
+
+// Test methods
+print(pattern.matches("999"));       // true
+print(pattern.find("42"));           // true
+
+// Check pattern property
+print(pattern.pattern);              // ^[0-9]+$
+
+// Free the regex
+pattern.free();
+
+print("Compiled regex test passed");

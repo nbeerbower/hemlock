@@ -1,0 +1,34 @@
+// Test: Quantifiers
+import { test } from "@stdlib/regex";
+
+// Zero or more (*)
+print(test("^ab*c$", "ac", null));        // true
+print(test("^ab*c$", "abc", null));       // true
+print(test("^ab*c$", "abbc", null));      // true
+
+// One or more (+)
+print(test("^ab+c$", "ac", null));        // false
+print(test("^ab+c$", "abc", null));       // true
+print(test("^ab+c$", "abbc", null));      // true
+
+// Zero or one (?)
+print(test("^ab?c$", "ac", null));        // true
+print(test("^ab?c$", "abc", null));       // true
+print(test("^ab?c$", "abbc", null));      // false
+
+// Exact count {n}
+print(test("^a{3}$", "aaa", null));       // true
+print(test("^a{3}$", "aa", null));        // false
+print(test("^a{3}$", "aaaa", null));      // false
+
+// At least {n,}
+print(test("^a{2,}$", "a", null));        // false
+print(test("^a{2,}$", "aa", null));       // true
+print(test("^a{2,}$", "aaaa", null));     // true
+
+// Range {n,m}
+print(test("^a{2,4}$", "a", null));       // false
+print(test("^a{2,4}$", "aa", null));      // true
+print(test("^a{2,4}$", "aaa", null));     // true
+print(test("^a{2,4}$", "aaaa", null));    // true
+print(test("^a{2,4}$", "aaaaa", null));   // false
