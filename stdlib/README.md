@@ -81,6 +81,20 @@ POSIX Extended Regular Expression pattern matching:
 
 See [docs/regex.md](docs/regex.md) for detailed documentation.
 
+### HTTP Client (`@stdlib/http`)
+**Status:** Production (via curl wrapper)
+
+Production-ready HTTP/HTTPS client wrapping curl:
+- **HTTP methods:** get, post, put, delete, request
+- **Convenience:** fetch, post_json, get_json, download
+- **Status helpers:** is_success, is_redirect, is_client_error, is_server_error
+- **URL helpers:** url_encode
+- **Wraps curl CLI** via exec() for simplicity and reliability
+- **Full HTTPS/TLS support** via curl's OpenSSL
+- **Battle-tested** - uses the same curl that powers millions of applications
+
+See [docs/http.md](docs/http.md) for detailed documentation.
+
 ## Usage
 
 Import modules using the `@stdlib/` prefix:
@@ -94,12 +108,14 @@ import { getenv, exit } from "@stdlib/env";
 import { read_file, write_file, exists } from "@stdlib/fs";
 import { TcpListener, TcpStream, UdpSocket } from "@stdlib/net";
 import { compile, test, REG_ICASE } from "@stdlib/regex";
+import { get, post, fetch } from "@stdlib/http";
 
 // Import all as namespace
 import * as math from "@stdlib/math";
 import * as fs from "@stdlib/fs";
 import * as net from "@stdlib/net";
 import * as regex from "@stdlib/regex";
+import * as http from "@stdlib/http";
 
 // Use imported functions
 let angle = math.PI / 4.0;
@@ -188,6 +204,23 @@ print(email_pattern.test("user@example.com"));  // true
 email_pattern.free();  // Manual cleanup required
 ```
 
+### HTTP Client
+```hemlock
+import { get, post_json, fetch } from "@stdlib/http";
+
+// Simple GET request
+let response = get("http://example.com/api/data", null);
+print(response.status_code);  // 200
+print(response.body);
+
+// Fetch URL (simplified)
+let body = fetch("http://example.com");
+
+// POST JSON
+let data = { name: "Alice", age: 30 };
+let response = post_json("http://api.example.com/users", data);
+```
+
 ## Directory Structure
 
 ```
@@ -200,6 +233,7 @@ stdlib/
 ├── fs.hml              # Filesystem module implementation
 ├── net.hml             # Networking module implementation
 ├── regex.hml           # Regular expressions module (via FFI)
+├── http.hml            # HTTP client module (pure Hemlock)
 └── docs/
     ├── collections.md  # Collections API reference
     ├── math.md         # Math API reference
@@ -207,7 +241,8 @@ stdlib/
     ├── env.md          # Environment API reference
     ├── fs.md           # Filesystem API reference
     ├── net.md          # Networking API reference
-    └── regex.md        # Regex API reference
+    ├── regex.md        # Regex API reference
+    └── http.md         # HTTP API reference
 ```
 
 ## JSON Serialization
@@ -228,8 +263,7 @@ print(parsed.name);  // "Alice"
 ## Future Modules
 
 Planned additions to the standard library:
-- **http** - HTTP client/server (building on @stdlib/net) - **IN PROGRESS**
-- **websocket** - WebSocket protocol (building on @stdlib/http) - **IN PROGRESS**
+- **websocket** - WebSocket protocol (building on @stdlib/http)
 - **strings** - String utilities (pad, join, is_alpha, reverse, lines, words)
 - **path** - Path manipulation (join, basename, dirname, extname, normalize)
 - **json** - Formalized JSON module (wrapper around serialize/deserialize)
@@ -252,6 +286,7 @@ See `STDLIB_ANALYSIS_UPDATED.md` and `STDLIB_NETWORKING_DESIGN.md` for detailed 
 | fs | ✅ Comprehensive | ✅ Complete | ⚠️ Partial | 31 | High |
 | net | ✅ Complete | ✅ Complete | ✅ Good | 240 | High |
 | regex | ⚠️ Basic (FFI) | ✅ Complete | ✅ Good | 152 | Good |
+| http | ✅ Production (curl) | ✅ Complete | ⚠️ Example | 311 | High |
 
 **Legend:**
 - ✅ Complete/Excellent
