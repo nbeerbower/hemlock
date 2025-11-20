@@ -231,7 +231,13 @@ Module* load_module(ModuleCache *cache, const char *module_path, ExecutionContex
             free(absolute_path);
             return NULL;
         }
-        // Already loaded
+        if (cached->state == MODULE_UNLOADED) {
+            // Module failed to load previously (parse error or other failure)
+            fprintf(stderr, "Error: Module '%s' failed to load previously\n", absolute_path);
+            free(absolute_path);
+            return NULL;
+        }
+        // Already loaded successfully
         free(absolute_path);
         return cached;
     }
