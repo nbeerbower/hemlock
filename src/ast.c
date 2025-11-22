@@ -369,6 +369,17 @@ Stmt* stmt_define_object(const char *name, char **field_names, Type **field_type
     return stmt;
 }
 
+Stmt* stmt_enum(const char *name, char **variant_names, Expr **variant_values, int num_variants) {
+    Stmt *stmt = malloc(sizeof(Stmt));
+    stmt->type = STMT_ENUM;
+    stmt->line = 0;
+    stmt->as.enum_decl.name = strdup(name);
+    stmt->as.enum_decl.variant_names = variant_names;
+    stmt->as.enum_decl.variant_values = variant_values;
+    stmt->as.enum_decl.num_variants = num_variants;
+    return stmt;
+}
+
 Stmt* stmt_try(Stmt *try_block, char *catch_param, Stmt *catch_block, Stmt *finally_block) {
     Stmt *stmt = malloc(sizeof(Stmt));
     stmt->type = STMT_TRY;
@@ -814,6 +825,19 @@ void stmt_free(Stmt *stmt) {
             free(stmt->as.define_object.field_types);
             free(stmt->as.define_object.field_optional);
             free(stmt->as.define_object.field_defaults);
+            break;
+        case STMT_ENUM:
+            free(stmt->as.enum_decl.name);
+            for (int i = 0; i < stmt->as.enum_decl.num_variants; i++) {
+                free(stmt->as.enum_decl.variant_names[i]);
+                if (stmt->as.enum_decl.variant_values && stmt->as.enum_decl.variant_values[i]) {
+                    expr_free(stmt->as.enum_decl.variant_values[i]);
+                }
+            }
+            free(stmt->as.enum_decl.variant_names);
+            if (stmt->as.enum_decl.variant_values) {
+                free(stmt->as.enum_decl.variant_values);
+            }
             break;
         case STMT_TRY:
             stmt_free(stmt->as.try_stmt.try_block);

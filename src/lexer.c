@@ -333,7 +333,10 @@ static TokenType identifier_type(Lexer *lex) {
             if (len == 7) return check_keyword(lex->start, 7, "default", TOK_DEFAULT);
             break;
         case 'e':
-            if (len == 4) return check_keyword(lex->start, 4, "else", TOK_ELSE);
+            if (len == 4) {
+                if (strncmp(lex->start, "else", 4) == 0) return TOK_ELSE;
+                if (strncmp(lex->start, "enum", 4) == 0) return TOK_ENUM;
+            }
             if (len == 6) {
                 if (strncmp(lex->start, "export", 6) == 0) return TOK_EXPORT;
                 if (strncmp(lex->start, "extern", 6) == 0) return TOK_EXTERN;

@@ -566,6 +566,41 @@ Stmt* statement(Parser *p) {
         return stmt;
     }
 
+    // Enum definition: enum EnumName { ... }
+    if (match(p, TOK_ENUM)) {
+        consume(p, TOK_IDENT, "Expect enum type name");
+        char *name = token_text(&p->previous);
+
+        consume(p, TOK_LBRACE, "Expect '{' after enum name");
+
+        // Parse variants
+        char **variant_names = malloc(sizeof(char*) * 32);
+        Expr **variant_values = malloc(sizeof(Expr*) * 32);
+        int num_variants = 0;
+
+        while (!check(p, TOK_RBRACE) && !check(p, TOK_EOF)) {
+            consume(p, TOK_IDENT, "Expect variant name");
+            variant_names[num_variants] = token_text(&p->previous);
+
+            // Check for explicit value assignment
+            if (match(p, TOK_EQUAL)) {
+                variant_values[num_variants] = expression(p);
+            } else {
+                variant_values[num_variants] = NULL;  // auto value
+            }
+
+            num_variants++;
+
+            if (!match(p, TOK_COMMA)) break;
+        }
+
+        consume(p, TOK_RBRACE, "Expect '}' after enum variants");
+
+        Stmt *stmt = stmt_enum(name, variant_names, variant_values, num_variants);
+        free(name);
+        return stmt;
+    }
+
     // Named function: fn name(...) { ... } or async fn name(...) { ... }
     // Desugar to: let name = fn(...) { ... }; or let name = async fn(...) { ... };
     int is_async = 0;

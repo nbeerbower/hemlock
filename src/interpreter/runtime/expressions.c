@@ -1183,6 +1183,17 @@ Value eval_expr(Expr *expr, Environment *env, ExecutionContext *ctx) {
             for (int i = 0; i < expr->as.function.num_params; i++) {
                 if (expr->as.function.param_types[i]) {
                     fn->param_types[i] = type_new(expr->as.function.param_types[i]->kind);
+                    // Copy type_name for custom types (enums and objects)
+                    if (expr->as.function.param_types[i]->type_name) {
+                        fn->param_types[i]->type_name = strdup(expr->as.function.param_types[i]->type_name);
+                    }
+                    // Copy element_type for arrays
+                    if (expr->as.function.param_types[i]->element_type) {
+                        fn->param_types[i]->element_type = type_new(expr->as.function.param_types[i]->element_type->kind);
+                        if (expr->as.function.param_types[i]->element_type->type_name) {
+                            fn->param_types[i]->element_type->type_name = strdup(expr->as.function.param_types[i]->element_type->type_name);
+                        }
+                    }
                 } else {
                     fn->param_types[i] = NULL;
                 }
@@ -1193,6 +1204,17 @@ Value eval_expr(Expr *expr, Environment *env, ExecutionContext *ctx) {
             // Copy return type (may be NULL)
             if (expr->as.function.return_type) {
                 fn->return_type = type_new(expr->as.function.return_type->kind);
+                // Copy type_name for custom types (enums and objects)
+                if (expr->as.function.return_type->type_name) {
+                    fn->return_type->type_name = strdup(expr->as.function.return_type->type_name);
+                }
+                // Copy element_type for arrays
+                if (expr->as.function.return_type->element_type) {
+                    fn->return_type->element_type = type_new(expr->as.function.return_type->element_type->kind);
+                    if (expr->as.function.return_type->element_type->type_name) {
+                        fn->return_type->element_type->type_name = strdup(expr->as.function.return_type->element_type->type_name);
+                    }
+                }
             } else {
                 fn->return_type = NULL;
             }

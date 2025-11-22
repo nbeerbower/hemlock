@@ -1287,6 +1287,135 @@ print(add5(3));  // 8
 
 ---
 
+## Enums
+
+Hemlock supports **C-style enumerations** with explicit or auto-incrementing values:
+
+```hemlock
+// Simple enum (auto values: 0, 1, 2, ...)
+enum Color {
+    RED,
+    GREEN,
+    BLUE
+}
+
+// Enum with explicit values
+enum Status {
+    OK = 0,
+    ERROR = 1,
+    PENDING = 2
+}
+
+// Mixed auto and explicit values
+enum Code {
+    A,        // 0
+    B = 10,   // 10
+    C,        // 11 (auto-increments from last explicit value)
+    D = 20,   // 20
+    E         // 21
+}
+```
+
+### Usage
+
+**Accessing enum variants:**
+```hemlock
+print(Color.RED);     // 0
+print(Status.ERROR);  // 1
+print(Code.C);        // 11
+```
+
+**Type annotations:**
+```hemlock
+let color: Color = Color.RED;
+let status: Status = Status.OK;
+
+// Type checking ensures values match
+color = Color.BLUE;  // ✓ OK
+```
+
+**Comparisons:**
+```hemlock
+let status = Status.OK;
+
+if (status == Status.OK) {
+    print("Success");
+}
+
+if (status != Status.ERROR) {
+    print("Not an error");
+}
+```
+
+**Switch statements:**
+```hemlock
+let color = Color.GREEN;
+
+switch (color) {
+    case Color.RED:
+        print("Red");
+        break;
+    case Color.GREEN:
+        print("Green");
+        break;
+    case Color.BLUE:
+        print("Blue");
+        break;
+}
+```
+
+**Function parameters:**
+```hemlock
+fn process(s: Status): string {
+    if (s == Status.OK) {
+        return "Success";
+    }
+    if (s == Status.ERROR) {
+        return "Failed";
+    }
+    return "Waiting";
+}
+
+print(process(Status.OK));      // "Success"
+print(process(Status.ERROR));   // "Failed"
+print(process(Status.PENDING)); // "Waiting"
+```
+
+### Implementation Details
+
+- Enum variants are **i32 values** at runtime
+- Enums create a **const namespace object** with variant fields
+- Type checking validates enum types during assignment and function calls
+- Auto-incrementing starts at 0, or continues from last explicit value
+- Variant values must be compile-time constants (i32 expressions)
+
+**Example of namespace object:**
+```hemlock
+enum Status {
+    OK,
+    ERROR,
+    PENDING
+}
+
+// Internally creates:
+// const Status = {
+//     OK: 0,
+//     ERROR: 1,
+//     PENDING: 2
+// }
+
+// So you can access:
+print(Status.OK);  // 0
+```
+
+**Current Limitations:**
+- No enum variant validation at runtime (can assign any i32 to enum-typed variable)
+- No discriminated unions or associated data
+- No pattern matching (use switch statements)
+- Enum values must fit in i32 range
+
+---
+
 ## Objects
 
 Hemlock implements JavaScript-style objects with heap allocation, dynamic fields, methods, and duck typing.
@@ -3170,13 +3299,14 @@ When adding features to Hemlock:
 
 ## Version History
 
-- **v0.1** - Primitives, memory management, UTF-8 strings, control flow, functions, closures, recursion, objects, arrays, error handling, file I/O, signal handling, command-line arguments, async/await, structured concurrency, FFI (current)
-  - Type system: i8-i64, u8-u64, f32/f64, bool, string, rune, null, ptr, buffer, array, object, file, task, channel, void
+- **v0.1** - Primitives, memory management, UTF-8 strings, control flow, functions, closures, recursion, objects, arrays, enums, error handling, file I/O, signal handling, command-line arguments, async/await, structured concurrency, FFI (current)
+  - Type system: i8-i64, u8-u64, f32/f64, bool, string, rune, null, ptr, buffer, array, object, enum, file, task, channel, void
   - **64-bit integer support:** i64 and u64 types with full type promotion, conversion, and FFI support
   - **UTF-8 first-class strings:** Full Unicode support (U+0000 to U+10FFFF), codepoint-based indexing and operations, `.length` (codepoints) and `.byte_length` (bytes) properties
   - **Rune type:** Unicode codepoints as distinct 32-bit type, rune literals with escape sequences and Unicode escapes ('\u{XXXX}'), string + rune concatenation, integer ↔ rune conversions
   - Memory: alloc, free, memset, memcpy, realloc, talloc, sizeof
   - Objects: literals, methods, duck typing, optional fields, serialize/deserialize
+  - **Enums:** C-style enumerations with auto-incrementing or explicit values, type checking, namespace objects
   - **Strings:** 18 methods including substr, slice, find, contains, split, trim, to_upper, to_lower, starts_with, ends_with, replace, replace_all, repeat, char_at, byte_at, chars, bytes, to_bytes
   - **Arrays:** 15 methods including push, pop, shift, unshift, insert, remove, find, contains, slice, join, concat, reverse, first, last, clear
   - Control flow: if/else, while, for, for-in, break, continue, switch, bitwise operators (&, |, ^, <<, >>, ~), **defer**
