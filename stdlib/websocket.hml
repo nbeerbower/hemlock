@@ -8,10 +8,10 @@ import "stdlib/c/lws_wrapper.so";
 // Client functions
 extern fn lws_ws_connect(url: string): ptr;
 extern fn lws_ws_send_text(ws: ptr, data: string): i32;
-extern fn lws_ws_send_binary(ws: ptr, data: buffer): i32;
+extern fn lws_ws_send_binary(ws: ptr, data: ptr, len: i32): i32;
 extern fn lws_ws_recv(ws: ptr, timeout_ms: i32): ptr;
 extern fn lws_ws_close(ws: ptr): void;
-extern fn lws_ws_is_closed(ws: ptr): bool;
+extern fn lws_ws_is_closed(ws: ptr): i32;
 
 // Server functions
 extern fn lws_ws_server_create(host: string, port: i32): ptr;
@@ -21,7 +21,8 @@ extern fn lws_ws_server_close(server: ptr): void;
 // Message accessors
 extern fn lws_msg_type(msg: ptr): i32;
 extern fn lws_msg_text(msg: ptr): string;
-extern fn lws_msg_binary(msg: ptr): buffer;
+extern fn lws_msg_binary(msg: ptr): ptr;
+extern fn lws_msg_len(msg: ptr): i32;
 extern fn lws_msg_free(msg: ptr): void;
 
 // ========== CONSTANTS ==========
@@ -72,11 +73,12 @@ export fn WebSocket(url: string): WebSocket {
             if (self.closed) {
                 throw "Cannot send on closed WebSocket";
             }
-            let result = lws_ws_send_binary(self.handle, data);
+            // Pass buffer pointer and length to C function
+            let result = lws_ws_send_binary(self.handle, data, data.length);
             return result == 0;
         },
 
-        recv: fn(timeout_ms?: i32): WebSocketMessage {
+        recv: fn(timeout_ms: i32): WebSocketMessage {
             if (self.closed) {
                 return null;
             }
@@ -103,7 +105,12 @@ export fn WebSocket(url: string): WebSocket {
                 message.data = lws_msg_text(msg_ptr);
             } else if (msg_type == WS_MSG_BINARY) {
                 message.type = "binary";
-                message.binary = lws_msg_binary(msg_ptr);
+                // Get binary data pointer and length
+                let bin_ptr = lws_msg_binary(msg_ptr);
+                let bin_len = lws_msg_len(msg_ptr);
+                // Would need to convert to buffer - for now just report length
+                message.data = "binary data (" + typeof(bin_len) + " bytes)";
+                message.binary = null;
             } else if (msg_type == WS_MSG_PING) {
                 message.type = "ping";
             } else if (msg_type == WS_MSG_PONG) {
@@ -148,7 +155,7 @@ export fn WebSocketServer(host: string, port: i32): WebSocketServer {
         port: port,
         closed: false,
 
-        accept: fn(timeout_ms?: i32): WebSocket {
+        accept: fn(timeout_ms: i32): WebSocket {
             if (self.closed) {
                 throw "Cannot accept on closed WebSocket server";
             }
@@ -179,10 +186,10 @@ export fn WebSocketServer(host: string, port: i32): WebSocketServer {
                     if (self.closed) {
                         throw "Cannot send on closed WebSocket";
                     }
-                    return lws_ws_send_binary(self.handle, data) == 0;
+                    return lws_ws_send_binary(self.handle, data, data.length) == 0;
                 },
 
-                recv: fn(timeout_ms?: i32): WebSocketMessage {
+                recv: fn(timeout_ms: i32): WebSocketMessage {
                     // Same as client recv
                     if (self.closed) { return null; }
                     if (timeout_ms == null) { timeout_ms = -1; }
@@ -202,7 +209,10 @@ export fn WebSocketServer(host: string, port: i32): WebSocketServer {
                         message.data = lws_msg_text(msg_ptr);
                     } else if (msg_type == WS_MSG_BINARY) {
                         message.type = "binary";
-                        message.binary = lws_msg_binary(msg_ptr);
+                        let bin_ptr = lws_msg_binary(msg_ptr);
+                        let bin_len = lws_msg_len(msg_ptr);
+                        message.data = "binary data (" + typeof(bin_len) + " bytes)";
+                        message.binary = null;
                     } else if (msg_type == WS_MSG_PING) {
                         message.type = "ping";
                     } else if (msg_type == WS_MSG_PONG) {

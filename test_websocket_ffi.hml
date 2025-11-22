@@ -1,0 +1,41 @@
+// Test if WebSocket FFI module can load
+// This will fail if lws_wrapper.so isn't compiled
+
+print("Testing WebSocket FFI module...");
+print("");
+
+try {
+    import { WebSocket } from "@stdlib/websocket";
+    print("✓ WebSocket module loaded successfully!");
+    print("");
+    print("FFI module is ready. You can now:");
+    print("  - Connect to WebSocket servers (ws:// and wss://)");
+    print("  - Create WebSocket servers");
+    print("  - Handle text and binary messages");
+    print("");
+    print("Try the examples:");
+    print("  ./hemlock examples/websocket_client_lws.hml");
+    print("  ./hemlock examples/websocket_server_lws.hml");
+
+} catch (e) {
+    print("✗ Failed to load WebSocket module");
+    print("");
+    print("Error: " + e);
+    print("");
+    print("This usually means:");
+    print("  1. lws_wrapper.so is not compiled");
+    print("  2. libwebsockets is not installed");
+    print("");
+    print("To fix:");
+    print("  # Install libwebsockets");
+    print("  sudo apt-get install libwebsockets-dev");
+    print("");
+    print("  # Compile the FFI wrapper");
+    print("  make stdlib");
+    print("");
+    print("Alternative:");
+    print("  Use the pure Hemlock version (no SSL, limited features):");
+    print("  import { WebSocket } from \"@stdlib/websocket_pure\";");
+}
+
+print("");
