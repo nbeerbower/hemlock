@@ -1,7 +1,8 @@
 #include "internal.h"
+#include <stdatomic.h>
 
-// Global task ID counter
-static int next_task_id = 1;
+// Global task ID counter (atomic for thread-safety in concurrent spawns)
+static atomic_int next_task_id = 1;
 
 // Thread wrapper function that executes a task
 static void* task_thread_wrapper(void* arg) {
@@ -96,8 +97,9 @@ Value builtin_spawn(Value *args, int num_args, ExecutionContext *ctx) {
         }
     }
 
-    // Create task
-    Task *task = task_new(next_task_id++, fn, task_args, task_num_args, fn->closure_env);
+    // Create task (atomically increment task ID for thread-safety)
+    int task_id = atomic_fetch_add(&next_task_id, 1);
+    Task *task = task_new(task_id, fn, task_args, task_num_args, fn->closure_env);
 
     // Allocate pthread_t
     task->thread = malloc(sizeof(pthread_t));
@@ -262,8 +264,9 @@ Value builtin_detach(Value *args, int num_args, ExecutionContext *ctx) {
             }
         }
 
-        // Create task
-        Task *task = task_new(next_task_id++, fn, task_args, task_num_args, fn->closure_env);
+        // Create task (atomically increment task ID for thread-safety)
+        int task_id = atomic_fetch_add(&next_task_id, 1);
+        Task *task = task_new(task_id, fn, task_args, task_num_args, fn->closure_env);
 
         // Mark as detached before starting thread
         task->detached = 1;
