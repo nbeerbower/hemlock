@@ -4,6 +4,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
+#include <pthread.h>
 
 // ========== FFI DATA STRUCTURES ==========
 
@@ -23,19 +24,27 @@ typedef struct {
 
 static FFIState g_ffi_state = {NULL, 0, 0, NULL};
 
+// Thread-safety: Mutex for FFI library cache access
+static pthread_mutex_t ffi_cache_mutex = PTHREAD_MUTEX_INITIALIZER;
+
 // ========== LIBRARY LOADING ==========
 
 FFILibrary* ffi_load_library(const char *path, ExecutionContext *ctx) {
+    pthread_mutex_lock(&ffi_cache_mutex);
+
     // Check if library is already loaded
     for (int i = 0; i < g_ffi_state.num_libraries; i++) {
         if (strcmp(g_ffi_state.libraries[i]->path, path) == 0) {
-            return g_ffi_state.libraries[i];
+            FFILibrary *lib = g_ffi_state.libraries[i];
+            pthread_mutex_unlock(&ffi_cache_mutex);
+            return lib;
         }
     }
 
     // Open library with RTLD_LAZY (resolve symbols on first call)
     void *handle = dlopen(path, RTLD_LAZY);
     if (handle == NULL) {
+        pthread_mutex_unlock(&ffi_cache_mutex);
         ctx->exception_state.is_throwing = 1;
         char error_msg[512];
         snprintf(error_msg, sizeof(error_msg), "Failed to load library '%s': %s", path, dlerror());
@@ -54,6 +63,7 @@ FFILibrary* ffi_load_library(const char *path, ExecutionContext *ctx) {
     }
     g_ffi_state.libraries[g_ffi_state.num_libraries++] = lib;
 
+    pthread_mutex_unlock(&ffi_cache_mutex);
     return lib;
 }
 
@@ -370,12 +380,18 @@ void execute_import_ffi(Stmt *stmt, ExecutionContext *ctx) {
     const char *library_path = stmt->as.import_ffi.library_path;
     FFILibrary *lib = ffi_load_library(library_path, ctx);
     if (lib != NULL) {
+        pthread_mutex_lock(&ffi_cache_mutex);
         g_ffi_state.current_lib = lib;
+        pthread_mutex_unlock(&ffi_cache_mutex);
     }
 }
 
 void execute_extern_fn(Stmt *stmt, Environment *env, ExecutionContext *ctx) {
-    if (g_ffi_state.current_lib == NULL) {
+    pthread_mutex_lock(&ffi_cache_mutex);
+    FFILibrary *current_lib = g_ffi_state.current_lib;
+    pthread_mutex_unlock(&ffi_cache_mutex);
+
+    if (current_lib == NULL) {
         ctx->exception_state.is_throwing = 1;
         ctx->exception_state.exception_value = val_string("No library imported before extern declaration");
         return;
@@ -387,7 +403,7 @@ void execute_extern_fn(Stmt *stmt, Environment *env, ExecutionContext *ctx) {
     Type *return_type = stmt->as.extern_fn.return_type;
 
     FFIFunction *func = ffi_declare_function(
-        g_ffi_state.current_lib,
+        current_lib,
         function_name,
         param_types,
         num_params,
