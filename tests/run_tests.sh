@@ -71,7 +71,7 @@ for test_file in $TEST_FILES; do
 
     # Skip HTTP/WebSocket tests if lws_wrapper.so doesn't exist
     if [[ "$category" == "stdlib_http" || "$category" == "stdlib_websocket" ]]; then
-        if [ ! -f "stdlib/c/lws_wrapper.so" ]; then
+        if [ ! -f "$PROJECT_ROOT/stdlib/c/lws_wrapper.so" ]; then
             # Only print the skip message once per category
             if [ "$category" != "$CURRENT_CATEGORY" ]; then
                 if [ -n "$CURRENT_CATEGORY" ]; then
