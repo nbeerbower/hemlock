@@ -8,6 +8,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <unistd.h>
+#include <pthread.h>
 
 // ========== HTTP SUPPORT ==========
 
@@ -365,23 +366,45 @@ typedef struct {
     ws_message_t *msg_queue_tail;
     int closed;
     int failed;
+    int established;  // 1 when connection is fully established (for client)
     char *send_buffer;
     size_t send_len;
     int send_pending;
+    pthread_t service_thread;
+    volatile int shutdown;
+    int has_own_thread;  // 1 if this connection started its own service thread
 } ws_connection_t;
+
+// Service thread function - runs continuously to service the event loop
+static void* ws_service_thread(void *arg) {
+    ws_connection_t *conn = (ws_connection_t *)arg;
+
+    while (!conn->shutdown) {
+        lws_service(conn->context, 50);
+    }
+
+    return NULL;
+}
 
 static int ws_callback(struct lws *wsi, enum lws_callback_reasons reason,
                        void *user, void *in, size_t len) {
     ws_connection_t *conn = (ws_connection_t *)user;
 
+    fprintf(stderr, "[DEBUG] ws_callback: reason=%d, conn=%p, wsi=%p\n", reason, (void*)conn, (void*)wsi);
+
     switch (reason) {
         case LWS_CALLBACK_CLIENT_ESTABLISHED:
-            fprintf(stderr, "WebSocket connection established\n");
+            fprintf(stderr, "[DEBUG] CLIENT_ESTABLISHED: conn=%p\n", (void*)conn);
+            if (conn) {
+                conn->wsi = wsi;
+                conn->established = 1;  // Mark connection as fully established
+            }
             break;
 
         case LWS_CALLBACK_CLIENT_RECEIVE:
+            fprintf(stderr, "[DEBUG] CLIENT_RECEIVE: len=%zu, conn=%p\n", len, (void*)conn);
             // Queue received message
-            {
+            if (conn) {
                 ws_message_t *msg = malloc(sizeof(ws_message_t));
                 if (!msg) break;
 
@@ -403,28 +426,38 @@ static int ws_callback(struct lws *wsi, enum lws_callback_reasons reason,
                     conn->msg_queue_head = msg;
                 }
                 conn->msg_queue_tail = msg;
+                fprintf(stderr, "[DEBUG] CLIENT_RECEIVE: message queued\n");
             }
             break;
 
         case LWS_CALLBACK_CLIENT_WRITEABLE:
-            if (conn->send_pending && conn->send_buffer) {
+            fprintf(stderr, "[DEBUG] CLIENT_WRITEABLE: conn=%p, send_pending=%d\n",
+                    (void*)conn, conn ? conn->send_pending : -1);
+            if (conn && conn->send_pending && conn->send_buffer) {
+                fprintf(stderr, "[DEBUG] CLIENT_WRITEABLE: writing %zu bytes\n", conn->send_len);
                 int flags = LWS_WRITE_TEXT;
                 lws_write(wsi, (unsigned char *)conn->send_buffer + LWS_PRE,
                          conn->send_len, flags);
                 free(conn->send_buffer);
                 conn->send_buffer = NULL;
                 conn->send_pending = 0;
+                fprintf(stderr, "[DEBUG] CLIENT_WRITEABLE: write complete\n");
             }
             break;
 
         case LWS_CALLBACK_CLOSED:
-            conn->closed = 1;
+            fprintf(stderr, "[DEBUG] CLOSED: conn=%p\n", (void*)conn);
+            if (conn) {
+                conn->closed = 1;
+            }
             break;
 
         case LWS_CALLBACK_CLIENT_CONNECTION_ERROR:
             fprintf(stderr, "WebSocket connection error: %s\n", in ? (char *)in : "unknown");
-            conn->failed = 1;
-            conn->closed = 1;
+            if (conn) {
+                conn->failed = 1;
+                conn->closed = 1;
+            }
             break;
 
         default:
@@ -560,13 +593,23 @@ ws_connection_t* lws_ws_connect(const char *url) {
         return NULL;
     }
 
-    // Wait for connection (timeout 10 seconds)
+    // Wait for connection to be established (timeout 10 seconds)
     int timeout = 100;
-    while (timeout-- > 0 && !conn->closed && !conn->failed && !conn->wsi) {
+    while (timeout-- > 0 && !conn->closed && !conn->failed && !conn->established) {
         lws_service(conn->context, 100);  // 100ms per iteration
     }
 
-    if (conn->failed || conn->closed) {
+    if (conn->failed || conn->closed || !conn->established) {
+        lws_context_destroy(conn->context);
+        free(conn);
+        return NULL;
+    }
+
+    // Start service thread
+    conn->shutdown = 0;
+    conn->has_own_thread = 1;
+    if (pthread_create(&conn->service_thread, NULL, ws_service_thread, conn) != 0) {
+        fprintf(stderr, "Failed to create service thread\n");
         lws_context_destroy(conn->context);
         free(conn);
         return NULL;
@@ -580,18 +623,29 @@ int lws_ws_send_text(ws_connection_t *conn, const char *text) {
     if (!conn || conn->closed) return -1;
 
     size_t len = strlen(text);
-    conn->send_buffer = malloc(LWS_PRE + len);
-    if (!conn->send_buffer) return -1;
+    fprintf(stderr, "[DEBUG] send_text called, len=%zu, text='%s'\n", len, text);
 
-    memcpy(conn->send_buffer + LWS_PRE, text, len);
-    conn->send_len = len;
-    conn->send_pending = 1;
+    // Allocate buffer with LWS_PRE padding
+    unsigned char *buf = malloc(LWS_PRE + len);
+    if (!buf) return -1;
 
-    lws_callback_on_writable(conn->wsi);
+    memcpy(buf + LWS_PRE, text, len);
 
-    // Service once with very short timeout to attempt immediate send
-    // If it doesn't complete immediately, it will complete on next recv/accept
-    lws_service(conn->context, 1);
+    fprintf(stderr, "[DEBUG] Calling lws_write directly, wsi=%p\n", (void*)conn->wsi);
+
+    // Write directly - libwebsockets should be thread-safe for writes
+    int written = lws_write(conn->wsi, buf + LWS_PRE, len, LWS_WRITE_TEXT);
+
+    free(buf);
+
+    fprintf(stderr, "[DEBUG] lws_write returned %d\n", written);
+
+    if (written < 0) {
+        return -1;
+    }
+
+    // Wake up service thread to actually send the data
+    lws_cancel_service(conn->context);
 
     return 0;
 }
@@ -609,18 +663,20 @@ int lws_ws_send_binary(ws_connection_t *conn, const unsigned char *data, size_t 
 
     lws_callback_on_writable(conn->wsi);
 
-    // Service once with very short timeout to attempt immediate send
-    // If it doesn't complete immediately, it will complete on next recv/accept
-    lws_service(conn->context, 1);
+    // Service thread will handle the send
 
     return 0;
 }
 
 // WebSocket receive (blocking with timeout)
 ws_message_t* lws_ws_recv(ws_connection_t *conn, int timeout_ms) {
-    if (!conn || conn->closed) return NULL;
+    if (!conn || conn->closed) {
+        fprintf(stderr, "[DEBUG] recv: conn=%p, closed=%d\n", (void*)conn, conn ? conn->closed : -1);
+        return NULL;
+    }
 
-    int iterations = timeout_ms > 0 ? (timeout_ms / 50) : -1;
+    fprintf(stderr, "[DEBUG] recv: waiting for message, timeout=%d\n", timeout_ms);
+    int iterations = timeout_ms > 0 ? (timeout_ms / 10) : -1;
 
     while (iterations != 0) {
         // Check if we have queued messages
@@ -631,16 +687,18 @@ ws_message_t* lws_ws_recv(ws_connection_t *conn, int timeout_ms) {
                 conn->msg_queue_tail = NULL;
             }
             msg->next = NULL;
+            fprintf(stderr, "[DEBUG] recv: found message, data='%s'\n", (char*)msg->data);
             return msg;
         }
 
-        // Service to receive more
-        lws_service(conn->context, 50);  // 50ms per iteration
+        // Service thread handles receiving, we just wait
+        usleep(10000);  // 10ms sleep
 
         if (conn->closed) return NULL;
         if (iterations > 0) iterations--;
     }
 
+    fprintf(stderr, "[DEBUG] recv: timeout\n");
     return NULL;
 }
 
@@ -674,6 +732,14 @@ void lws_msg_free(ws_message_t *msg) {
 // WebSocket close
 void lws_ws_close(ws_connection_t *conn) {
     if (conn) {
+        // Signal service thread to stop (if it has one)
+        conn->shutdown = 1;
+
+        // Wait for service thread to finish (only if this connection has its own thread)
+        if (conn->has_own_thread) {
+            pthread_join(conn->service_thread, NULL);
+        }
+
         // Free queued messages
         ws_message_t *msg = conn->msg_queue_head;
         while (msg) {
@@ -683,7 +749,13 @@ void lws_ws_close(ws_connection_t *conn) {
         }
 
         if (conn->send_buffer) free(conn->send_buffer);
-        if (conn->context) lws_context_destroy(conn->context);
+
+        // Only destroy context if this connection owns it (has its own thread)
+        // Server-side connections share the server's context
+        if (conn->has_own_thread && conn->context) {
+            lws_context_destroy(conn->context);
+        }
+
         free(conn);
     }
 }
@@ -698,31 +770,51 @@ int lws_ws_is_closed(ws_connection_t *conn) {
 typedef struct ws_server {
     struct lws_context *context;
     struct lws *pending_wsi;
+    ws_connection_t *pending_conn;  // Store the actual connection struct
     int port;
     int closed;
+    pthread_t service_thread;
+    volatile int shutdown;
 } ws_server_t;
+
+// Service thread function for server - runs continuously to service the event loop
+static void* ws_server_service_thread(void *arg) {
+    ws_server_t *server = (ws_server_t *)arg;
+
+    while (!server->shutdown) {
+        lws_service(server->context, 50);
+    }
+
+    return NULL;
+}
 
 static int ws_server_callback(struct lws *wsi, enum lws_callback_reasons reason,
                               void *user, void *in, size_t len) {
     ws_server_t *server = (ws_server_t *)lws_context_user(lws_get_context(wsi));
     ws_connection_t *conn = (ws_connection_t *)user;
 
+    fprintf(stderr, "[DEBUG] ws_server_callback: reason=%d, conn=%p, wsi=%p\n", reason, (void*)conn, (void*)wsi);
+
     switch (reason) {
         case LWS_CALLBACK_ESTABLISHED:
             fprintf(stderr, "WebSocket server connection established\n");
-            // Store the wsi for accept() to pick up
+            // Store the wsi AND conn for accept() to pick up
             if (server && !server->pending_wsi) {
                 server->pending_wsi = wsi;
+                server->pending_conn = conn;  // Store the actual conn struct
             }
             // Initialize connection state
             if (conn) {
                 conn->wsi = wsi;
                 conn->context = lws_get_context(wsi);
+                conn->shutdown = 0;
+                conn->has_own_thread = 0;  // Server's thread handles this
             }
             break;
 
         case LWS_CALLBACK_RECEIVE:
             // Queue received message
+            fprintf(stderr, "[DEBUG] SERVER RECEIVE callback, len=%zu, conn=%p\n", len, (void*)conn);
             if (conn) {
                 ws_message_t *msg = malloc(sizeof(ws_message_t));
                 if (!msg) break;
@@ -745,17 +837,23 @@ static int ws_server_callback(struct lws *wsi, enum lws_callback_reasons reason,
                     conn->msg_queue_head = msg;
                 }
                 conn->msg_queue_tail = msg;
+                fprintf(stderr, "[DEBUG] Message queued, data='%s'\n", (char*)msg->data);
             }
             break;
 
         case LWS_CALLBACK_SERVER_WRITEABLE:
+            fprintf(stderr, "[DEBUG] SERVER_WRITEABLE callback triggered\n");
             if (conn && conn->send_pending && conn->send_buffer) {
+                fprintf(stderr, "[DEBUG] Writing %zu bytes\n", conn->send_len);
                 int flags = LWS_WRITE_TEXT;
                 lws_write(wsi, (unsigned char *)conn->send_buffer + LWS_PRE,
                          conn->send_len, flags);
                 free(conn->send_buffer);
                 conn->send_buffer = NULL;
                 conn->send_pending = 0;
+                fprintf(stderr, "[DEBUG] Write complete\n");
+            } else {
+                fprintf(stderr, "[DEBUG] No pending send or buffer\n");
             }
             break;
 
@@ -801,6 +899,15 @@ ws_server_t* lws_ws_server_create(const char *host, int port) {
         return NULL;
     }
 
+    // Start service thread
+    server->shutdown = 0;
+    if (pthread_create(&server->service_thread, NULL, ws_server_service_thread, server) != 0) {
+        fprintf(stderr, "Failed to create server service thread\n");
+        lws_context_destroy(server->context);
+        free(server);
+        return NULL;
+    }
+
     return server;
 }
 
@@ -808,23 +915,22 @@ ws_server_t* lws_ws_server_create(const char *host, int port) {
 ws_connection_t* lws_ws_server_accept(ws_server_t *server, int timeout_ms) {
     if (!server || server->closed) return NULL;
 
-    int iterations = timeout_ms > 0 ? (timeout_ms / 50) : -1;
+    int iterations = timeout_ms > 0 ? (timeout_ms / 10) : -1;
 
     while (iterations != 0) {
-        // Poll libwebsockets with reasonable timeout for event loop
-        lws_service(server->context, 50);  // 50ms per iteration
-
-        // Check for pending connection
+        // Check for pending connection (service thread handles the event loop)
         if (server->pending_wsi) {
-            ws_connection_t *conn = calloc(1, sizeof(ws_connection_t));
-            if (!conn) return NULL;
-
-            conn->wsi = server->pending_wsi;
-            conn->context = server->context;
+            // Return the connection struct that was created by libwebsockets
+            // and initialized in the ESTABLISHED callback
+            ws_connection_t *conn = server->pending_conn;
             server->pending_wsi = NULL;
+            server->pending_conn = NULL;
 
             return conn;
         }
+
+        // Service thread handles receiving, we just wait
+        usleep(10000);  // 10ms sleep
 
         if (iterations > 0) iterations--;
     }
@@ -836,6 +942,13 @@ ws_connection_t* lws_ws_server_accept(ws_server_t *server, int timeout_ms) {
 void lws_ws_server_close(ws_server_t *server) {
     if (server) {
         server->closed = 1;
+
+        // Signal service thread to stop
+        server->shutdown = 1;
+
+        // Wait for service thread to finish
+        pthread_join(server->service_thread, NULL);
+
         if (server->context) {
             lws_context_destroy(server->context);
         }

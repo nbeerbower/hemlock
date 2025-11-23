@@ -92,30 +92,41 @@ export fn WebSocket(url: string): WebSocket {
             }
 
             let msg_type = lws_msg_type(msg_ptr);
-            let message: WebSocketMessage = {
-                type: "",
-                data: null,
-                binary: null,
-            };
+
+            // Build message object based on type (no type annotation to avoid premature validation)
+            let message = null;
 
             if (msg_type == WS_MSG_TEXT) {
-                message.type = "text";
-                message.data = lws_msg_text(msg_ptr);
+                message = {
+                    type: "text",
+                    data: lws_msg_text(msg_ptr),
+                };
             } else if (msg_type == WS_MSG_BINARY) {
-                message.type = "binary";
                 // Get binary data pointer and length
                 let bin_ptr = lws_msg_binary(msg_ptr);
                 let bin_len = lws_msg_len(msg_ptr);
                 // Would need to convert to buffer - for now just report length
-                message.data = "binary data (" + bin_len + " bytes)";
-                message.binary = null;
+                message = {
+                    type: "binary",
+                    data: "binary data (" + bin_len + " bytes)",
+                };
             } else if (msg_type == WS_MSG_PING) {
-                message.type = "ping";
+                message = {
+                    type: "ping",
+                };
             } else if (msg_type == WS_MSG_PONG) {
-                message.type = "pong";
+                message = {
+                    type: "pong",
+                };
             } else if (msg_type == WS_MSG_CLOSE) {
-                message.type = "close";
+                message = {
+                    type: "close",
+                };
                 self.closed = true;
+            } else {
+                message = {
+                    type: "unknown",
+                };
             }
 
             lws_msg_free(msg_ptr);
@@ -194,28 +205,37 @@ export fn WebSocketServer(host: string, port: i32): WebSocketServer {
                     if (msg_ptr == null) { return null; }
 
                     let msg_type = lws_msg_type(msg_ptr);
-                    let message: WebSocketMessage = {
-                        type: "",
-                        data: null,
-                        binary: null,
-                    };
+                    let message = null;
 
                     if (msg_type == WS_MSG_TEXT) {
-                        message.type = "text";
-                        message.data = lws_msg_text(msg_ptr);
+                        message = {
+                            type: "text",
+                            data: lws_msg_text(msg_ptr),
+                        };
                     } else if (msg_type == WS_MSG_BINARY) {
-                        message.type = "binary";
                         let bin_ptr = lws_msg_binary(msg_ptr);
                         let bin_len = lws_msg_len(msg_ptr);
-                        message.data = "binary data (" + bin_len + " bytes)";
-                        message.binary = null;
+                        message = {
+                            type: "binary",
+                            data: "binary data (" + bin_len + " bytes)",
+                        };
                     } else if (msg_type == WS_MSG_PING) {
-                        message.type = "ping";
+                        message = {
+                            type: "ping",
+                        };
                     } else if (msg_type == WS_MSG_PONG) {
-                        message.type = "pong";
+                        message = {
+                            type: "pong",
+                        };
                     } else if (msg_type == WS_MSG_CLOSE) {
-                        message.type = "close";
+                        message = {
+                            type: "close",
+                        };
                         self.closed = true;
+                    } else {
+                        message = {
+                            type: "unknown",
+                        };
                     }
 
                     lws_msg_free(msg_ptr);
