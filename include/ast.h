@@ -191,6 +191,7 @@ typedef enum {
     TYPE_INFER,          // No annotation, infer from value
     TYPE_CUSTOM_OBJECT,  // Custom object type (Person, User, etc.)
     TYPE_GENERIC_OBJECT, // Generic 'object' keyword
+    TYPE_ENUM,           // Enum type (Color, Status, etc.)
     TYPE_VOID,           // Void type (for FFI functions with no return)
 } TypeKind;
 
@@ -215,6 +216,7 @@ typedef enum {
     STMT_BLOCK,
     STMT_RETURN,
     STMT_DEFINE_OBJECT,
+    STMT_ENUM,
     STMT_TRY,
     STMT_THROW,
     STMT_SWITCH,
@@ -278,6 +280,12 @@ struct Stmt {
             Expr **field_defaults;    // NULL or default value expression
             int num_fields;
         } define_object;
+        struct {
+            char *name;               // Enum type name
+            char **variant_names;     // Array of variant names
+            Expr **variant_values;    // Array of values (NULL for auto)
+            int num_variants;         // Number of variants
+        } enum_decl;
         struct {
             Stmt *try_block;
             char *catch_param;        // NULL if no catch block
@@ -374,6 +382,7 @@ Stmt* stmt_expr(Expr *expr);
 Stmt* stmt_return(Expr *value);
 Stmt* stmt_define_object(const char *name, char **field_names, Type **field_types,
                          int *field_optional, Expr **field_defaults, int num_fields);
+Stmt* stmt_enum(const char *name, char **variant_names, Expr **variant_values, int num_variants);
 Stmt* stmt_try(Stmt *try_block, char *catch_param, Stmt *catch_block, Stmt *finally_block);
 Stmt* stmt_throw(Expr *value);
 Stmt* stmt_switch(Expr *expr, Expr **case_values, Stmt **case_bodies, int num_cases);

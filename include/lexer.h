@@ -28,6 +28,7 @@ typedef enum {
     TOK_RETURN,
     TOK_REF,
     TOK_DEFINE,
+    TOK_ENUM,
     TOK_OBJECT,
     TOK_SELF,
     TOK_TRY,
