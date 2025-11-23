@@ -1,0 +1,337 @@
+// @stdlib/websocket - Pure Hemlock WebSocket implementation
+// Works TODAY without external dependencies (uses @stdlib/net)
+// Educational implementation following RFC 6455
+
+import { TcpStream } from "@stdlib/net";
+
+// ========== WEBSOCKET PROTOCOL CONSTANTS ==========
+
+let WS_MAGIC_STRING = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
+
+// Opcodes (RFC 6455)
+let OP_TEXT = 0x1;
+let OP_BINARY = 0x2;
+let OP_CLOSE = 0x8;
+let OP_PING = 0x9;
+let OP_PONG = 0xA;
+
+// ========== BASE64 ENCODING (for WebSocket handshake) ==========
+
+let base64_chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+
+fn base64_encode(data: buffer): string {
+    let result = "";
+    let i = 0;
+
+    while (i < data.length) {
+        let b1: u8 = data[i];
+        let b2: u8 = 0;
+        let b3: u8 = 0;
+
+        if (i + 1 < data.length) {
+            b2 = data[i + 1];
+        }
+        if (i + 2 < data.length) {
+            b3 = data[i + 2];
+        }
+
+        let enc1 = b1 >> 2;
+        let enc2 = ((b1 & 3) << 4) | (b2 >> 4);
+        let enc3 = ((b2 & 15) << 2) | (b3 >> 6);
+        let enc4 = b3 & 63;
+
+        result = result + base64_chars[enc1];
+        result = result + base64_chars[enc2];
+
+        if (i + 1 < data.length) {
+            result = result + base64_chars[enc3];
+        } else {
+            result = result + '=';
+        }
+
+        if (i + 2 < data.length) {
+            result = result + base64_chars[enc4];
+        } else {
+            result = result + '=';
+        }
+
+        i = i + 3;
+    }
+
+    return result;
+}
+
+// ========== SHA-1 HASH (simplified for WebSocket handshake) ==========
+// Note: For production, would use FFI to call system crypto
+
+fn sha1_hash(data: string): buffer {
+    // SIMPLIFIED: For a real implementation, we'd use FFI to OpenSSL
+    // For now, return a placeholder (websocket will fail handshake validation)
+    let hash = buffer(20);
+    let i = 0;
+    while (i < 20) {
+        hash[i] = 0;
+        i = i + 1;
+    }
+    return hash;
+}
+
+// ========== URL PARSING ==========
+
+fn parse_ws_url(url: string): object {
+    let secure = url.starts_with("wss://");
+    let prefix = secure ? "wss://" : "ws://";
+
+    if (!url.starts_with(prefix)) {
+        throw "Invalid WebSocket URL: " + url;
+    }
+
+    let rest = url.substr(prefix.length, url.length - prefix.length);
+    let path_start = rest.find("/");
+
+    let host_port = "";
+    let path = "/";
+
+    if (path_start >= 0) {
+        host_port = rest.substr(0, path_start);
+        path = rest.substr(path_start, rest.length - path_start);
+    } else {
+        host_port = rest;
+    }
+
+    let port_pos = host_port.find(":");
+    let host = "";
+    let port = secure ? 443 : 80;
+
+    if (port_pos >= 0) {
+        host = host_port.substr(0, port_pos);
+        // Would need string-to-int conversion for port
+        port = secure ? 443 : 80;  // Use default for now
+    } else {
+        host = host_port;
+    }
+
+    return {
+        secure: secure,
+        host: host,
+        port: port,
+        path: path,
+    };
+}
+
+// ========== RANDOM KEY GENERATION ==========
+
+fn generate_ws_key(): string {
+    // Generate 16 random bytes and base64 encode
+    // For now, use a simple pseudo-random approach
+    let key_bytes = buffer(16);
+    let i = 0;
+    while (i < 16) {
+        key_bytes[i] = 65 + (i * 17) % 26;  // Pseudo-random for demo
+        i = i + 1;
+    }
+    return base64_encode(key_bytes);
+}
+
+// ========== MESSAGE TYPES ==========
+
+define WebSocketMessage {
+    type: string,      // "text", "binary", "ping", "pong", "close"
+    data: string,      // For text messages
+    binary: buffer,    // For binary messages (null for text)
+}
+
+// ========== WEBSOCKET CLIENT ==========
+
+define WebSocket {
+    stream: object,    // TcpStream
+    url: string,
+    host: string,
+    closed: bool,
+}
+
+export fn WebSocket(url: string): WebSocket {
+    let parsed = parse_ws_url(url);
+
+    if (parsed.secure) {
+        throw "wss:// (secure WebSocket) not supported in pure implementation - use libwebsockets version";
+    }
+
+    // Connect TCP socket
+    let stream = TcpStream(parsed.host, parsed.port);
+
+    // Generate WebSocket key
+    let ws_key = generate_ws_key();
+
+    // Send HTTP upgrade request
+    let handshake = "GET " + parsed.path + " HTTP/1.1\r\n" +
+                    "Host: " + parsed.host + "\r\n" +
+                    "Upgrade: websocket\r\n" +
+                    "Connection: Upgrade\r\n" +
+                    "Sec-WebSocket-Key: " + ws_key + "\r\n" +
+                    "Sec-WebSocket-Version: 13\r\n\r\n";
+
+    stream.write(handshake);
+
+    // Read HTTP response
+    let response = stream.read(4096);
+
+    // Validate response (simplified - should check Sec-WebSocket-Accept)
+    if (!response.contains("101") || !response.contains("Upgrade")) {
+        stream.close();
+        throw "WebSocket handshake failed: " + response;
+    }
+
+    return {
+        stream: stream,
+        url: url,
+        host: parsed.host,
+        closed: false,
+
+        send_text: fn(data: string): bool {
+            if (self.closed) {
+                throw "Cannot send on closed WebSocket";
+            }
+
+            // Build WebSocket frame
+            let payload_len = data.length;
+            let frame = buffer(payload_len + 14);  // Max header size
+            let pos = 0;
+
+            // Byte 0: FIN + opcode
+            frame[pos] = 0x80 | OP_TEXT;  // FIN=1, opcode=text
+            pos = pos + 1;
+
+            // Byte 1: MASK + payload length
+            if (payload_len < 126) {
+                frame[pos] = 0x80 | payload_len;  // MASK=1
+                pos = pos + 1;
+            } else {
+                // Extended payload length (TODO: implement)
+                throw "Messages > 125 bytes not yet supported";
+            }
+
+            // Masking key (4 bytes) - simplified
+            frame[pos] = 1;
+            frame[pos + 1] = 2;
+            frame[pos + 2] = 3;
+            frame[pos + 3] = 4;
+            let mask_key = [1, 2, 3, 4];
+            pos = pos + 4;
+
+            // Masked payload
+            let i = 0;
+            while (i < payload_len) {
+                let char_code: u8 = data[i];  // Get character code
+                frame[pos + i] = char_code ^ mask_key[i % 4];
+                i = i + 1;
+            }
+
+            // Send frame
+            self.stream.write_bytes(frame);
+            return true;
+        },
+
+        recv: fn(timeout_ms?: i32): WebSocketMessage {
+            if (self.closed) {
+                return null;
+            }
+
+            // Read frame header (at least 2 bytes)
+            let header = self.stream.read(2);
+            if (header.length < 2) {
+                self.closed = true;
+                return null;
+            }
+
+            // Parse frame header
+            let byte0: u8 = header[0];
+            let byte1: u8 = header[1];
+
+            let fin = (byte0 & 0x80) != 0;
+            let opcode = byte0 & 0x0F;
+            let masked = (byte1 & 0x80) != 0;
+            let payload_len = byte1 & 0x7F;
+
+            // Read extended payload length if needed
+            if (payload_len == 126) {
+                throw "Extended payload length (126) not yet supported";
+            }
+            if (payload_len == 127) {
+                throw "Extended payload length (127) not yet supported";
+            }
+
+            // Read payload (server should not mask)
+            let payload_data = "";
+            if (payload_len > 0) {
+                payload_data = self.stream.read(payload_len);
+            }
+
+            // Build message
+            let message: WebSocketMessage = {
+                type: "",
+                data: null,
+                binary: null,
+            };
+
+            if (opcode == OP_TEXT) {
+                message.type = "text";
+                message.data = payload_data;
+            } else if (opcode == OP_BINARY) {
+                message.type = "binary";
+                // Would convert payload_data to buffer
+            } else if (opcode == OP_CLOSE) {
+                message.type = "close";
+                self.closed = true;
+            } else if (opcode == OP_PING) {
+                message.type = "ping";
+            } else if (opcode == OP_PONG) {
+                message.type = "pong";
+            }
+
+            return message;
+        },
+
+        close: fn() {
+            if (!self.closed) {
+                // Send close frame
+                let close_frame = buffer(2);
+                close_frame[0] = 0x80 | OP_CLOSE;  // FIN + close opcode
+                close_frame[1] = 0;  // No payload
+
+                self.stream.write_bytes(close_frame);
+                self.stream.close();
+                self.closed = true;
+            }
+        },
+    };
+}
+
+// ========== USAGE EXAMPLE ==========
+//
+// import { WebSocket } from "@stdlib/websocket_pure";
+//
+// let ws = WebSocket("ws://echo.websocket.org");
+// defer ws.close();
+//
+// ws.send_text("Hello WebSocket!");
+//
+// let msg = ws.recv();
+// if (msg != null && msg.type == "text") {
+//     print("Received: " + msg.data);
+// }
+//
+// ========== LIMITATIONS ==========
+//
+// This pure Hemlock implementation:
+// - ✅ Works without external dependencies
+// - ✅ Educational (shows WebSocket protocol)
+// - ✅ Good for learning and simple use cases
+// - ❌ No wss:// (SSL) support
+// - ❌ Messages limited to < 126 bytes (no extended length)
+// - ❌ No SHA-1 (handshake validation weak)
+// - ❌ Simplified masking
+//
+// For production use with SSL, use the libwebsockets FFI version
+// (stdlib/websocket.hml) which requires `libwebsockets-dev`
+//
