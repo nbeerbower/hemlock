@@ -659,3 +659,149 @@ void lws_ws_close(ws_connection_t *conn) {
 int lws_ws_is_closed(ws_connection_t *conn) {
     return conn ? conn->closed : 1;
 }
+
+// ========== WEBSOCKET SERVER SUPPORT ==========
+
+typedef struct ws_server {
+    struct lws_context *context;
+    struct lws *pending_wsi;
+    int port;
+    int closed;
+} ws_server_t;
+
+static int ws_server_callback(struct lws *wsi, enum lws_callback_reasons reason,
+                              void *user, void *in, size_t len) {
+    ws_server_t *server = (ws_server_t *)lws_context_user(lws_get_context(wsi));
+    ws_connection_t *conn = (ws_connection_t *)user;
+
+    switch (reason) {
+        case LWS_CALLBACK_ESTABLISHED:
+            fprintf(stderr, "WebSocket server connection established\n");
+            // Store the wsi for accept() to pick up
+            if (server && !server->pending_wsi) {
+                server->pending_wsi = wsi;
+            }
+            // Initialize connection state
+            if (conn) {
+                conn->wsi = wsi;
+                conn->context = lws_get_context(wsi);
+            }
+            break;
+
+        case LWS_CALLBACK_RECEIVE:
+            // Queue received message
+            if (conn) {
+                ws_message_t *msg = malloc(sizeof(ws_message_t));
+                if (!msg) break;
+
+                msg->len = len;
+                msg->data = malloc(len);
+                if (!msg->data) {
+                    free(msg);
+                    break;
+                }
+                memcpy(msg->data, in, len);
+                msg->is_binary = lws_frame_is_binary(wsi);
+                msg->next = NULL;
+
+                if (conn->msg_queue_tail) {
+                    conn->msg_queue_tail->next = msg;
+                } else {
+                    conn->msg_queue_head = msg;
+                }
+                conn->msg_queue_tail = msg;
+            }
+            break;
+
+        case LWS_CALLBACK_SERVER_WRITEABLE:
+            if (conn && conn->send_pending && conn->send_buffer) {
+                int flags = LWS_WRITE_TEXT;
+                lws_write(wsi, (unsigned char *)conn->send_buffer + LWS_PRE,
+                         conn->send_len, flags);
+                free(conn->send_buffer);
+                conn->send_buffer = NULL;
+                conn->send_pending = 0;
+            }
+            break;
+
+        case LWS_CALLBACK_CLOSED:
+            if (conn) {
+                conn->closed = 1;
+            }
+            break;
+
+        default:
+            break;
+    }
+
+    return 0;
+}
+
+// Create WebSocket server
+ws_server_t* lws_ws_server_create(const char *host, int port) {
+    struct lws_context_creation_info info;
+    ws_server_t *server;
+
+    server = calloc(1, sizeof(ws_server_t));
+    if (!server) return NULL;
+
+    server->port = port;
+
+    // Create context
+    memset(&info, 0, sizeof(info));
+    info.port = port;
+    info.iface = host;
+    info.user = server;
+
+    static const struct lws_protocols server_protocols[] = {
+        { "ws", ws_server_callback, sizeof(ws_connection_t), 4096, 0, NULL, 0 },
+        { NULL, NULL, 0, 0, 0, NULL, 0 }
+    };
+    info.protocols = server_protocols;
+
+    server->context = lws_create_context(&info);
+    if (!server->context) {
+        free(server);
+        return NULL;
+    }
+
+    return server;
+}
+
+// Accept WebSocket connection (blocking with timeout)
+ws_connection_t* lws_ws_server_accept(ws_server_t *server, int timeout_ms) {
+    if (!server || server->closed) return NULL;
+
+    int iterations = timeout_ms > 0 ? (timeout_ms / 10) : -1;
+
+    while (iterations != 0) {
+        lws_service(server->context, 10);
+
+        // Check for pending connection
+        if (server->pending_wsi) {
+            ws_connection_t *conn = calloc(1, sizeof(ws_connection_t));
+            if (!conn) return NULL;
+
+            conn->wsi = server->pending_wsi;
+            conn->context = server->context;
+            server->pending_wsi = NULL;
+
+            return conn;
+        }
+
+        if (iterations > 0) iterations--;
+    }
+
+    return NULL;
+}
+
+// Close WebSocket server
+void lws_ws_server_close(ws_server_t *server) {
+    if (server) {
+        server->closed = 1;
+        if (server->context) {
+            lws_context_destroy(server->context);
+        }
+        free(server);
+    }
+}
