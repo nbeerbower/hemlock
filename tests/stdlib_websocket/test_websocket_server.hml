@@ -11,6 +11,14 @@ print("");
 let tests_passed = 0;
 let tests_failed = 0;
 
+// Async function to accept server connection
+async fn accept_connection(srv) {
+    print("  Server: Waiting for client...");
+    let conn = srv.accept(5000);
+    print("  Server: Client connected");
+    return conn;
+}
+
 // Test 1: Create WebSocket server
 print("Test 1: Create WebSocket server");
 try {
@@ -28,14 +36,6 @@ try {
     // Test 2: Client connects to server
     print("");
     print("Test 2: Client connects to server");
-
-    // Spawn async task to accept connection
-    async fn accept_connection(srv): WebSocket {
-        print("  Server: Waiting for client...");
-        let conn = srv.accept(5000);
-        print("  Server: Client connected");
-        return conn;
-    }
 
     let accept_task = spawn(accept_connection, server);
 
@@ -99,7 +99,7 @@ try {
 
     let echo_count = 0;
     while (echo_count < 3) {
-        let test_msg = "Echo test " + typeof(echo_count + 1);
+        let test_msg = "Echo test " + (echo_count + 1);
 
         // Client sends
         client.send_text(test_msg);

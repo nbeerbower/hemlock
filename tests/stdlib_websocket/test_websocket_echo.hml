@@ -1,27 +1,74 @@
-// Test WebSocket client with public echo server
-// Requires: libwebsockets-dev installed, network connectivity, make stdlib
+// Test WebSocket client with local echo server
+// Requires: libwebsockets-dev installed, make stdlib
 // Run with: ./hemlock tests/stdlib_websocket/test_websocket_echo.hml
 
-import { WebSocket } from "@stdlib/websocket";
+import { WebSocket, WebSocketServer } from "@stdlib/websocket";
+import { sleep } from "@stdlib/time";
 
-print("Testing WebSocket client with echo server...");
-print("Requires: libwebsockets-dev + network connectivity");
+print("Testing WebSocket client with local echo server...");
+print("Requires: libwebsockets-dev");
 print("");
 
 let tests_passed = 0;
 let tests_failed = 0;
 
-// Test 1: Connect to WebSocket echo server
-print("Test 1: Connect to echo server");
+// Echo server that reflects messages back to client
+async fn echo_server(server, num_messages: i32) {
+    print("  Echo server: Waiting for client connection...");
+    let conn = server.accept(10000);
+
+    if (conn == null) {
+        print("  Echo server: Accept timeout");
+        return;
+    }
+
+    defer conn.close();
+    print("  Echo server: Client connected");
+
+    let count = 0;
+    while (count < num_messages) {
+        let msg = conn.recv(5000);
+        if (msg == null) {
+            print("  Echo server: Receive timeout");
+            return;
+        }
+
+        // Echo the message back
+        if (msg.type == "text") {
+            conn.send_text(msg.data);
+        } else {
+            conn.send_binary(msg.data, msg.length);
+        }
+
+        count = count + 1;
+    }
+
+    print("  Echo server: Echoed " + count + " messages");
+}
+
+// Test 1: Connect to local echo server
+print("Test 1: Connect to local echo server");
 try {
-    let ws = WebSocket("ws://echo.websocket.org");
+    let server = WebSocketServer("127.0.0.1", 9002);
+    defer server.close();
+
+    // Start echo server in background (will echo 5 messages total)
+    let server_task = spawn(echo_server, server, 5);
+
+    // Give server time to start listening
+    sleep(0.5);
+
+    // Client connects
+    print("  Client: Connecting to ws://127.0.0.1:9002...");
+    let ws = WebSocket("ws://127.0.0.1:9002");
     defer ws.close();
 
     assert(ws != null, "WebSocket should be created");
-    assert(ws.url == "ws://echo.websocket.org", "URL should be stored");
+    assert(ws.url == "ws://127.0.0.1:9002", "URL should be stored");
     assert(ws.closed == false, "Should not be closed initially");
+    print("  Client: Connected");
 
-    print("✓ Connected to ws://echo.websocket.org");
+    print("✓ Connected to local echo server");
     tests_passed = tests_passed + 1;
 
     // Test 2: Send and receive text message
@@ -75,6 +122,9 @@ try {
     print("✓ Connection closed successfully");
     tests_passed = tests_passed + 1;
 
+    // Wait for echo server to complete
+    join(server_task);
+
 } catch (e) {
     print("✗ WebSocket test failed: " + e);
     tests_failed = tests_failed + 1;
@@ -92,8 +142,7 @@ if (tests_failed > 0) {
     print("Some tests failed. Common issues:");
     print("  - lws_wrapper.so not compiled (run: make stdlib)");
     print("  - libwebsockets not installed");
-    print("  - No network connectivity");
-    print("  - echo.websocket.org is down");
+    print("  - Port 9002 already in use");
 }
 
 print("");
