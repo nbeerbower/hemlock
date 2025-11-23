@@ -112,14 +112,14 @@ String* string_concat(String *a, String *b) {
 }
 
 Value val_string(const char *str) {
-    Value v;
+    Value v = {0};  // Zero-initialize entire struct
     v.type = VAL_STRING;
     v.as.as_string = string_new(str);
     return v;
 }
 
 Value val_string_take(char *data, int length, int capacity) {
-    Value v;
+    Value v = {0};  // Zero-initialize entire struct
     v.type = VAL_STRING;
     String *str = malloc(sizeof(String));
     if (!str) {
@@ -140,7 +140,7 @@ Value val_rune(uint32_t codepoint) {
         fprintf(stderr, "Runtime error: Invalid Unicode codepoint: 0x%X (max is 0x10FFFF)\n", codepoint);
         exit(1);
     }
-    Value v;
+    Value v = {0};  // Zero-initialize entire struct
     v.type = VAL_RUNE;
     v.as.as_rune = codepoint;
     return v;
@@ -179,7 +179,7 @@ Value val_buffer(int size) {
         exit(1);
     }
 
-    Value v;
+    Value v = {0};  // Zero-initialize entire struct
     v.type = VAL_BUFFER;
     Buffer *buf = malloc(sizeof(Buffer));
     if (!buf) {
@@ -200,7 +200,7 @@ Value val_buffer(int size) {
 }
 
 Value val_file(FileHandle *file) {
-    Value v;
+    Value v = {0};  // Zero-initialize entire struct
     v.type = VAL_FILE;
     v.as.as_file = file;
     return v;
@@ -352,7 +352,7 @@ void array_set(Array *arr, int index, Value val, ExecutionContext *ctx) {
 }
 
 Value val_array(Array *arr) {
-    Value v;
+    Value v = {0};  // Zero-initialize entire struct
     v.type = VAL_ARRAY;
     v.as.as_array = arr;
     return v;
@@ -485,7 +485,7 @@ Object* object_new(char *type_name, int initial_capacity) {
 }
 
 Value val_object(Object *obj) {
-    Value v;
+    Value v = {0};  // Zero-initialize entire struct
     v.type = VAL_OBJECT;
     v.as.as_object = obj;
     return v;
@@ -577,7 +577,7 @@ void task_release(Task *task) {
 }
 
 Value val_task(Task *task) {
-    Value v;
+    Value v = {0};  // Zero-initialize entire struct
     v.type = VAL_TASK;
     v.as.as_task = task;
     return v;
@@ -670,7 +670,7 @@ void channel_release(Channel *ch) {
 }
 
 Value val_channel(Channel *channel) {
-    Value v;
+    Value v = {0};  // Zero-initialize entire struct
     v.type = VAL_CHANNEL;
     v.as.as_channel = channel;
     return v;
@@ -679,70 +679,70 @@ Value val_channel(Channel *channel) {
 // ========== VALUE OPERATIONS ==========
 
 Value val_i8(int8_t value) {
-    Value v;
+    Value v = {0};  // Zero-initialize entire struct
     v.type = VAL_I8;
     v.as.as_i8 = value;
     return v;
 }
 
 Value val_i16(int16_t value) {
-    Value v;
+    Value v = {0};  // Zero-initialize entire struct
     v.type = VAL_I16;
     v.as.as_i16 = value;
     return v;
 }
 
 Value val_i32(int32_t value) {
-    Value v;
+    Value v = {0};  // Zero-initialize entire struct
     v.type = VAL_I32;
     v.as.as_i32 = value;
     return v;
 }
 
 Value val_i64(int64_t value) {
-    Value v;
+    Value v = {0};  // Zero-initialize entire struct
     v.type = VAL_I64;
     v.as.as_i64 = value;
     return v;
 }
 
 Value val_u8(uint8_t value) {
-    Value v;
+    Value v = {0};  // Zero-initialize entire struct
     v.type = VAL_U8;
     v.as.as_u8 = value;
     return v;
 }
 
 Value val_u16(uint16_t value) {
-    Value v;
+    Value v = {0};  // Zero-initialize entire struct
     v.type = VAL_U16;
     v.as.as_u16 = value;
     return v;
 }
 
 Value val_u32(uint32_t value) {
-    Value v;
+    Value v = {0};  // Zero-initialize entire struct
     v.type = VAL_U32;
     v.as.as_u32 = value;
     return v;
 }
 
 Value val_u64(uint64_t value) {
-    Value v;
+    Value v = {0};  // Zero-initialize entire struct
     v.type = VAL_U64;
     v.as.as_u64 = value;
     return v;
 }
 
 Value val_f32(float value) {
-    Value v;
+    Value v = {0};  // Zero-initialize entire struct
     v.type = VAL_F32;
     v.as.as_f32 = value;
     return v;
 }
 
 Value val_f64(double value) {
-    Value v;
+    Value v = {0};  // Zero-initialize entire struct
     v.type = VAL_F64;
     v.as.as_f64 = value;
     return v;
@@ -757,35 +757,35 @@ Value val_float(double value) {
 }
 
 Value val_bool(int value) {
-    Value v;
+    Value v = {0};  // Zero-initialize entire struct
     v.type = VAL_BOOL;
     v.as.as_bool = value ? 1 : 0;
     return v;
 }
 
 Value val_ptr(void *ptr) {
-    Value v;
+    Value v = {0};  // Zero-initialize entire struct
     v.type = VAL_PTR;
     v.as.as_ptr = ptr;
     return v;
 }
 
 Value val_type(TypeKind kind) {
-    Value v;
+    Value v = {0};  // Zero-initialize entire struct
     v.type = VAL_TYPE;
     v.as.as_type = kind;
     return v;
 }
 
 Value val_function(Function *fn) {
-    Value v;
+    Value v = {0};  // Zero-initialize entire struct
     v.type = VAL_FUNCTION;
     v.as.as_function = fn;
     return v;
 }
 
 Value val_null(void) {
-    Value v;
+    Value v = {0};  // Zero-initialize entire struct
     v.type = VAL_NULL;
     return v;
 }

@@ -95,6 +95,19 @@ Production-ready HTTP/HTTPS client wrapping curl:
 
 See [docs/http.md](docs/http.md) for detailed documentation.
 
+### JSON (`@stdlib/json`)
+**Status:** Comprehensive
+
+Full-featured JSON manipulation library:
+- **Parsing:** parse, parse_file, is_valid, validate
+- **Serialization:** stringify, stringify_file, pretty, pretty_file
+- **Path access:** get, set, has, delete (dot notation: "user.address.city")
+- **Type checking:** is_object, is_array, is_string, is_number, is_bool, is_null, type_of
+- **Utilities:** clone (deep copy), equals (deep comparison)
+- **Building on:** Built-in serialize()/deserialize() with enhanced features
+
+See [docs/json.md](docs/json.md) for detailed documentation.
+
 ## Usage
 
 Import modules using the `@stdlib/` prefix:
@@ -109,6 +122,7 @@ import { read_file, write_file, exists } from "@stdlib/fs";
 import { TcpListener, TcpStream, UdpSocket } from "@stdlib/net";
 import { compile, test, REG_ICASE } from "@stdlib/regex";
 import { get, post, fetch } from "@stdlib/http";
+import { parse, stringify, pretty, get, set } from "@stdlib/json";
 
 // Import all as namespace
 import * as math from "@stdlib/math";
@@ -116,6 +130,7 @@ import * as fs from "@stdlib/fs";
 import * as net from "@stdlib/net";
 import * as regex from "@stdlib/regex";
 import * as http from "@stdlib/http";
+import * as json from "@stdlib/json";
 
 // Use imported functions
 let angle = math.PI / 4.0;
@@ -221,6 +236,22 @@ let data = { name: "Alice", age: 30 };
 let response = post_json("http://api.example.com/users", data);
 ```
 
+### JSON
+```hemlock
+import { parse, pretty, get, set } from "@stdlib/json";
+
+// Parse and access nested data
+let config = parse('{"server":{"host":"localhost","port":8080}}');
+let port = get(config, "server.port");  // 8080
+
+// Modify and pretty print
+set(config, "server.port", 9000);
+print(pretty(config, 2));
+
+// Clone for independent copy
+let backup = clone(config);
+```
+
 ## Directory Structure
 
 ```
@@ -234,6 +265,7 @@ stdlib/
 ├── net.hml             # Networking module implementation
 ├── regex.hml           # Regular expressions module (via FFI)
 ├── http.hml            # HTTP client module (pure Hemlock)
+├── json.hml            # JSON module (pure Hemlock)
 └── docs/
     ├── collections.md  # Collections API reference
     ├── math.md         # Math API reference
@@ -242,7 +274,8 @@ stdlib/
     ├── fs.md           # Filesystem API reference
     ├── net.md          # Networking API reference
     ├── regex.md        # Regex API reference
-    └── http.md         # HTTP API reference
+    ├── http.md         # HTTP API reference
+    └── json.md         # JSON API reference
 ```
 
 ## JSON Serialization
@@ -266,7 +299,6 @@ Planned additions to the standard library:
 - **websocket** - WebSocket protocol (building on @stdlib/http)
 - **strings** - String utilities (pad, join, is_alpha, reverse, lines, words)
 - **path** - Path manipulation (join, basename, dirname, extname, normalize)
-- **json** - Formalized JSON module (wrapper around serialize/deserialize)
 - **encoding** - Base64, hex, URL encoding/decoding
 - **testing** - Test framework with describe/test/expect/assertions
 - **datetime** - Date/time formatting and parsing
@@ -287,6 +319,7 @@ See `STDLIB_ANALYSIS_UPDATED.md` and `STDLIB_NETWORKING_DESIGN.md` for detailed 
 | net | ✅ Complete | ✅ Complete | ✅ Good | 240 | High |
 | regex | ⚠️ Basic (FFI) | ✅ Complete | ✅ Good | 152 | Good |
 | http | ✅ Production (curl) | ✅ Complete | ⚠️ Example | 311 | High |
+| json | ✅ Comprehensive | ✅ Complete | ✅ Good | 550+ | High |
 
 **Legend:**
 - ✅ Complete/Excellent
