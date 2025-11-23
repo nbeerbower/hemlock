@@ -589,8 +589,10 @@ int lws_ws_send_text(ws_connection_t *conn, const char *text) {
 
     lws_callback_on_writable(conn->wsi);
 
-    // Return success immediately - actual send happens asynchronously
-    // The callback will be triggered when context is serviced (in recv or accept calls)
+    // Service once with very short timeout to attempt immediate send
+    // If it doesn't complete immediately, it will complete on next recv/accept
+    lws_service(conn->context, 1);
+
     return 0;
 }
 
@@ -607,8 +609,10 @@ int lws_ws_send_binary(ws_connection_t *conn, const unsigned char *data, size_t 
 
     lws_callback_on_writable(conn->wsi);
 
-    // Return success immediately - actual send happens asynchronously
-    // The callback will be triggered when context is serviced (in recv or accept calls)
+    // Service once with very short timeout to attempt immediate send
+    // If it doesn't complete immediately, it will complete on next recv/accept
+    lws_service(conn->context, 1);
+
     return 0;
 }
 
@@ -616,7 +620,7 @@ int lws_ws_send_binary(ws_connection_t *conn, const unsigned char *data, size_t 
 ws_message_t* lws_ws_recv(ws_connection_t *conn, int timeout_ms) {
     if (!conn || conn->closed) return NULL;
 
-    int iterations = timeout_ms > 0 ? (timeout_ms / 10) : -1;
+    int iterations = timeout_ms > 0 ? (timeout_ms / 50) : -1;
 
     while (iterations != 0) {
         // Check if we have queued messages

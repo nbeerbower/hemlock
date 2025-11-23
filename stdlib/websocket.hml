@@ -78,7 +78,7 @@ export fn WebSocket(url: string): WebSocket {
             return result == 0;
         },
 
-        recv: fn(timeout_ms: i32): WebSocketMessage {
+        recv: fn(timeout_ms: i32) {
             if (self.closed) {
                 return null;
             }
@@ -185,7 +185,7 @@ export fn WebSocketServer(host: string, port: i32): WebSocketServer {
                     return lws_ws_send_binary(self.handle, data, data.length) == 0;
                 },
 
-                recv: fn(timeout_ms: i32): WebSocketMessage {
+                recv: fn(timeout_ms: i32) {
                     // Same as client recv
                     if (self.closed) { return null; }
                     // timeout_ms is i32, -1 means block forever
