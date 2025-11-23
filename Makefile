@@ -54,7 +54,7 @@ stdlib: $(STDLIB_LWS_WRAPPER)
 $(STDLIB_LWS_WRAPPER): $(STDLIB_C_DIR)/lws_wrapper.c
 	@echo "Building libwebsockets wrapper..."
 	@mkdir -p $(STDLIB_C_DIR)
-	@if $(CC) -shared -fPIC -o $@ $< -lwebsockets $(CFLAGS) 2>/dev/null; then \
+	@if $(CC) -shared -fPIC -o $@ $< -lwebsockets $(CFLAGS) 2>&1; then \
 		echo "✓ Built $@"; \
 	else \
 		echo "⚠ Warning: Could not build lws_wrapper.so"; \
@@ -68,3 +68,6 @@ clean-stdlib:
 	rm -f $(STDLIB_LWS_WRAPPER)
 
 .PHONY: all clean run test stdlib clean-stdlib
+
+# Force rebuild of stdlib target
+.PHONY: $(STDLIB_LWS_WRAPPER)
