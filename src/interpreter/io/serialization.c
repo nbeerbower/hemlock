@@ -240,8 +240,8 @@ char* serialize_value(Value val, VisitedSet *visited, ExecutionContext *ctx) {
             return json;
         }
         default:
-            fprintf(stderr, "Runtime error: Cannot serialize value of this type\n");
-            exit(1);
+            throw_runtime_error(ctx, "Cannot serialize value of this type");
+            return NULL;
     }
 }
 
@@ -277,8 +277,8 @@ Value json_parse_string(JSONParser *p, ExecutionContext *ctx) {
                 case '"': buf[len++] = '"'; break;
                 case '\\': buf[len++] = '\\'; break;
                 default:
-                    fprintf(stderr, "Runtime error: Invalid escape sequence in JSON string\n");
-                    exit(1);
+                    free(buf);
+                    return throw_runtime_error(ctx, "Invalid escape sequence in JSON string");
             }
             p->pos++;
         } else {
@@ -287,8 +287,8 @@ Value json_parse_string(JSONParser *p, ExecutionContext *ctx) {
     }
 
     if (p->input[p->pos] != '"') {
-        fprintf(stderr, "Runtime error: Unterminated string in JSON\n");
-        exit(1);
+        free(buf);
+        return throw_runtime_error(ctx, "Unterminated string in JSON");
     }
     p->pos++;  // skip closing quote
 
@@ -335,8 +335,7 @@ Value json_parse_number(JSONParser *p, ExecutionContext *ctx) {
 
 Value json_parse_object(JSONParser *p, ExecutionContext *ctx) {
     if (p->input[p->pos] != '{') {
-        fprintf(stderr, "Runtime error: Expected '{' in JSON\n");
-        exit(1);
+        return throw_runtime_error(ctx, "Expected '{' in JSON");
     }
     p->pos++;  // skip opening brace
 
@@ -363,6 +362,16 @@ Value json_parse_object(JSONParser *p, ExecutionContext *ctx) {
 
         // Parse field name (must be a string)
         Value name_val = json_parse_string(p, ctx);
+        if (ctx->exception_state.is_throwing) {
+            // Clean up and propagate error
+            for (int i = 0; i < num_fields; i++) {
+                free(field_names[i]);
+                value_release(field_values[i]);
+            }
+            free(field_names);
+            free(field_values);
+            return val_null();
+        }
         field_names[num_fields] = strdup(name_val.as.as_string->data);
 
         json_skip_whitespace(p);
@@ -384,6 +393,16 @@ Value json_parse_object(JSONParser *p, ExecutionContext *ctx) {
 
         // Parse field value
         field_values[num_fields] = json_parse_value(p, ctx);
+        if (ctx->exception_state.is_throwing) {
+            // Clean up and propagate error
+            for (int i = 0; i < num_fields; i++) {
+                free(field_names[i]);
+                value_release(field_values[i]);
+            }
+            free(field_names);
+            free(field_values);
+            return val_null();
+        }
         num_fields++;
 
         json_skip_whitespace(p);
@@ -392,14 +411,26 @@ Value json_parse_object(JSONParser *p, ExecutionContext *ctx) {
         if (p->input[p->pos] == ',') {
             p->pos++;
         } else if (p->input[p->pos] != '}') {
-            fprintf(stderr, "Runtime error: Expected ',' or '}' in JSON object\n");
-            exit(1);
+            // Clean up allocated memory
+            for (int i = 0; i < num_fields; i++) {
+                free(field_names[i]);
+                value_release(field_values[i]);
+            }
+            free(field_names);
+            free(field_values);
+            return throw_runtime_error(ctx, "Expected ',' or '}' in JSON object");
         }
     }
 
     if (p->input[p->pos] != '}') {
-        fprintf(stderr, "Runtime error: Unterminated object in JSON\n");
-        exit(1);
+        // Clean up allocated memory
+        for (int i = 0; i < num_fields; i++) {
+            free(field_names[i]);
+            value_release(field_values[i]);
+        }
+        free(field_names);
+        free(field_values);
+        return throw_runtime_error(ctx, "Unterminated object in JSON");
     }
     p->pos++;  // skip closing brace
 
@@ -414,8 +445,7 @@ Value json_parse_object(JSONParser *p, ExecutionContext *ctx) {
 
 Value json_parse_array(JSONParser *p, ExecutionContext *ctx) {
     if (p->input[p->pos] != '[') {
-        fprintf(stderr, "Runtime error: Expected '[' in JSON\n");
-        exit(1);
+        return throw_runtime_error(ctx, "Expected '[' in JSON");
     }
     p->pos++;  // skip opening bracket
 
@@ -434,6 +464,10 @@ Value json_parse_array(JSONParser *p, ExecutionContext *ctx) {
 
         // Parse element value
         Value element = json_parse_value(p, ctx);
+        if (ctx->exception_state.is_throwing) {
+            // Error already set, just return
+            return val_null();
+        }
         array_push(arr, element);
 
         json_skip_whitespace(p);
@@ -442,14 +476,14 @@ Value json_parse_array(JSONParser *p, ExecutionContext *ctx) {
         if (p->input[p->pos] == ',') {
             p->pos++;
         } else if (p->input[p->pos] != ']') {
-            fprintf(stderr, "Runtime error: Expected ',' or ']' in JSON array\n");
-            exit(1);
+            // Note: arr will be cleaned up by value system when error is thrown
+            return throw_runtime_error(ctx, "Expected ',' or ']' in JSON array");
         }
     }
 
     if (p->input[p->pos] != ']') {
-        fprintf(stderr, "Runtime error: Unterminated array in JSON\n");
-        exit(1);
+        // Note: arr will be cleaned up by value system when error is thrown
+        return throw_runtime_error(ctx, "Unterminated array in JSON");
     }
     p->pos++;  // skip closing bracket
 
@@ -480,8 +514,9 @@ Value json_parse_value(JSONParser *p, ExecutionContext *ctx) {
         p->pos += 4;
         return val_null();
     } else {
-        fprintf(stderr, "Runtime error: Unexpected character in JSON: '%c'\n", c);
-        exit(1);
+        char msg[100];
+        snprintf(msg, sizeof(msg), "Unexpected character in JSON: '%c'", c);
+        return throw_runtime_error(ctx, msg);
     }
 }
 
