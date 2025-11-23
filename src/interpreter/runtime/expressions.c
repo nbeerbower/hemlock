@@ -1377,6 +1377,7 @@ Value eval_expr(Expr *expr, Environment *env, ExecutionContext *ctx) {
 
             if (object.type != VAL_OBJECT) {
                 runtime_error(ctx, "Only objects can have properties set");
+                return val_null();  // Return after error
             }
 
             Object *obj = object.as.as_object;
