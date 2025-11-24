@@ -12,9 +12,10 @@ The `@stdlib/hash` module provides:
 ### System Requirements
 
 **Cryptographic hash functions require OpenSSL:**
-- The module dynamically loads `libcrypto.so.3` at runtime via FFI
-- On most Linux systems: `sudo apt-get install libssl3` (usually pre-installed)
-- On macOS: OpenSSL is typically available via Homebrew
+- Hemlock links against `libcrypto` (OpenSSL) at compile time
+- On Debian/Ubuntu: `sudo apt-get install libssl-dev` (for building from source)
+- Runtime requires `libcrypto.so.3` (usually pre-installed)
+- On macOS: Install OpenSSL via Homebrew
 - Non-cryptographic hashes (djb2, fnv1a, murmur3) work without OpenSSL
 
 ## Usage
