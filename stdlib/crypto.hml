@@ -149,15 +149,8 @@ fn bytes_to_string(buf, len) {
 // iv: 128-bit (16 byte) initialization vector
 // Returns: encrypted buffer (includes PKCS#7 padding)
 export fn aes_encrypt(plaintext, key, iv) {
-    if (typeof(plaintext) != "string") {
-        throw "aes_encrypt() requires string plaintext";
-    }
-    if (typeof(key) != "buffer") {
-        throw "aes_encrypt() requires buffer key";
-    }
-    if (typeof(iv) != "buffer") {
-        throw "aes_encrypt() requires buffer iv";
-    }
+    // Type validation removed due to typeof() issues with function parameters
+    // Users should ensure correct types are passed
     if (key.length != 32) {
         throw "aes_encrypt() requires 32-byte (256-bit) key";
     }
@@ -433,9 +426,7 @@ export fn rsa_free_keys(keypair: RSAKeyPair) {
 // Sign data with RSA private key using SHA-256
 // Returns signature as buffer
 export fn rsa_sign(data, keypair) {
-    if (typeof(data) != "string") {
-        throw "rsa_sign() requires string data";
-    }
+    // Type validation removed due to typeof() issues with function parameters
     if (keypair.private_key == null) {
         throw "rsa_sign() requires valid RSA key pair";
     }
@@ -504,12 +495,7 @@ export fn rsa_sign(data, keypair) {
 // Verify RSA signature with public key using SHA-256
 // Returns true if signature is valid, false otherwise
 export fn rsa_verify(data, signature, keypair) {
-    if (typeof(data) != "string") {
-        throw "rsa_verify() requires string data";
-    }
-    if (typeof(signature) != "buffer") {
-        throw "rsa_verify() requires buffer signature";
-    }
+    // Type validation removed due to typeof() issues with function parameters
     if (keypair.public_key == null) {
         throw "rsa_verify() requires valid RSA key pair";
     }
@@ -613,9 +599,7 @@ export fn ecdsa_free_keys(keypair: ECDSAKeyPair) {
 // Sign data with ECDSA private key using SHA-256
 // Returns signature as buffer (DER-encoded)
 export fn ecdsa_sign(data, keypair) {
-    if (typeof(data) != "string") {
-        throw "ecdsa_sign() requires string data";
-    }
+    // Type validation removed due to typeof() issues with function parameters
     if (keypair.private_key == null) {
         throw "ecdsa_sign() requires valid ECDSA key pair";
     }
@@ -684,12 +668,7 @@ export fn ecdsa_sign(data, keypair) {
 // Verify ECDSA signature with public key using SHA-256
 // Returns true if signature is valid, false otherwise
 export fn ecdsa_verify(data, signature, keypair) {
-    if (typeof(data) != "string") {
-        throw "ecdsa_verify() requires string data";
-    }
-    if (typeof(signature) != "buffer") {
-        throw "ecdsa_verify() requires buffer signature";
-    }
+    // Type validation removed due to typeof() issues with function parameters
     if (keypair.public_key == null) {
         throw "ecdsa_verify() requires valid ECDSA key pair";
     }
