@@ -1,4 +1,0 @@
-// Test just importing
-print("Before import...");
-import { pad_left } from "@stdlib/strings";
-print("After import!");
