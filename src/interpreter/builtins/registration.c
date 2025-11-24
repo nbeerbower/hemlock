@@ -58,7 +58,7 @@ static BuiltinInfo builtins[] = {
     {"__rand", builtin_rand},
     {"__rand_range", builtin_rand_range},
     {"__seed", builtin_seed},
-    // Time functions (use stdlib/time.hml module for public API)
+    // Time functions (use stdlib/time.hml and stdlib/datetime.hml modules for public API)
     {"__now", builtin_now},
     {"__time_ms", builtin_time_ms},
     {"__sleep", builtin_sleep},
@@ -67,12 +67,23 @@ static BuiltinInfo builtins[] = {
     {"__gmtime", builtin_gmtime},
     {"__mktime", builtin_mktime},
     {"__strftime", builtin_strftime},
-    // Environment functions (use stdlib/env.hml module for public API)
+    // Environment functions (use stdlib/env.hml and stdlib/process.hml modules for public API)
     {"__getenv", builtin_getenv},
     {"__setenv", builtin_setenv},
     {"__unsetenv", builtin_unsetenv},
     {"__exit", builtin_exit},
     {"__get_pid", builtin_get_pid},
+    {"__exec", builtin_exec},
+    {"__getppid", builtin_getppid},
+    {"__getuid", builtin_getuid},
+    {"__geteuid", builtin_geteuid},
+    {"__getgid", builtin_getgid},
+    {"__getegid", builtin_getegid},
+    {"__kill", builtin_kill},
+    {"__fork", builtin_fork},
+    {"__wait", builtin_wait},
+    {"__waitpid", builtin_waitpid},
+    {"__abort", builtin_abort},
     // Internal helper builtins
     {"__read_u32", builtin_read_u32},
     {"__read_u64", builtin_read_u64},

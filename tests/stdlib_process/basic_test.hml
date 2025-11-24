@@ -1,0 +1,41 @@
+// Basic functionality test for @stdlib/process
+import { get_pid, getppid, getuid, geteuid, getgid, getegid, exec } from "@stdlib/process";
+
+print("Testing @stdlib/process basic functionality...");
+
+// Test process identification
+let pid = get_pid();
+assert(typeof(pid) == "i32", "get_pid() should return i32");
+assert(pid > 0, "PID should be positive");
+
+let ppid = getppid();
+assert(typeof(ppid) == "i32", "getppid() should return i32");
+assert(ppid > 0, "PPID should be positive");
+
+let uid = getuid();
+assert(typeof(uid) == "i32", "getuid() should return i32");
+assert(uid >= 0, "UID should be non-negative");
+
+let euid = geteuid();
+assert(typeof(euid) == "i32", "geteuid() should return i32");
+assert(euid >= 0, "EUID should be non-negative");
+
+let gid = getgid();
+assert(typeof(gid) == "i32", "getgid() should return i32");
+assert(gid >= 0, "GID should be non-negative");
+
+let egid = getegid();
+assert(typeof(egid) == "i32", "getegid() should return i32");
+assert(egid >= 0, "EGID should be non-negative");
+
+// Test exec
+let result = exec("echo 'test output'");
+assert(typeof(result) == "object", "exec() should return object");
+assert(result.exit_code == 0, "exec() exit_code should be 0");
+assert(result.output.contains("test output"), "exec() output should contain command output");
+
+// Test exec with non-zero exit
+let result2 = exec("false");
+assert(result2.exit_code != 0, "false command should have non-zero exit code");
+
+print("✅ All basic tests passed!");

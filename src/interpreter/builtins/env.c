@@ -217,3 +217,173 @@ Value builtin_exec(Value *args, int num_args, ExecutionContext *ctx) {
 
     return val_object(result);
 }
+
+Value builtin_getppid(Value *args, int num_args, ExecutionContext *ctx) {
+    (void)args;
+    (void)ctx;
+    if (num_args != 0) {
+        fprintf(stderr, "Runtime error: getppid() expects no arguments\n");
+        exit(1);
+    }
+    return val_i32((int32_t)getppid());
+}
+
+Value builtin_getuid(Value *args, int num_args, ExecutionContext *ctx) {
+    (void)args;
+    (void)ctx;
+    if (num_args != 0) {
+        fprintf(stderr, "Runtime error: getuid() expects no arguments\n");
+        exit(1);
+    }
+    return val_i32((int32_t)getuid());
+}
+
+Value builtin_geteuid(Value *args, int num_args, ExecutionContext *ctx) {
+    (void)args;
+    (void)ctx;
+    if (num_args != 0) {
+        fprintf(stderr, "Runtime error: geteuid() expects no arguments\n");
+        exit(1);
+    }
+    return val_i32((int32_t)geteuid());
+}
+
+Value builtin_getgid(Value *args, int num_args, ExecutionContext *ctx) {
+    (void)args;
+    (void)ctx;
+    if (num_args != 0) {
+        fprintf(stderr, "Runtime error: getgid() expects no arguments\n");
+        exit(1);
+    }
+    return val_i32((int32_t)getgid());
+}
+
+Value builtin_getegid(Value *args, int num_args, ExecutionContext *ctx) {
+    (void)args;
+    (void)ctx;
+    if (num_args != 0) {
+        fprintf(stderr, "Runtime error: getegid() expects no arguments\n");
+        exit(1);
+    }
+    return val_i32((int32_t)getegid());
+}
+
+Value builtin_kill(Value *args, int num_args, ExecutionContext *ctx) {
+    if (num_args != 2) {
+        fprintf(stderr, "Runtime error: kill() expects 2 arguments (pid, signal)\n");
+        exit(1);
+    }
+    if (!is_integer(args[0]) || !is_integer(args[1])) {
+        fprintf(stderr, "Runtime error: kill() arguments must be integers\n");
+        exit(1);
+    }
+
+    int pid = value_to_int(args[0]);
+    int sig = value_to_int(args[1]);
+
+    if (kill(pid, sig) != 0) {
+        char error_msg[256];
+        snprintf(error_msg, sizeof(error_msg), "kill(%d, %d) failed: %s", pid, sig, strerror(errno));
+        ctx->exception_state.exception_value = val_string(error_msg);
+        ctx->exception_state.is_throwing = 1;
+        return val_null();
+    }
+
+    return val_null();
+}
+
+Value builtin_fork(Value *args, int num_args, ExecutionContext *ctx) {
+    (void)args;
+    if (num_args != 0) {
+        fprintf(stderr, "Runtime error: fork() expects no arguments\n");
+        exit(1);
+    }
+
+    pid_t pid = fork();
+    if (pid < 0) {
+        char error_msg[256];
+        snprintf(error_msg, sizeof(error_msg), "fork() failed: %s", strerror(errno));
+        ctx->exception_state.exception_value = val_string(error_msg);
+        ctx->exception_state.is_throwing = 1;
+        return val_null();
+    }
+
+    return val_i32((int32_t)pid);
+}
+
+Value builtin_wait(Value *args, int num_args, ExecutionContext *ctx) {
+    (void)args;
+    if (num_args != 0) {
+        fprintf(stderr, "Runtime error: wait() expects no arguments\n");
+        exit(1);
+    }
+
+    int status;
+    pid_t pid = wait(&status);
+    if (pid < 0) {
+        char error_msg[256];
+        snprintf(error_msg, sizeof(error_msg), "wait() failed: %s", strerror(errno));
+        ctx->exception_state.exception_value = val_string(error_msg);
+        ctx->exception_state.is_throwing = 1;
+        return val_null();
+    }
+
+    // Create result object with pid and status
+    Object *result = object_new(NULL, 2);
+    result->field_names[0] = strdup("pid");
+    result->field_values[0] = val_i32((int32_t)pid);
+    result->num_fields++;
+
+    result->field_names[1] = strdup("status");
+    result->field_values[1] = val_i32(status);
+    result->num_fields++;
+
+    return val_object(result);
+}
+
+Value builtin_waitpid(Value *args, int num_args, ExecutionContext *ctx) {
+    if (num_args != 2) {
+        fprintf(stderr, "Runtime error: waitpid() expects 2 arguments (pid, options)\n");
+        exit(1);
+    }
+    if (!is_integer(args[0]) || !is_integer(args[1])) {
+        fprintf(stderr, "Runtime error: waitpid() arguments must be integers\n");
+        exit(1);
+    }
+
+    pid_t pid = (pid_t)value_to_int(args[0]);
+    int options = value_to_int(args[1]);
+
+    int status;
+    pid_t result_pid = waitpid(pid, &status, options);
+    if (result_pid < 0) {
+        char error_msg[256];
+        snprintf(error_msg, sizeof(error_msg), "waitpid(%d, %d) failed: %s", pid, options, strerror(errno));
+        ctx->exception_state.exception_value = val_string(error_msg);
+        ctx->exception_state.is_throwing = 1;
+        return val_null();
+    }
+
+    // Create result object with pid and status
+    Object *result = object_new(NULL, 2);
+    result->field_names[0] = strdup("pid");
+    result->field_values[0] = val_i32((int32_t)result_pid);
+    result->num_fields++;
+
+    result->field_names[1] = strdup("status");
+    result->field_values[1] = val_i32(status);
+    result->num_fields++;
+
+    return val_object(result);
+}
+
+Value builtin_abort(Value *args, int num_args, ExecutionContext *ctx) {
+    (void)args;
+    (void)ctx;
+    if (num_args != 0) {
+        fprintf(stderr, "Runtime error: abort() expects no arguments\n");
+        exit(1);
+    }
+    abort();
+    return val_null();  // Never reached
+}

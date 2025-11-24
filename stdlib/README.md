@@ -90,6 +90,17 @@ Environment variables and process control:
 
 See [docs/env.md](docs/env.md) for detailed documentation.
 
+### Process Management (`@stdlib/process`)
+**Status:** Complete
+
+Comprehensive process control and inter-process communication:
+- **Process ID:** get_pid, getppid, getuid, geteuid, getgid, getegid
+- **Process control:** exit, kill, abort
+- **Process creation:** fork, wait, waitpid
+- **Command execution:** exec (returns output + exit_code)
+
+See [docs/process.md](docs/process.md) for detailed documentation.
+
 ### Filesystem (`@stdlib/fs`)
 **Status:** Comprehensive
 
@@ -186,6 +197,7 @@ import { sin, cos, PI } from "@stdlib/math";
 import { now, sleep } from "@stdlib/time";
 import { DateTime, from_date, parse_iso } from "@stdlib/datetime";
 import { getenv, exit } from "@stdlib/env";
+import { get_pid, getppid, exec, kill } from "@stdlib/process";
 import { read_file, write_file, exists } from "@stdlib/fs";
 import { TcpListener, TcpStream, UdpSocket } from "@stdlib/net";
 import { compile, test, REG_ICASE } from "@stdlib/regex";
@@ -448,6 +460,7 @@ See `STDLIB_ANALYSIS_UPDATED.md` and `STDLIB_NETWORKING_DESIGN.md` for detailed 
 | time | ⚠️ Basic | ✅ Complete | ✅ Good | 13 | Good |
 | datetime | ✅ Complete | ✅ Complete | ✅ Comprehensive | 450+ | High |
 | env | ✅ Complete | ✅ Complete | ✅ Good | 14 | High |
+| process | ✅ Complete | ✅ Complete | ✅ Good | 23 | High |
 | fs | ✅ Comprehensive | ✅ Complete | ⚠️ Partial | 31 | High |
 | net | ✅ Complete | ✅ Complete | ✅ Good | 240 | High |
 | regex | ⚠️ Basic (FFI) | ✅ Complete | ✅ Good | 152 | Good |
