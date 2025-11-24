@@ -113,6 +113,8 @@ static BuiltinInfo builtins[] = {
     {"__chdir", builtin_chdir},
     {"__absolute_path", builtin_absolute_path},
     // libwebsockets builtins (use stdlib/http.hml and stdlib/websocket.hml modules for public API)
+    // TEMPORARILY DISABLED - libwebsockets not available
+    /*
     // HTTP builtins
     {"__lws_http_get", builtin_lws_http_get},
     {"__lws_http_post", builtin_lws_http_post},
@@ -134,6 +136,7 @@ static BuiltinInfo builtins[] = {
     {"__lws_ws_server_create", builtin_lws_ws_server_create},
     {"__lws_ws_server_accept", builtin_lws_ws_server_accept},
     {"__lws_ws_server_close", builtin_lws_ws_server_close},
+    */
     {NULL, NULL}  // Sentinel
 };
 
