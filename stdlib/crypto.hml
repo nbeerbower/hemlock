@@ -448,6 +448,15 @@ extern fn EVP_PKEY_keygen(ctx: ptr, ppkey: ptr): i32;
 // OpenSSL 3.x simplified API - returns pointer directly, no need for pointer-to-pointer
 extern fn EVP_PKEY_Q_keygen(libctx: ptr, propq: ptr, type_name: ptr, bits: u64): ptr;
 
+// EVP_PKEY_CTX *EVP_PKEY_CTX_new_from_name(OSSL_LIB_CTX *libctx, const char *name, const char *propquery)
+extern fn EVP_PKEY_CTX_new_from_name(libctx: ptr, name: ptr, propquery: ptr): ptr;
+
+// int EVP_PKEY_CTX_set_group_name(EVP_PKEY_CTX *ctx, const char *name)
+extern fn EVP_PKEY_CTX_set_group_name(ctx: ptr, name: ptr): i32;
+
+// int EVP_PKEY_generate(EVP_PKEY_CTX *ctx, EVP_PKEY **ppkey)
+extern fn EVP_PKEY_generate(ctx: ptr, ppkey: ptr): i32;
+
 // EVP_MD_CTX *EVP_MD_CTX_new(void)
 extern fn EVP_MD_CTX_new(): ptr;
 
@@ -672,39 +681,43 @@ define ECDSAKeyPair {
 // Returns ECDSAKeyPair object with private and public keys
 // NOTE: Keys must be freed with ecdsa_free_keys()
 export fn ecdsa_generate_key() {
-    // Create key generation context for EC
-    let ctx = EVP_PKEY_CTX_new_id(EVP_PKEY_EC, null);
-    if (ctx == null) {
-        throw "Failed to create ECDSA key context";
-    }
+    // Use OpenSSL 3.x simplified API (EVP_PKEY_Q_keygen)
+    // This avoids pointer-to-pointer issues and matches RSA approach
 
-    // Initialize key generation
-    let result = EVP_PKEY_keygen_init(ctx);
-    if (result != 1) {
-        EVP_PKEY_CTX_free(ctx);
-        throw "EVP_PKEY_keygen_init() failed";
-    }
+    // Create null-terminated C string "EC\0"
+    let type_str = buffer(3);
+    type_str[0] = 69;  // 'E'
+    type_str[1] = 67;  // 'C'
+    type_str[2] = 0;   // null terminator
 
-    // Set curve to P-256
-    result = EVP_PKEY_CTX_set_ec_paramgen_curve_nid(ctx, NID_X9_62_prime256v1);
-    if (result != 1) {
-        EVP_PKEY_CTX_free(ctx);
-        throw "EVP_PKEY_CTX_set_ec_paramgen_curve_nid() failed";
-    }
+    // Create null-terminated C string "prime256v1\0" (P-256 curve)
+    let curve_str = buffer(11);
+    curve_str[0] = 112;  // 'p'
+    curve_str[1] = 114;  // 'r'
+    curve_str[2] = 105;  // 'i'
+    curve_str[3] = 109;  // 'm'
+    curve_str[4] = 101;  // 'e'
+    curve_str[5] = 50;   // '2'
+    curve_str[6] = 53;   // '5'
+    curve_str[7] = 54;   // '6'
+    curve_str[8] = 118;  // 'v'
+    curve_str[9] = 49;   // '1'
+    curve_str[10] = 0;   // null terminator
 
-    // Generate key pair
-    let pkey_ptr = alloc(8);  // Pointer to EVP_PKEY*
-    result = EVP_PKEY_keygen(ctx, pkey_ptr);
-    if (result != 1) {
-        free(pkey_ptr);
-        EVP_PKEY_CTX_free(ctx);
-        throw "EVP_PKEY_keygen() failed";
-    }
+    let type_ptr = buffer_to_ptr(type_str);
+    let curve_ptr = buffer_to_ptr(curve_str);
 
-    // Read pointer as u64 (pointers are 64-bit on this platform)
-    let pkey = __read_u64(pkey_ptr);
-    free(pkey_ptr);
-    EVP_PKEY_CTX_free(ctx);
+    // EVP_PKEY_Q_keygen(NULL, NULL, "EC", "prime256v1") - returns EVP_PKEY* directly
+    // Note: For EC keys, pass curve name as string instead of bits
+    let pkey = EVP_PKEY_Q_keygen(null, null, type_ptr, curve_ptr);
+
+    // Cleanup temporary buffers
+    free(type_ptr);
+    free(curve_ptr);
+
+    if (pkey == null) {
+        throw "ECDSA key generation failed";
+    }
 
     let keypair = {
         private_key: pkey,
