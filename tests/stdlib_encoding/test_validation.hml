@@ -1,0 +1,127 @@
+// Test input validation and error handling in encoding module
+
+import { base64_encode, base64_decode, hex_encode, hex_decode, url_encode, url_decode } from "@stdlib/encoding";
+
+let error_count = 0;
+
+// Test 1: Invalid Base64 - wrong length
+try {
+    base64_decode("ABC");  // Not multiple of 4
+    throw "Should have thrown error for invalid Base64 length";
+} catch (e) {
+    if (!e.contains("multiple of 4")) {
+        throw "Wrong error message for Base64 length: " + e;
+    }
+    error_count = error_count + 1;
+}
+print("✓ Test 1: Base64 invalid length error");
+
+// Test 2: Invalid Base64 - invalid characters
+try {
+    base64_decode("A@C!");  // Invalid characters
+    throw "Should have thrown error for invalid Base64 characters";
+} catch (e) {
+    if (!e.contains("invalid character")) {
+        throw "Wrong error message for Base64 characters: " + e;
+    }
+    error_count = error_count + 1;
+}
+print("✓ Test 2: Base64 invalid character error");
+
+// Test 3: Invalid Base64 - unexpected padding
+try {
+    base64_decode("=ABC");  // Padding at start
+    throw "Should have thrown error for unexpected padding";
+} catch (e) {
+    if (!e.contains("padding")) {
+        throw "Wrong error message for Base64 padding: " + e;
+    }
+    error_count = error_count + 1;
+}
+print("✓ Test 3: Base64 unexpected padding error");
+
+// Test 4: Invalid hex - odd length
+try {
+    hex_decode("ABC");  // Odd length
+    throw "Should have thrown error for odd hex length";
+} catch (e) {
+    if (!e.contains("must be even")) {
+        throw "Wrong error message for hex length: " + e;
+    }
+    error_count = error_count + 1;
+}
+print("✓ Test 4: Hex invalid length error");
+
+// Test 5: Invalid hex - invalid characters
+try {
+    hex_decode("XYZ");  // Invalid hex characters
+    throw "Should have thrown error for invalid hex characters";
+} catch (e) {
+    if (!e.contains("invalid character")) {
+        throw "Wrong error message for hex characters: " + e;
+    }
+    error_count = error_count + 1;
+}
+print("✓ Test 5: Hex invalid character error");
+
+// Test 6: Invalid URL encoding - incomplete percent sequence
+try {
+    url_decode("Hello%2");  // Incomplete %XX
+    throw "Should have thrown error for incomplete percent sequence";
+} catch (e) {
+    if (!e.contains("incomplete")) {
+        throw "Wrong error message for URL encoding: " + e;
+    }
+    error_count = error_count + 1;
+}
+print("✓ Test 6: URL incomplete percent sequence error");
+
+// Test 7: Invalid URL encoding - bad hex in percent
+try {
+    url_decode("Hello%XY");  // Invalid hex digits
+    throw "Should have thrown error for invalid hex in percent sequence";
+} catch (e) {
+    if (!e.contains("invalid hex")) {
+        throw "Wrong error message for URL hex digits: " + e;
+    }
+    error_count = error_count + 1;
+}
+print("✓ Test 7: URL invalid hex digits error");
+
+// Test 8: Type checking - base64_encode
+try {
+    base64_encode(123);  // Not a string
+    throw "Should have thrown error for non-string argument";
+} catch (e) {
+    if (!e.contains("requires string")) {
+        throw "Wrong error message for type check: " + e;
+    }
+    error_count = error_count + 1;
+}
+print("✓ Test 8: base64_encode type checking");
+
+// Test 9: Type checking - hex_encode
+try {
+    hex_encode(null);  // Not a string
+    throw "Should have thrown error for non-string argument";
+} catch (e) {
+    if (!e.contains("requires string")) {
+        throw "Wrong error message for type check: " + e;
+    }
+    error_count = error_count + 1;
+}
+print("✓ Test 9: hex_encode type checking");
+
+// Test 10: Type checking - url_encode
+try {
+    url_encode(true);  // Not a string
+    throw "Should have thrown error for non-string argument";
+} catch (e) {
+    if (!e.contains("requires string")) {
+        throw "Wrong error message for type check: " + e;
+    }
+    error_count = error_count + 1;
+}
+print("✓ Test 10: url_encode type checking");
+
+print("\n✅ All error handling tests passed! (" + typeof(error_count) + " errors correctly caught)");

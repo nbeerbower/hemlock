@@ -87,6 +87,10 @@ Value builtin_now(Value *args, int num_args, ExecutionContext *ctx);
 Value builtin_time_ms(Value *args, int num_args, ExecutionContext *ctx);
 Value builtin_sleep(Value *args, int num_args, ExecutionContext *ctx);
 Value builtin_clock(Value *args, int num_args, ExecutionContext *ctx);
+Value builtin_localtime(Value *args, int num_args, ExecutionContext *ctx);
+Value builtin_gmtime(Value *args, int num_args, ExecutionContext *ctx);
+Value builtin_mktime(Value *args, int num_args, ExecutionContext *ctx);
+Value builtin_strftime(Value *args, int num_args, ExecutionContext *ctx);
 
 // Environment builtins (env.c)
 Value builtin_getenv(Value *args, int num_args, ExecutionContext *ctx);
@@ -95,6 +99,16 @@ Value builtin_unsetenv(Value *args, int num_args, ExecutionContext *ctx);
 Value builtin_exit(Value *args, int num_args, ExecutionContext *ctx);
 Value builtin_get_pid(Value *args, int num_args, ExecutionContext *ctx);
 Value builtin_exec(Value *args, int num_args, ExecutionContext *ctx);
+Value builtin_getppid(Value *args, int num_args, ExecutionContext *ctx);
+Value builtin_getuid(Value *args, int num_args, ExecutionContext *ctx);
+Value builtin_geteuid(Value *args, int num_args, ExecutionContext *ctx);
+Value builtin_getgid(Value *args, int num_args, ExecutionContext *ctx);
+Value builtin_getegid(Value *args, int num_args, ExecutionContext *ctx);
+Value builtin_kill(Value *args, int num_args, ExecutionContext *ctx);
+Value builtin_fork(Value *args, int num_args, ExecutionContext *ctx);
+Value builtin_wait(Value *args, int num_args, ExecutionContext *ctx);
+Value builtin_waitpid(Value *args, int num_args, ExecutionContext *ctx);
+Value builtin_abort(Value *args, int num_args, ExecutionContext *ctx);
 
 // Signal handling builtins (signals.c)
 Value builtin_signal(Value *args, int num_args, ExecutionContext *ctx);
@@ -145,5 +159,28 @@ Value val_socket(SocketHandle *sock);
 void socket_free(SocketHandle *sock);
 Value get_socket_property(SocketHandle *sock, const char *property, ExecutionContext *ctx);
 Value call_socket_method(SocketHandle *sock, const char *method, Value *args, int num_args, ExecutionContext *ctx);
+
+// libwebsockets builtins (websockets.c)
+// HTTP builtins
+Value builtin_lws_http_get(Value *args, int num_args, ExecutionContext *ctx);
+Value builtin_lws_http_post(Value *args, int num_args, ExecutionContext *ctx);
+Value builtin_lws_response_status(Value *args, int num_args, ExecutionContext *ctx);
+Value builtin_lws_response_body(Value *args, int num_args, ExecutionContext *ctx);
+Value builtin_lws_response_headers(Value *args, int num_args, ExecutionContext *ctx);
+Value builtin_lws_response_free(Value *args, int num_args, ExecutionContext *ctx);
+// WebSocket builtins
+Value builtin_lws_ws_connect(Value *args, int num_args, ExecutionContext *ctx);
+Value builtin_lws_ws_send_text(Value *args, int num_args, ExecutionContext *ctx);
+Value builtin_lws_ws_recv(Value *args, int num_args, ExecutionContext *ctx);
+Value builtin_lws_msg_type(Value *args, int num_args, ExecutionContext *ctx);
+Value builtin_lws_msg_text(Value *args, int num_args, ExecutionContext *ctx);
+Value builtin_lws_msg_len(Value *args, int num_args, ExecutionContext *ctx);
+Value builtin_lws_msg_free(Value *args, int num_args, ExecutionContext *ctx);
+Value builtin_lws_ws_close(Value *args, int num_args, ExecutionContext *ctx);
+Value builtin_lws_ws_is_closed(Value *args, int num_args, ExecutionContext *ctx);
+// WebSocket server builtins
+Value builtin_lws_ws_server_create(Value *args, int num_args, ExecutionContext *ctx);
+Value builtin_lws_ws_server_accept(Value *args, int num_args, ExecutionContext *ctx);
+Value builtin_lws_ws_server_close(Value *args, int num_args, ExecutionContext *ctx);
 
 #endif // BUILTINS_INTERNAL_H

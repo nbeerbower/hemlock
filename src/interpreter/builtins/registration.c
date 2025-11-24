@@ -58,17 +58,32 @@ static BuiltinInfo builtins[] = {
     {"__rand", builtin_rand},
     {"__rand_range", builtin_rand_range},
     {"__seed", builtin_seed},
-    // Time functions (use stdlib/time.hml module for public API)
+    // Time functions (use stdlib/time.hml and stdlib/datetime.hml modules for public API)
     {"__now", builtin_now},
     {"__time_ms", builtin_time_ms},
     {"__sleep", builtin_sleep},
     {"__clock", builtin_clock},
-    // Environment functions (use stdlib/env.hml module for public API)
+    {"__localtime", builtin_localtime},
+    {"__gmtime", builtin_gmtime},
+    {"__mktime", builtin_mktime},
+    {"__strftime", builtin_strftime},
+    // Environment functions (use stdlib/env.hml and stdlib/process.hml modules for public API)
     {"__getenv", builtin_getenv},
     {"__setenv", builtin_setenv},
     {"__unsetenv", builtin_unsetenv},
     {"__exit", builtin_exit},
     {"__get_pid", builtin_get_pid},
+    {"__exec", builtin_exec},
+    {"__getppid", builtin_getppid},
+    {"__getuid", builtin_getuid},
+    {"__geteuid", builtin_geteuid},
+    {"__getgid", builtin_getgid},
+    {"__getegid", builtin_getegid},
+    {"__kill", builtin_kill},
+    {"__fork", builtin_fork},
+    {"__wait", builtin_wait},
+    {"__waitpid", builtin_waitpid},
+    {"__abort", builtin_abort},
     // Internal helper builtins
     {"__read_u32", builtin_read_u32},
     {"__read_u64", builtin_read_u64},
@@ -97,6 +112,28 @@ static BuiltinInfo builtins[] = {
     {"__cwd", builtin_cwd},
     {"__chdir", builtin_chdir},
     {"__absolute_path", builtin_absolute_path},
+    // libwebsockets builtins (use stdlib/http.hml and stdlib/websocket.hml modules for public API)
+    // HTTP builtins
+    {"__lws_http_get", builtin_lws_http_get},
+    {"__lws_http_post", builtin_lws_http_post},
+    {"__lws_response_status", builtin_lws_response_status},
+    {"__lws_response_body", builtin_lws_response_body},
+    {"__lws_response_headers", builtin_lws_response_headers},
+    {"__lws_response_free", builtin_lws_response_free},
+    // WebSocket builtins
+    {"__lws_ws_connect", builtin_lws_ws_connect},
+    {"__lws_ws_send_text", builtin_lws_ws_send_text},
+    {"__lws_ws_recv", builtin_lws_ws_recv},
+    {"__lws_msg_type", builtin_lws_msg_type},
+    {"__lws_msg_text", builtin_lws_msg_text},
+    {"__lws_msg_len", builtin_lws_msg_len},
+    {"__lws_msg_free", builtin_lws_msg_free},
+    {"__lws_ws_close", builtin_lws_ws_close},
+    {"__lws_ws_is_closed", builtin_lws_ws_is_closed},
+    // WebSocket server builtins
+    {"__lws_ws_server_create", builtin_lws_ws_server_create},
+    {"__lws_ws_server_accept", builtin_lws_ws_server_accept},
+    {"__lws_ws_server_close", builtin_lws_ws_server_close},
     {NULL, NULL}  // Sentinel
 };
 

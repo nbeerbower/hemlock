@@ -65,6 +65,21 @@ Time measurement and delays:
 
 See [docs/time.md](docs/time.md) for detailed documentation.
 
+### Date & Time (`@stdlib/datetime`)
+**Status:** Complete
+
+Comprehensive date/time manipulation:
+- **DateTime class** - High-level date/time object with methods
+- **Constructors:** now, from_date, from_utc, parse_iso
+- **Formatting:** format (strftime), to_string, to_date_string, to_time_string, to_iso_string
+- **Arithmetic:** add_days, add_hours, add_minutes, add_seconds
+- **Comparison:** is_before, is_after, is_equal
+- **Differences:** diff_days, diff_hours, diff_minutes, diff_seconds
+- **Utilities:** weekday_name, month_name
+- **Low-level builtins:** localtime, gmtime, mktime, strftime
+
+See [docs/datetime.md](docs/datetime.md) for detailed documentation.
+
 ### Environment (`@stdlib/env`)
 **Status:** Complete
 
@@ -74,6 +89,17 @@ Environment variables and process control:
 - `get_pid()` - Process ID
 
 See [docs/env.md](docs/env.md) for detailed documentation.
+
+### Process Management (`@stdlib/process`)
+**Status:** Complete
+
+Comprehensive process control and inter-process communication:
+- **Process ID:** get_pid, getppid, getuid, geteuid, getgid, getegid
+- **Process control:** exit, kill, abort
+- **Process creation:** fork, wait, waitpid
+- **Command execution:** exec (returns output + exit_code)
+
+See [docs/process.md](docs/process.md) for detailed documentation.
 
 ### Filesystem (`@stdlib/fs`)
 **Status:** Comprehensive
@@ -148,6 +174,29 @@ Full-featured JSON manipulation library:
 
 See [docs/json.md](docs/json.md) for detailed documentation.
 
+### Strings (`@stdlib/strings`)
+**Status:** Complete
+
+Advanced string utilities beyond the 18 built-in methods:
+- **Padding & Alignment:** pad_left, pad_right, center
+- **Character type checking:** is_alpha, is_digit, is_alnum, is_whitespace
+- **String manipulation:** reverse, lines, words
+- **Full Unicode support** - All functions work with UTF-8 codepoints
+- **Complements built-ins** - Extends substr, slice, split, trim, etc.
+
+See [docs/strings.md](docs/strings.md) for detailed documentation.
+
+### Encoding (`@stdlib/encoding`)
+**Status:** Complete
+
+Data encoding and decoding utilities for data interchange:
+- **Base64:** base64_encode, base64_decode - Standard Base64 encoding
+- **Hexadecimal:** hex_encode, hex_decode - Binary to hex string conversion
+- **URL encoding:** url_encode, url_decode - Percent-encoding for URLs
+- **Use cases:** Network protocols, data transmission, safe URL parameters
+
+See [docs/encoding.md](docs/encoding.md) for detailed documentation.
+
 ### Testing (`@stdlib/testing`)
 **Status:** Complete
 
@@ -170,23 +219,30 @@ Import modules using the `@stdlib/` prefix:
 import { HashMap, Queue, Stack } from "@stdlib/collections";
 import { sin, cos, PI } from "@stdlib/math";
 import { now, sleep } from "@stdlib/time";
+import { DateTime, from_date, parse_iso } from "@stdlib/datetime";
 import { getenv, exit } from "@stdlib/env";
+import { get_pid, getppid, exec, kill } from "@stdlib/process";
 import { read_file, write_file, exists } from "@stdlib/fs";
 import { TcpListener, TcpStream, UdpSocket } from "@stdlib/net";
 import { compile, test, REG_ICASE } from "@stdlib/regex";
 import { get, post, fetch } from "@stdlib/http";
 import { WebSocket, WebSocketServer } from "@stdlib/websocket";
 import { parse, stringify, pretty, get, set } from "@stdlib/json";
+import { pad_left, is_alpha, reverse, lines, words } from "@stdlib/strings";
+import { base64_encode, base64_decode, hex_encode, url_encode } from "@stdlib/encoding";
 import { describe, test, expect, assert_eq, run } from "@stdlib/testing";
 
 // Import all as namespace
 import * as math from "@stdlib/math";
+import * as datetime from "@stdlib/datetime";
 import * as fs from "@stdlib/fs";
 import * as net from "@stdlib/net";
 import * as regex from "@stdlib/regex";
 import * as http from "@stdlib/http";
 import * as ws from "@stdlib/websocket";
 import * as json from "@stdlib/json";
+import * as strings from "@stdlib/strings";
+import * as encoding from "@stdlib/encoding";
 import * as testing from "@stdlib/testing";
 
 // Use imported functions
@@ -195,6 +251,7 @@ let result = math.sin(angle);
 let content = fs.read_file("data.txt");
 let stream = net.TcpStream("example.com", 80);
 let is_valid = regex.test("^[a-z]+$", "hello", null);
+let b64 = encoding.base64_encode("Hello!");
 ```
 
 ## Quick Examples
@@ -225,6 +282,24 @@ let start = time_ms();
 sleep(1.0);
 let elapsed = time_ms() - start;
 print("Elapsed: " + typeof(elapsed) + "ms");
+```
+
+### Date & Time
+```hemlock
+import { now, from_date, parse_iso } from "@stdlib/datetime";
+
+// Current date/time
+let current = now();
+print(current.to_string());  // "2025-01-16 12:30:45"
+
+// Create from specific date
+let birthday = from_date(1990, 5, 15);
+print(birthday.format("%B %d, %Y"));  // "May 15, 1990"
+
+// Date arithmetic
+let next_week = current.add_days(7);
+let days_until = next_week.diff_days(current);
+print("Days until: " + typeof(days_until));  // 7
 ```
 
 ### Environment
@@ -325,6 +400,42 @@ print(pretty(config, 2));
 let backup = clone(config);
 ```
 
+### Strings
+```hemlock
+import { pad_left, is_alpha, reverse, lines, words } from "@stdlib/strings";
+
+// Padding and alignment
+let padded = pad_left("42", 5, "0");  // "00042"
+let centered = center("Title", 20, "=");  // "=======Title========"
+
+// Character type checking
+print(is_alpha("hello"));    // true
+print(is_digit("12345"));    // true
+print(is_alnum("test123"));  // true
+
+// String manipulation
+print(reverse("hello"));     // "olleh"
+let text_lines = lines("line1\nline2\nline3");  // ["line1", "line2", "line3"]
+let word_list = words("the quick brown fox");   // ["the", "quick", "brown", "fox"]
+```
+
+### Encoding
+```hemlock
+import { base64_encode, hex_encode, url_encode } from "@stdlib/encoding";
+
+// Base64 encoding
+let b64 = base64_encode("Hello, World!");
+print(b64);  // "SGVsbG8sIFdvcmxkIQ=="
+
+// Hexadecimal encoding
+let hex = hex_encode("Hello");
+print(hex);  // "48656c6c6f"
+
+// URL encoding
+let url_param = url_encode("hello@example.com");
+print(url_param);  // "hello%40example.com"
+```
+
 ### Testing
 ```hemlock
 import { describe, test, expect, run } from "@stdlib/testing";
@@ -350,6 +461,7 @@ stdlib/
 ├── collections.hml     # Collections module implementation
 ├── math.hml            # Math module implementation
 ├── time.hml            # Time module implementation
+├── datetime.hml        # Date & time module implementation
 ├── env.hml             # Environment module implementation
 ├── fs.hml              # Filesystem module implementation
 ├── net.hml             # Networking module implementation
@@ -358,6 +470,8 @@ stdlib/
 ├── websocket.hml       # WebSocket client/server (via libwebsockets FFI)
 ├── websocket_pure.hml  # WebSocket pure Hemlock implementation (educational)
 ├── json.hml            # JSON module (pure Hemlock)
+├── strings.hml         # String utilities module (pure Hemlock)
+├── encoding.hml        # Encoding module (pure Hemlock)
 ├── testing.hml         # Testing framework (pure Hemlock)
 ├── c/                  # C FFI wrappers (compiled with 'make stdlib')
 │   └── lws_wrapper.c   # libwebsockets wrapper for HTTP/WebSocket
@@ -365,6 +479,7 @@ stdlib/
     ├── collections.md  # Collections API reference
     ├── math.md         # Math API reference
     ├── time.md         # Time API reference
+    ├── datetime.md     # Date & time API reference
     ├── env.md          # Environment API reference
     ├── fs.md           # Filesystem API reference
     ├── net.md          # Networking API reference
@@ -372,6 +487,8 @@ stdlib/
     ├── http.md         # HTTP API reference
     ├── websocket.md    # WebSocket API reference
     ├── json.md         # JSON API reference
+    ├── strings.md      # Strings API reference
+    ├── encoding.md     # Encoding API reference
     └── testing.md      # Testing API reference
 ```
 
@@ -393,10 +510,7 @@ print(parsed.name);  // "Alice"
 ## Future Modules
 
 Planned additions to the standard library:
-- **strings** - String utilities (pad, join, is_alpha, reverse, lines, words)
 - **path** - Path manipulation (join, basename, dirname, extname, normalize)
-- **encoding** - Base64, hex, URL encoding/decoding
-- **datetime** - Date/time formatting and parsing
 - **crypto** - Cryptographic functions (via FFI + OpenSSL)
 - **compression** - zlib/gzip compression (via FFI)
 
@@ -409,13 +523,17 @@ See `STDLIB_ANALYSIS_UPDATED.md` and `STDLIB_NETWORKING_DESIGN.md` for detailed 
 | collections | ✅ Production | ✅ Complete | ✅ Comprehensive | 760 | Excellent |
 | math | ✅ Complete | ✅ Complete | ✅ Good | 50 | High |
 | time | ⚠️ Basic | ✅ Complete | ✅ Good | 13 | Good |
+| datetime | ✅ Complete | ✅ Complete | ✅ Comprehensive | 450+ | High |
 | env | ✅ Complete | ✅ Complete | ✅ Good | 14 | High |
+| process | ✅ Complete | ✅ Complete | ✅ Good | 23 | High |
 | fs | ✅ Comprehensive | ✅ Complete | ⚠️ Partial | 31 | High |
 | net | ✅ Complete | ✅ Complete | ✅ Good | 240 | High |
 | regex | ⚠️ Basic (FFI) | ✅ Complete | ✅ Good | 152 | Good |
 | http | ✅ Production (libwebsockets) | ✅ Complete | ✅ Good | 280 | High |
 | websocket | ✅ Production (libwebsockets) | ✅ Complete | ✅ Good | 318 | High |
 | json | ✅ Comprehensive | ✅ Complete | ✅ Good | 550+ | High |
+| strings | ✅ Complete | ✅ Complete | ✅ Comprehensive | 293 | High |
+| encoding | ✅ Complete | ✅ Complete | ✅ Comprehensive | 370 | High |
 | testing | ✅ Complete | ✅ Complete | ✅ Good | 410 | High |
 
 **Legend:**

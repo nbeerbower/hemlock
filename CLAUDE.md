@@ -2879,12 +2879,14 @@ import { now, sleep } from "@stdlib/time";
 import { read_file, write_file } from "@stdlib/fs";
 import { TcpListener, TcpStream, UdpSocket } from "@stdlib/net";
 import { compile, test } from "@stdlib/regex";
+import { pad_left, is_alpha, reverse, lines, words } from "@stdlib/strings";
 
 // Import all as namespace
 import * as math from "@stdlib/math";
 import * as fs from "@stdlib/fs";
 import * as net from "@stdlib/net";
 import * as regex from "@stdlib/regex";
+import * as strings from "@stdlib/strings";
 
 // Use imported functions
 let angle = math.PI / 4.0;
@@ -3000,7 +3002,56 @@ fn process_items(items: array): null {
 
 ---
 
-#### 4. **Environment** (`@stdlib/env`)
+#### 4. **Date & Time** (`@stdlib/datetime`)
+**Status:** Complete
+
+Comprehensive date/time manipulation with formatting, parsing, and arithmetic:
+- **DateTime class** - High-level date/time object
+- **Constructors:** now, from_date, from_utc, parse_iso
+- **Formatting:** format (strftime), to_string, to_date_string, to_time_string, to_iso_string
+- **Arithmetic:** add_days, add_hours, add_minutes, add_seconds
+- **Comparison:** is_before, is_after, is_equal
+- **Differences:** diff_days, diff_hours, diff_minutes, diff_seconds
+- **Utilities:** weekday_name, month_name
+- **Low-level builtins:** localtime, gmtime, mktime, strftime
+
+```hemlock
+import { now, from_date, parse_iso } from "@stdlib/datetime";
+
+// Get current date/time
+let current = now();
+print(current.to_string());  // "2025-01-16 12:30:45"
+print(current.format("%B %d, %Y"));  // "January 16, 2025"
+
+// Create from specific date
+let birthday = from_date(1990, 5, 15, 14, 30, 0);
+print(birthday.format("%B %d, %Y at %I:%M %p"));  // "May 15, 1990 at 02:30 PM"
+
+// Parse ISO date
+let meeting = parse_iso("2025-03-20T14:30:00");
+print(meeting.to_string());  // "2025-03-20 14:30:00"
+
+// Date arithmetic
+let next_week = current.add_days(7);
+let days_until = next_week.diff_days(current);
+print("Days until: " + typeof(days_until));  // 7
+
+// Comparison
+if (meeting.is_after(current)) {
+    print("Meeting is in the future");
+}
+
+// Format with strftime codes
+let formatted = current.format("%A, %B %d, %Y at %I:%M:%S %p");
+print(formatted);  // "Thursday, January 16, 2025 at 12:30:45 PM"
+```
+
+**Documentation:** `stdlib/docs/datetime.md`
+**Notes:** Building on `@stdlib/time`, uses C's strftime for formatting
+
+---
+
+#### 5. **Environment** (`@stdlib/env`)
 **Status:** Complete
 
 Environment variables and process control:
@@ -3038,7 +3089,44 @@ if (error_occurred) {
 
 ---
 
-#### 5. **Filesystem** (`@stdlib/fs`)
+#### 6. **Process Management** (`@stdlib/process`)
+**Status:** Complete
+
+Process control and inter-process communication:
+- **Process ID:** get_pid, getppid, getuid, geteuid, getgid, getegid
+- **Process control:** exit, kill, abort
+- **Process creation:** fork, wait, waitpid
+- **Command execution:** exec (returns output + exit_code)
+
+```hemlock
+import { get_pid, getppid, exec, kill } from "@stdlib/process";
+
+// Process information
+let pid = get_pid();
+let ppid = getppid();
+print("PID: " + typeof(pid) + ", PPID: " + typeof(ppid));
+
+// Execute commands
+let result = exec("echo 'Hello World'");
+print(result.output);        // "Hello World\n"
+print(result.exit_code);     // 0
+
+// Check command success
+let r = exec("grep pattern file.txt");
+if (r.exit_code == 0) {
+    print("Found: " + r.output);
+}
+
+// Send signal to process
+kill(target_pid, 15);  // SIGTERM
+```
+
+**Documentation:** `stdlib/docs/process.md`
+**Notes:** fork() should be used with caution in interpreter; prefer exec() for running commands
+
+---
+
+#### 7. **Filesystem** (`@stdlib/fs`)
 **Status:** Comprehensive
 
 File and directory operations:
@@ -3101,7 +3189,7 @@ copy_file("important.txt", "important.txt.backup");
 
 ---
 
-#### 6. **Networking** (`@stdlib/net`)
+#### 8. **Networking** (`@stdlib/net`)
 **Status:** Complete
 
 TCP/UDP networking with ergonomic wrappers over raw socket builtins:
@@ -3145,7 +3233,7 @@ let ip = resolve("example.com");  // "93.184.216.34"
 
 ---
 
-#### 7. **Regular Expressions** (`@stdlib/regex`)
+#### 9. **Regular Expressions** (`@stdlib/regex`)
 **Status:** Basic (via FFI)
 
 POSIX Extended Regular Expression pattern matching via FFI to system regex library:
@@ -3177,6 +3265,43 @@ email_pattern.free();  // Manual cleanup required
 
 **Documentation:** `stdlib/docs/regex.md`
 **Notes:** Uses POSIX ERE syntax, manual memory management required
+
+---
+
+#### 8. **Strings** (`@stdlib/strings`)
+**Status:** Complete
+
+Advanced string utilities beyond the 18 built-in methods:
+- **Padding & Alignment:** pad_left, pad_right, center
+- **Character type checking:** is_alpha, is_digit, is_alnum, is_whitespace
+- **String manipulation:** reverse, lines, words
+
+```hemlock
+import { pad_left, pad_right, center } from "@stdlib/strings";
+import { is_alpha, is_digit, is_alnum } from "@stdlib/strings";
+import { reverse, lines, words } from "@stdlib/strings";
+
+// Padding and alignment
+let padded = pad_left("42", 5, "0");  // "00042"
+let centered = center("Title", 20, "=");  // "=======Title========"
+
+// Character type checking
+print(is_alpha("hello"));    // true
+print(is_digit("12345"));    // true
+print(is_alnum("test123"));  // true
+
+// String manipulation
+print(reverse("hello"));     // "olleh"
+let text_lines = lines("line1\nline2\nline3");  // ["line1", "line2", "line3"]
+let word_list = words("the quick brown fox");   // ["the", "quick", "brown", "fox"]
+
+// Unicode support
+print(reverse("Hello 🌍"));  // "🌍 olleH"
+let s = pad_left("test", 10, "█");  // "██████test"
+```
+
+**Documentation:** `stdlib/docs/strings.md`
+**Features:** Full UTF-8 Unicode support, complements built-in string methods, comprehensive error handling
 
 ---
 
@@ -3220,6 +3345,7 @@ stdlib/
 ├── fs.hml                 # Filesystem operations
 ├── net.hml                # Networking (TCP/UDP)
 ├── regex.hml              # Regular expressions (via FFI)
+├── strings.hml            # String utilities
 └── docs/
     ├── collections.md     # Collections API reference
     ├── math.md            # Math API reference
@@ -3227,7 +3353,8 @@ stdlib/
     ├── env.md             # Environment API reference
     ├── fs.md              # Filesystem API reference
     ├── net.md             # Networking API reference
-    └── regex.md           # Regex API reference
+    ├── regex.md           # Regex API reference
+    └── strings.md         # Strings API reference
 ```
 
 ### Testing
@@ -3245,6 +3372,7 @@ make test | grep stdlib_time
 make test | grep stdlib_env
 make test | grep stdlib_net
 make test | grep stdlib_regex
+make test | grep stdlib_strings
 ```
 
 **Test locations:**
@@ -3254,18 +3382,14 @@ make test | grep stdlib_regex
 - `tests/stdlib_env/` - Environment tests
 - `tests/stdlib_net/` - Networking tests (TCP/UDP)
 - `tests/stdlib_regex/` - Regular expression tests
+- `tests/stdlib_strings/` - String utilities tests
 
 ### Future Stdlib Modules
 
 Planned additions:
-- **http** - HTTP client/server (building on @stdlib/net) - **IN PROGRESS**
-- **websocket** - WebSocket protocol (building on @stdlib/http) - **IN PROGRESS**
-- **strings** - String utilities (pad, join, is_alpha, reverse, lines, words)
 - **path** - Path manipulation (join, basename, dirname, extname, normalize)
-- **json** - Formalized JSON module (wrapper around serialize/deserialize)
 - **encoding** - Base64, hex, URL encoding/decoding
 - **testing** - Test framework with describe/test/expect/assertions
-- **datetime** - Date/time formatting and parsing
 - **crypto** - Cryptographic functions (via FFI + OpenSSL)
 - **compression** - zlib/gzip compression (via FFI)
 
@@ -3323,6 +3447,32 @@ hemlock/
 - Compile to C code
 - Keep runtime library for dynamic features
 - Optional `--no-tags` flag for fully static builds
+
+### External Dependencies
+
+Hemlock uses **static linking** for external C libraries to ensure reliability and simplify deployment:
+
+**Required dependencies (statically linked):**
+- **libm** - Math functions (sin, cos, sqrt, etc.)
+- **libpthread** - Threading for async/await
+- **libffi** - Foreign function interface for FFI support
+- **libdl** - Dynamic loading for FFI libraries
+- **libcrypto (OpenSSL)** - Cryptographic hash functions (md5, sha1, sha256)
+- **libwebsockets** - HTTP and WebSocket networking
+
+**Installation on Ubuntu/Debian:**
+```bash
+sudo apt-get install libssl-dev libwebsockets-dev libffi-dev
+```
+
+**Static vs Dynamic Linking:**
+- ✅ **Prefer static linking** - Libraries are linked directly into the Hemlock binary at compile time
+- ✅ **Simpler deployment** - No separate .so files to manage
+- ✅ **Earlier error detection** - Link-time errors vs runtime failures
+- ✅ **Consistent behavior** - Same library version guaranteed across systems
+- ❌ **Avoid dynamic loading** - Only use dlopen() for user FFI libraries, not core dependencies
+
+**Historical note:** Earlier versions used dynamic loading (dlopen) for libwebsockets and OpenSSL, but this was changed to static linking in v0.1 for better reliability.
 
 ---
 
