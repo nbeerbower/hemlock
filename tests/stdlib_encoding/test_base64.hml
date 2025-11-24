@@ -1,0 +1,122 @@
+// Test Base64 encoding and decoding
+
+import { base64_encode, base64_decode } from "@stdlib/encoding";
+
+// Test 1: Empty string
+let encoded1 = base64_encode("");
+if (encoded1 != "") {
+    throw "Empty string should encode to empty string";
+}
+let decoded1 = base64_decode("");
+if (decoded1 != "") {
+    throw "Empty string should decode to empty string";
+}
+print("✓ Test 1: Empty string");
+
+// Test 2: Single character
+let encoded2 = base64_encode("A");
+if (encoded2 != "QQ==") {
+    throw "Failed to encode 'A', got: " + encoded2;
+}
+let decoded2 = base64_decode("QQ==");
+if (decoded2 != "A") {
+    throw "Failed to decode 'QQ==', got: " + decoded2;
+}
+print("✓ Test 2: Single character");
+
+// Test 3: Two characters
+let encoded3 = base64_encode("AB");
+if (encoded3 != "QUI=") {
+    throw "Failed to encode 'AB', got: " + encoded3;
+}
+let decoded3 = base64_decode("QUI=");
+if (decoded3 != "AB") {
+    throw "Failed to decode 'QUI=', got: " + decoded3;
+}
+print("✓ Test 3: Two characters");
+
+// Test 4: Three characters (no padding)
+let encoded4 = base64_encode("ABC");
+if (encoded4 != "QUJD") {
+    throw "Failed to encode 'ABC', got: " + encoded4;
+}
+let decoded4 = base64_decode("QUJD");
+if (decoded4 != "ABC") {
+    throw "Failed to decode 'QUJD', got: " + decoded4;
+}
+print("✓ Test 4: Three characters");
+
+// Test 5: Standard test vector "Hello, World!"
+let encoded5 = base64_encode("Hello, World!");
+if (encoded5 != "SGVsbG8sIFdvcmxkIQ==") {
+    throw "Failed to encode 'Hello, World!', got: " + encoded5;
+}
+let decoded5 = base64_decode("SGVsbG8sIFdvcmxkIQ==");
+if (decoded5 != "Hello, World!") {
+    throw "Failed to decode 'SGVsbG8sIFdvcmxkIQ==', got: " + decoded5;
+}
+print("✓ Test 5: Hello, World!");
+
+// Test 6: Longer text
+let text6 = "The quick brown fox jumps over the lazy dog";
+let encoded6 = base64_encode(text6);
+let decoded6 = base64_decode(encoded6);
+if (decoded6 != text6) {
+    throw "Failed round-trip for longer text";
+}
+print("✓ Test 6: Longer text round-trip");
+
+// Test 7: Binary data (all bytes 0-255)
+let binary7 = "";
+let i = 0;
+while (i < 256) {
+    let byte_char: rune = i;
+    binary7 = binary7 + byte_char;
+    i = i + 1;
+}
+let encoded7 = base64_encode(binary7);
+let decoded7 = base64_decode(encoded7);
+if (decoded7.length != binary7.length) {
+    throw "Binary data length mismatch";
+}
+print("✓ Test 7: Binary data (all bytes 0-255)");
+
+// Test 8: Special characters
+let text8 = "Hello\nWorld\t!\r\n";
+let encoded8 = base64_encode(text8);
+let decoded8 = base64_decode(encoded8);
+if (decoded8 != text8) {
+    throw "Failed round-trip for special characters";
+}
+print("✓ Test 8: Special characters");
+
+// Test 9: Numbers and symbols
+let text9 = "0123456789!@#$%^&*()";
+let encoded9 = base64_encode(text9);
+let decoded9 = base64_decode(encoded9);
+if (decoded9 != text9) {
+    throw "Failed round-trip for numbers and symbols";
+}
+print("✓ Test 9: Numbers and symbols");
+
+// Test 10: Unicode (UTF-8)
+let text10 = "Hello 世界 🚀";
+let encoded10 = base64_encode(text10);
+let decoded10 = base64_decode(encoded10);
+if (decoded10 != text10) {
+    throw "Failed round-trip for Unicode text";
+}
+print("✓ Test 10: Unicode (UTF-8)");
+
+// Test 11: Multiple padding scenarios
+let test11a = base64_encode("a");
+let test11b = base64_encode("ab");
+let test11c = base64_encode("abc");
+let test11d = base64_encode("abcd");
+if (base64_decode(test11a) != "a") { throw "Failed 1-byte padding"; }
+if (base64_decode(test11b) != "ab") { throw "Failed 2-byte padding"; }
+if (base64_decode(test11c) != "abc") { throw "Failed 3-byte padding"; }
+if (base64_decode(test11d) != "abcd") { throw "Failed 4-byte padding"; }
+print("✓ Test 11: Multiple padding scenarios");
+
+print("\n✅ All Base64 tests passed!");

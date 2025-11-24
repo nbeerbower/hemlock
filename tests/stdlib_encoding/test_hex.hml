@@ -1,0 +1,143 @@
+// Test Hexadecimal encoding and decoding
+
+import { hex_encode, hex_decode } from "@stdlib/encoding";
+
+// Test 1: Empty string
+let encoded1 = hex_encode("");
+if (encoded1 != "") {
+    throw "Empty string should encode to empty string";
+}
+let decoded1 = hex_decode("");
+if (decoded1 != "") {
+    throw "Empty string should decode to empty string";
+}
+print("✓ Test 1: Empty string");
+
+// Test 2: Single character
+let encoded2 = hex_encode("A");
+if (encoded2 != "41") {
+    throw "Failed to encode 'A', got: " + encoded2;
+}
+let decoded2 = hex_decode("41");
+if (decoded2 != "A") {
+    throw "Failed to decode '41', got: " + decoded2;
+}
+print("✓ Test 2: Single character");
+
+// Test 3: Multiple characters
+let encoded3 = hex_encode("ABC");
+if (encoded3 != "414243") {
+    throw "Failed to encode 'ABC', got: " + encoded3;
+}
+let decoded3 = hex_decode("414243");
+if (decoded3 != "ABC") {
+    throw "Failed to decode '414243', got: " + decoded3;
+}
+print("✓ Test 3: Multiple characters");
+
+// Test 4: Hello World
+let text4 = "Hello, World!";
+let encoded4 = hex_encode(text4);
+if (encoded4 != "48656c6c6f2c20576f726c6421") {
+    throw "Failed to encode 'Hello, World!', got: " + encoded4;
+}
+let decoded4 = hex_decode("48656c6c6f2c20576f726c6421");
+if (decoded4 != text4) {
+    throw "Failed to decode hex, got: " + decoded4;
+}
+print("✓ Test 4: Hello, World!");
+
+// Test 5: Case insensitive decoding
+let decoded5a = hex_decode("48656c6c6f");
+let decoded5b = hex_decode("48656C6C6F");
+let decoded5c = hex_decode("48656C6c6f");
+if (decoded5a != "Hello" || decoded5b != "Hello" || decoded5c != "Hello") {
+    throw "Hex decode should be case-insensitive";
+}
+print("✓ Test 5: Case insensitive decoding");
+
+// Test 6: Numbers
+let text6 = "0123456789";
+let encoded6 = hex_encode(text6);
+let decoded6 = hex_decode(encoded6);
+if (decoded6 != text6) {
+    throw "Failed round-trip for numbers";
+}
+print("✓ Test 6: Numbers round-trip");
+
+// Test 7: Special characters
+let text7 = "!@#$%^&*()";
+let encoded7 = hex_encode(text7);
+let decoded7 = hex_decode(encoded7);
+if (decoded7 != text7) {
+    throw "Failed round-trip for special characters";
+}
+print("✓ Test 7: Special characters");
+
+// Test 8: Whitespace characters
+let text8 = " \t\n\r";
+let encoded8 = hex_encode(text8);
+let decoded8 = hex_decode(encoded8);
+if (decoded8 != text8) {
+    throw "Failed round-trip for whitespace";
+}
+print("✓ Test 8: Whitespace characters");
+
+// Test 9: Binary data (all bytes 0-255)
+let binary9 = "";
+let i = 0;
+while (i < 256) {
+    let byte_char: rune = i;
+    binary9 = binary9 + byte_char;
+    i = i + 1;
+}
+let encoded9 = hex_encode(binary9);
+let decoded9 = hex_decode(encoded9);
+if (decoded9.length != binary9.length) {
+    throw "Binary data length mismatch";
+}
+print("✓ Test 9: Binary data (all bytes 0-255)");
+
+// Test 10: Specific byte values
+let byte10: rune = 0;
+let text10 = "" + byte10;
+let encoded10 = hex_encode(text10);
+if (encoded10 != "00") {
+    throw "Failed to encode null byte, got: " + encoded10;
+}
+let decoded10 = hex_decode("00");
+if (decoded10.length != 1) {
+    throw "Failed to decode null byte";
+}
+print("✓ Test 10: Null byte");
+
+// Test 11: High byte values
+let byte11: rune = 255;
+let text11 = "" + byte11;
+let encoded11 = hex_encode(text11);
+if (encoded11 != "ff") {
+    throw "Failed to encode 0xFF, got: " + encoded11;
+}
+let decoded11 = hex_decode("FF");
+if (decoded11.length != 1) {
+    throw "Failed to decode 0xFF";
+}
+print("✓ Test 11: High byte values (0xFF)");
+
+// Test 12: Longer text
+let text12 = "The quick brown fox jumps over the lazy dog";
+let encoded12 = hex_encode(text12);
+let decoded12 = hex_decode(encoded12);
+if (decoded12 != text12) {
+    throw "Failed round-trip for longer text";
+}
+print("✓ Test 12: Longer text round-trip");
+
+// Test 13: Decode with whitespace (should be removed)
+let decoded13 = hex_decode("48 65 6c 6c 6f");
+if (decoded13 != "Hello") {
+    throw "Failed to decode hex with spaces, got: " + decoded13;
+}
+print("✓ Test 13: Decode with whitespace");
+
+print("\n✅ All Hex tests passed!");

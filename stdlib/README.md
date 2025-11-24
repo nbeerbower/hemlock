@@ -186,6 +186,17 @@ Advanced string utilities beyond the 18 built-in methods:
 
 See [docs/strings.md](docs/strings.md) for detailed documentation.
 
+### Encoding (`@stdlib/encoding`)
+**Status:** Complete
+
+Data encoding and decoding utilities for data interchange:
+- **Base64:** base64_encode, base64_decode - Standard Base64 encoding
+- **Hexadecimal:** hex_encode, hex_decode - Binary to hex string conversion
+- **URL encoding:** url_encode, url_decode - Percent-encoding for URLs
+- **Use cases:** Network protocols, data transmission, safe URL parameters
+
+See [docs/encoding.md](docs/encoding.md) for detailed documentation.
+
 ## Usage
 
 Import modules using the `@stdlib/` prefix:
@@ -205,6 +216,7 @@ import { get, post, fetch } from "@stdlib/http";
 import { WebSocket, WebSocketServer } from "@stdlib/websocket";
 import { parse, stringify, pretty, get, set } from "@stdlib/json";
 import { pad_left, is_alpha, reverse, lines, words } from "@stdlib/strings";
+import { base64_encode, base64_decode, hex_encode, url_encode } from "@stdlib/encoding";
 
 // Import all as namespace
 import * as math from "@stdlib/math";
@@ -216,6 +228,7 @@ import * as http from "@stdlib/http";
 import * as ws from "@stdlib/websocket";
 import * as json from "@stdlib/json";
 import * as strings from "@stdlib/strings";
+import * as encoding from "@stdlib/encoding";
 
 // Use imported functions
 let angle = math.PI / 4.0;
@@ -223,6 +236,7 @@ let result = math.sin(angle);
 let content = fs.read_file("data.txt");
 let stream = net.TcpStream("example.com", 80);
 let is_valid = regex.test("^[a-z]+$", "hello", null);
+let b64 = encoding.base64_encode("Hello!");
 ```
 
 ## Quick Examples
@@ -390,6 +404,23 @@ let text_lines = lines("line1\nline2\nline3");  // ["line1", "line2", "line3"]
 let word_list = words("the quick brown fox");   // ["the", "quick", "brown", "fox"]
 ```
 
+### Encoding
+```hemlock
+import { base64_encode, hex_encode, url_encode } from "@stdlib/encoding";
+
+// Base64 encoding
+let b64 = base64_encode("Hello, World!");
+print(b64);  // "SGVsbG8sIFdvcmxkIQ=="
+
+// Hexadecimal encoding
+let hex = hex_encode("Hello");
+print(hex);  // "48656c6c6f"
+
+// URL encoding
+let url_param = url_encode("hello@example.com");
+print(url_param);  // "hello%40example.com"
+```
+
 ## Directory Structure
 
 ```
@@ -408,6 +439,7 @@ stdlib/
 ├── websocket_pure.hml  # WebSocket pure Hemlock implementation (educational)
 ├── json.hml            # JSON module (pure Hemlock)
 ├── strings.hml         # String utilities module (pure Hemlock)
+├── encoding.hml        # Encoding module (pure Hemlock)
 ├── c/                  # C FFI wrappers (compiled with 'make stdlib')
 │   └── lws_wrapper.c   # libwebsockets wrapper for HTTP/WebSocket
 └── docs/
@@ -422,7 +454,8 @@ stdlib/
     ├── http.md         # HTTP API reference
     ├── websocket.md    # WebSocket API reference
     ├── json.md         # JSON API reference
-    └── strings.md      # Strings API reference
+    ├── strings.md      # Strings API reference
+    └── encoding.md     # Encoding API reference
 ```
 
 ## JSON Serialization
@@ -444,7 +477,6 @@ print(parsed.name);  // "Alice"
 
 Planned additions to the standard library:
 - **path** - Path manipulation (join, basename, dirname, extname, normalize)
-- **encoding** - Base64, hex, URL encoding/decoding
 - **testing** - Test framework with describe/test/expect/assertions
 - **crypto** - Cryptographic functions (via FFI + OpenSSL)
 - **compression** - zlib/gzip compression (via FFI)
@@ -468,6 +500,7 @@ See `STDLIB_ANALYSIS_UPDATED.md` and `STDLIB_NETWORKING_DESIGN.md` for detailed 
 | websocket | ✅ Production (libwebsockets) | ✅ Complete | ✅ Good | 318 | High |
 | json | ✅ Comprehensive | ✅ Complete | ✅ Good | 550+ | High |
 | strings | ✅ Complete | ✅ Complete | ✅ Comprehensive | 293 | High |
+| encoding | ✅ Complete | ✅ Complete | ✅ Comprehensive | 370 | High |
 
 **Legend:**
 - ✅ Complete/Excellent

@@ -1,0 +1,179 @@
+// Test URL encoding and decoding
+
+import { url_encode, url_decode } from "@stdlib/encoding";
+
+// Test 1: Empty string
+let encoded1 = url_encode("");
+if (encoded1 != "") {
+    throw "Empty string should encode to empty string";
+}
+let decoded1 = url_decode("");
+if (decoded1 != "") {
+    throw "Empty string should decode to empty string";
+}
+print("✓ Test 1: Empty string");
+
+// Test 2: Safe characters (no encoding needed)
+let text2 = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_.~";
+let encoded2 = url_encode(text2);
+if (encoded2 != text2) {
+    throw "Safe characters should not be encoded, got: " + encoded2;
+}
+let decoded2 = url_decode(encoded2);
+if (decoded2 != text2) {
+    throw "Failed to decode safe characters";
+}
+print("✓ Test 2: Safe characters (unreserved)");
+
+// Test 3: Space encoding
+let text3 = "Hello World";
+let encoded3 = url_encode(text3);
+if (encoded3 != "Hello+World") {
+    throw "Space should encode to +, got: " + encoded3;
+}
+let decoded3 = url_decode(encoded3);
+if (decoded3 != text3) {
+    throw "Failed to decode space";
+}
+print("✓ Test 3: Space encoding");
+
+// Test 4: Space as %20
+let decoded4 = url_decode("Hello%20World");
+if (decoded4 != "Hello World") {
+    throw "Failed to decode %20 as space";
+}
+print("✓ Test 4: Space decoding (%20)");
+
+// Test 5: Special characters
+let text5 = "hello@example.com";
+let encoded5 = url_encode(text5);
+if (encoded5 != "hello%40example.com") {
+    throw "@ should encode to %40, got: " + encoded5;
+}
+let decoded5 = url_decode(encoded5);
+if (decoded5 != text5) {
+    throw "Failed to decode special characters";
+}
+print("✓ Test 5: Special characters (@)");
+
+// Test 6: Multiple special characters
+let text6 = "key=value&foo=bar";
+let encoded6 = url_encode(text6);
+let decoded6 = url_decode(encoded6);
+if (decoded6 != text6) {
+    throw "Failed round-trip for multiple special characters";
+}
+print("✓ Test 6: Multiple special characters");
+
+// Test 7: Punctuation
+let text7 = "Hello, World!";
+let encoded7 = url_encode(text7);
+let decoded7 = url_decode(encoded7);
+if (decoded7 != text7) {
+    throw "Failed round-trip for punctuation";
+}
+print("✓ Test 7: Punctuation");
+
+// Test 8: Symbols
+let text8 = "100% sure!";
+let encoded8 = url_encode(text8);
+if (!encoded8.contains("%25")) {
+    throw "% should be percent-encoded";
+}
+let decoded8 = url_decode(encoded8);
+if (decoded8 != text8) {
+    throw "Failed to decode percent sign";
+}
+print("✓ Test 8: Percent sign");
+
+// Test 9: Plus sign
+let text9 = "1+1=2";
+let encoded9 = url_encode(text9);
+let decoded9 = url_decode(encoded9);
+if (decoded9 != text9) {
+    throw "Failed round-trip for plus sign";
+}
+print("✓ Test 9: Plus sign");
+
+// Test 10: Slashes and query strings
+let text10 = "/path?query=value";
+let encoded10 = url_encode(text10);
+let decoded10 = url_decode(encoded10);
+if (decoded10 != text10) {
+    throw "Failed round-trip for slashes and query";
+}
+print("✓ Test 10: Slashes and query strings");
+
+// Test 11: Brackets
+let text11 = "[item]";
+let encoded11 = url_encode(text11);
+let decoded11 = url_decode(encoded11);
+if (decoded11 != text11) {
+    throw "Failed round-trip for brackets";
+}
+print("✓ Test 11: Brackets");
+
+// Test 12: Quotes
+let text12 = "He said \"hello\"";
+let encoded12 = url_encode(text12);
+let decoded12 = url_decode(encoded12);
+if (decoded12 != text12) {
+    throw "Failed round-trip for quotes";
+}
+print("✓ Test 12: Quotes");
+
+// Test 13: Hash and ampersand
+let text13 = "#tag&more";
+let encoded13 = url_encode(text13);
+let decoded13 = url_decode(encoded13);
+if (decoded13 != text13) {
+    throw "Failed round-trip for hash and ampersand";
+}
+print("✓ Test 13: Hash and ampersand");
+
+// Test 14: Newlines and tabs
+let text14 = "line1\nline2\ttab";
+let encoded14 = url_encode(text14);
+let decoded14 = url_decode(encoded14);
+if (decoded14 != text14) {
+    throw "Failed round-trip for newlines and tabs";
+}
+print("✓ Test 14: Newlines and tabs");
+
+// Test 15: Unicode characters
+let text15 = "Hello 世界";
+let encoded15 = url_encode(text15);
+let decoded15 = url_decode(encoded15);
+if (decoded15 != text15) {
+    throw "Failed round-trip for Unicode";
+}
+print("✓ Test 15: Unicode characters");
+
+// Test 16: Emoji
+let text16 = "Hello 🚀";
+let encoded16 = url_encode(text16);
+let decoded16 = url_decode(encoded16);
+if (decoded16 != text16) {
+    throw "Failed round-trip for emoji";
+}
+print("✓ Test 16: Emoji");
+
+// Test 17: Form data style
+let text17 = "name=John Doe&email=john@example.com";
+let encoded17 = url_encode(text17);
+let decoded17 = url_decode(encoded17);
+if (decoded17 != text17) {
+    throw "Failed round-trip for form data";
+}
+print("✓ Test 17: Form data style");
+
+// Test 18: Reserved characters (RFC 3986)
+let text18 = ":/?#[]@!$&'()*+,;=";
+let encoded18 = url_encode(text18);
+let decoded18 = url_decode(encoded18);
+if (decoded18 != text18) {
+    throw "Failed round-trip for reserved characters";
+}
+print("✓ Test 18: Reserved characters");
+
+print("\n✅ All URL encoding tests passed!");

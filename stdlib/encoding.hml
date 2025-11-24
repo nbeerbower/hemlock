@@ -1,0 +1,378 @@
+// @stdlib/encoding - Data encoding and decoding utilities
+//
+// Provides Base64, hexadecimal, and URL encoding/decoding for
+// data interchange and network protocols.
+//
+// Usage:
+//   import { base64_encode, base64_decode, hex_encode, hex_decode, url_encode, url_decode } from "@stdlib/encoding";
+
+// ============================================================================
+// Base64 Encoding
+// ============================================================================
+
+// Base64 encoding table (standard Base64 alphabet)
+let BASE64_CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+
+// Base64 padding character
+let BASE64_PAD = '=';
+
+// Encode string to Base64
+fn base64_encode(input): string {
+    if (typeof(input) != "string") {
+        throw "base64_encode() requires string argument";
+    }
+
+    // Convert string to bytes
+    let bytes = input.bytes();
+    let result = "";
+
+    let i = 0;
+    while (i < bytes.length) {
+        // Read 3 bytes (24 bits)
+        let b1 = bytes[i];
+        let b2: i32 = 0;
+        let b3: i32 = 0;
+
+        if (i + 1 < bytes.length) {
+            b2 = bytes[i + 1];
+        }
+        if (i + 2 < bytes.length) {
+            b3 = bytes[i + 2];
+        }
+
+        // Convert to 4 Base64 characters (6 bits each)
+        let idx1 = (b1 >> 2) & 63;
+        let idx2 = ((b1 & 3) << 4) | ((b2 >> 4) & 15);
+        let idx3 = ((b2 & 15) << 2) | ((b3 >> 6) & 3);
+        let idx4 = b3 & 63;
+
+        result = result + BASE64_CHARS[idx1];
+        result = result + BASE64_CHARS[idx2];
+
+        if (i + 1 < bytes.length) {
+            result = result + BASE64_CHARS[idx3];
+        } else {
+            result = result + BASE64_PAD;
+        }
+
+        if (i + 2 < bytes.length) {
+            result = result + BASE64_CHARS[idx4];
+        } else {
+            result = result + BASE64_PAD;
+        }
+
+        i = i + 3;
+    }
+
+    return result;
+}
+
+// Decode Base64 string to original string
+fn base64_decode(input): string {
+    if (typeof(input) != "string") {
+        throw "base64_decode() requires string argument";
+    }
+
+    // Remove whitespace
+    let clean = input.replace_all(" ", "").replace_all("\n", "").replace_all("\r", "").replace_all("\t", "");
+
+    // Validate length (must be multiple of 4)
+    if (clean.length % 4 != 0) {
+        throw "Invalid Base64 string: length must be multiple of 4";
+    }
+
+    // Build reverse lookup table
+    let lookup = {};
+    let i = 0;
+    while (i < BASE64_CHARS.length) {
+        let ch = BASE64_CHARS[i];
+        let ch_str: string = ch;  // Convert rune to string for object key
+        lookup[ch_str] = i;
+        i = i + 1;
+    }
+
+    // Decode
+    let bytes = [];
+    i = 0;
+    while (i < clean.length) {
+        let c1 = clean[i];
+        let c2 = clean[i + 1];
+        let c3 = clean[i + 2];
+        let c4 = clean[i + 3];
+
+        // Handle padding
+        if (c1 == BASE64_PAD || c2 == BASE64_PAD) {
+            throw "Invalid Base64 string: unexpected padding";
+        }
+
+        let c1_str: string = c1;
+        let c2_str: string = c2;
+        let v1 = lookup[c1_str];
+        let v2 = lookup[c2_str];
+
+        if (v1 == null || v2 == null) {
+            throw "Invalid Base64 string: invalid character";
+        }
+
+        // First byte is always present
+        let b1 = ((v1 << 2) | (v2 >> 4)) & 255;
+        bytes.push(b1);
+
+        // Second byte (if not padded)
+        if (c3 != BASE64_PAD) {
+            let c3_str: string = c3;
+            let v3 = lookup[c3_str];
+            if (v3 == null) {
+                throw "Invalid Base64 string: invalid character";
+            }
+            let b2 = ((v2 << 4) | (v3 >> 2)) & 255;
+            bytes.push(b2);
+        }
+
+        // Third byte (if not padded)
+        if (c4 != BASE64_PAD) {
+            let c3_str: string = c3;
+            let c4_str: string = c4;
+            let v3 = lookup[c3_str];
+            let v4 = lookup[c4_str];
+            if (v3 == null || v4 == null) {
+                throw "Invalid Base64 string: invalid character";
+            }
+            let b3 = ((v3 << 6) | v4) & 255;
+            bytes.push(b3);
+        }
+
+        i = i + 4;
+    }
+
+    // Convert bytes back to string
+    let result = "";
+    i = 0;
+    while (i < bytes.length) {
+        let byte_val: rune = bytes[i];
+        result = result + byte_val;
+        i = i + 1;
+    }
+
+    return result;
+}
+
+// ============================================================================
+// Hexadecimal Encoding
+// ============================================================================
+
+// Hex characters
+let HEX_CHARS = "0123456789abcdef";
+
+// Encode string to hexadecimal
+fn hex_encode(input): string {
+    if (typeof(input) != "string") {
+        throw "hex_encode() requires string argument";
+    }
+
+    let bytes = input.bytes();
+    let result = "";
+
+    let i = 0;
+    while (i < bytes.length) {
+        let b = bytes[i];
+        let high = (b >> 4) & 15;
+        let low = b & 15;
+        result = result + HEX_CHARS[high] + HEX_CHARS[low];
+        i = i + 1;
+    }
+
+    return result;
+}
+
+// Decode hexadecimal string to original string
+fn hex_decode(input): string {
+    if (typeof(input) != "string") {
+        throw "hex_decode() requires string argument";
+    }
+
+    // Remove whitespace
+    let clean = input.replace_all(" ", "").replace_all("\n", "").replace_all("\r", "").replace_all("\t", "");
+
+    // Validate length (must be even)
+    if (clean.length % 2 != 0) {
+        throw "Invalid hex string: length must be even";
+    }
+
+    // Convert to lowercase for easier parsing
+    clean = clean.to_lower();
+
+    let bytes = [];
+    let i = 0;
+    while (i < clean.length) {
+        let c1 = clean[i];
+        let c2 = clean[i + 1];
+
+        let v1 = hex_char_to_value(c1);
+        let v2 = hex_char_to_value(c2);
+
+        if (v1 == -1 || v2 == -1) {
+            throw "Invalid hex string: invalid character";
+        }
+
+        let byte_val = (v1 << 4) | v2;
+        bytes.push(byte_val);
+
+        i = i + 2;
+    }
+
+    // Convert bytes back to string
+    let result = "";
+    i = 0;
+    while (i < bytes.length) {
+        let byte_val: rune = bytes[i];
+        result = result + byte_val;
+        i = i + 1;
+    }
+
+    return result;
+}
+
+// Helper: Convert hex character to value (0-15)
+fn hex_char_to_value(ch: rune): i32 {
+    if (ch == '0') { return 0; }
+    if (ch == '1') { return 1; }
+    if (ch == '2') { return 2; }
+    if (ch == '3') { return 3; }
+    if (ch == '4') { return 4; }
+    if (ch == '5') { return 5; }
+    if (ch == '6') { return 6; }
+    if (ch == '7') { return 7; }
+    if (ch == '8') { return 8; }
+    if (ch == '9') { return 9; }
+    if (ch == 'a') { return 10; }
+    if (ch == 'b') { return 11; }
+    if (ch == 'c') { return 12; }
+    if (ch == 'd') { return 13; }
+    if (ch == 'e') { return 14; }
+    if (ch == 'f') { return 15; }
+    return -1;
+}
+
+// ============================================================================
+// URL Encoding (Percent Encoding)
+// ============================================================================
+
+// Helper: Convert byte/rune to single-character string
+fn byte_to_string(b): string {
+    let r: rune = b;
+    return "" + r;
+}
+
+// Check if character is safe for URLs (unreserved characters)
+fn is_url_safe(ch: rune): bool {
+    // Convert rune to integer for comparison
+    let code: i32 = ch;
+
+    // A-Z (65-90)
+    if (code >= 65 && code <= 90) { return true; }
+    // a-z (97-122)
+    if (code >= 97 && code <= 122) { return true; }
+    // 0-9 (48-57)
+    if (code >= 48 && code <= 57) { return true; }
+    // Unreserved characters: - (45) _ (95) . (46) ~ (126)
+    if (code == 45 || code == 95 || code == 46 || code == 126) { return true; }
+
+    return false;
+}
+
+// Encode string for use in URLs (percent-encoding)
+fn url_encode(input): string {
+    if (typeof(input) != "string") {
+        throw "url_encode() requires string argument";
+    }
+
+    let bytes = input.bytes();
+    let result = "";
+
+    let i = 0;
+    while (i < bytes.length) {
+        let b = bytes[i];
+        let ch: rune = b;
+
+        if (is_url_safe(ch)) {
+            // Safe character - add as-is
+            result = result + ch;
+        } else if (ch == ' ') {
+            // Space can be encoded as + or %20, we use +
+            result = result + '+';
+        } else {
+            // Percent-encode the byte
+            let high = (b >> 4) & 15;
+            let low = b & 15;
+            result = result + '%' + HEX_CHARS[high] + HEX_CHARS[low];
+        }
+
+        i = i + 1;
+    }
+
+    return result;
+}
+
+// Decode URL-encoded string (percent-decoding)
+fn url_decode(input): string {
+    if (typeof(input) != "string") {
+        throw "url_decode() requires string argument";
+    }
+
+    let bytes = [];
+    let i = 0;
+
+    while (i < input.length) {
+        let ch = input[i];
+
+        if (ch == '+') {
+            // + decodes to space
+            bytes.push(32);
+            i = i + 1;
+        } else if (ch == '%') {
+            // Percent-encoded byte
+            if (i + 2 >= input.length) {
+                throw "Invalid URL encoding: incomplete percent sequence";
+            }
+
+            let h1 = input[i + 1];
+            let h2 = input[i + 2];
+
+            let v1 = hex_char_to_value(h1);
+            let v2 = hex_char_to_value(h2);
+
+            if (v1 == -1 || v2 == -1) {
+                throw "Invalid URL encoding: invalid hex digits in percent sequence";
+            }
+
+            let byte_val = (v1 << 4) | v2;
+            bytes.push(byte_val);
+
+            i = i + 3;
+        } else {
+            // Regular character
+            let b: i32 = ch;
+            bytes.push(b);
+            i = i + 1;
+        }
+    }
+
+    // Convert bytes back to string
+    let result = "";
+    i = 0;
+    while (i < bytes.length) {
+        let byte_val: rune = bytes[i];
+        result = result + byte_val;
+        i = i + 1;
+    }
+
+    return result;
+}
+
+// ============================================================================
+// Export Note
+// ============================================================================
+
+// All functions are automatically exported when imported with:
+// import { function_name } from "@stdlib/encoding";
