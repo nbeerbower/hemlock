@@ -413,14 +413,14 @@ Comprehensive test suite available in `tests/stdlib_encoding/`:
 ./hemlock tests/stdlib_encoding/test_base64.hml
 ./hemlock tests/stdlib_encoding/test_hex.hml
 ./hemlock tests/stdlib_encoding/test_url.hml
-./hemlock tests/stdlib_encoding/test_errors.hml
+./hemlock tests/stdlib_encoding/test_validation.hml
 ```
 
 Test coverage:
 - ✅ 11 Base64 tests (empty, single char, padding, binary, UTF-8, round-trip)
 - ✅ 13 Hex tests (empty, case-insensitive, binary, whitespace, round-trip)
 - ✅ 18 URL tests (safe chars, space, special chars, Unicode, emoji, round-trip)
-- ✅ 10 Error handling tests (type checking, invalid input validation)
+- ✅ 10 Validation tests (type checking, invalid input validation)
 
 ---
 

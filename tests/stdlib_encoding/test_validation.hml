@@ -1,4 +1,4 @@
-// Test error handling in encoding module
+// Test input validation and error handling in encoding module
 
 import { base64_encode, base64_decode, hex_encode, hex_decode, url_encode, url_decode } from "@stdlib/encoding";
 
