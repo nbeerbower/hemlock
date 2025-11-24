@@ -2,7 +2,7 @@
 import { crc32, adler32, compress_bound } from "@stdlib/compression";
 
 // Helper to create buffer from string
-fn string_to_buffer(s: string): buffer {
+fn string_to_buffer(s) {
     let bytes = s.bytes();
     let buf = buffer(bytes.length);
     let i = 0;
@@ -46,10 +46,5 @@ print(bound > 1000);  // true (always larger than input for worst case)
 
 let bound2 = compress_bound(0);
 print(bound2 > 0);  // true (even empty input has some bound)
-
-// Cleanup
-free(data);
-free(data2);
-free(data3);
 
 print("Checksum tests passed!");

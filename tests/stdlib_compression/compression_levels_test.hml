@@ -37,10 +37,4 @@ print(restored_none == restored_fast);  // true
 print(restored_fast == restored_default);  // true
 print(restored_default == restored_best);  // true
 
-// Cleanup
-free(compressed_none);
-free(compressed_fast);
-free(compressed_default);
-free(compressed_best);
-
 print("Compression levels tests passed!");

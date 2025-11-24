@@ -31,7 +31,7 @@ export let LEVEL_BEST = 9;
 // Compress data using raw deflate format
 // Returns buffer containing compressed data
 // level: compression level (0-9, default 6)
-export fn deflate_compress(data: string, level?: 6): buffer {
+export fn deflate_compress(data: string, level?: 6) {
     if (typeof(data) != "string") {
         throw "deflate_compress() requires string argument";
     }
@@ -41,7 +41,7 @@ export fn deflate_compress(data: string, level?: 6): buffer {
 // Decompress raw deflate data
 // Returns decompressed string
 // max_size: maximum expected output size (default 10MB)
-export fn inflate_decompress(data: buffer, max_size?: 10485760): string {
+export fn inflate_decompress(data, max_size?: 10485760) {
     if (typeof(data) != "buffer") {
         throw "inflate_decompress() requires buffer argument";
     }
@@ -55,7 +55,7 @@ export fn inflate_decompress(data: buffer, max_size?: 10485760): string {
 // Compress data to gzip format
 // Returns buffer containing gzip-compressed data
 // level: compression level (0-9, default 6)
-export fn gzip(data: string, level?: 6): buffer {
+export fn gzip(data: string, level?: 6) {
     if (typeof(data) != "string") {
         throw "gzip() requires string argument";
     }
@@ -65,7 +65,7 @@ export fn gzip(data: string, level?: 6): buffer {
 // Decompress gzip data
 // Returns decompressed string
 // max_size: maximum expected output size (default 10MB)
-export fn gunzip(data: buffer, max_size?: 10485760): string {
+export fn gunzip(data, max_size?: 10485760) {
     if (typeof(data) != "buffer") {
         throw "gunzip() requires buffer argument";
     }
@@ -77,22 +77,22 @@ export fn gunzip(data: buffer, max_size?: 10485760): string {
 // ============================================================================
 
 // Alias for deflate_compress
-export fn compress(data: string, level?: 6): buffer {
+export fn compress(data: string, level?: 6) {
     return deflate_compress(data, level);
 }
 
 // Alias for inflate_decompress
-export fn decompress(data: buffer, max_size?: 10485760): string {
+export fn decompress(data, max_size?: 10485760) {
     return inflate_decompress(data, max_size);
 }
 
 // Calculate maximum compressed size for given input length
-export fn compress_bound(source_len: i64): i64 {
+export fn compress_bound(source_len: i64) {
     return __zlib_compress_bound(source_len);
 }
 
 // Calculate CRC32 checksum of buffer data
-export fn crc32(data: buffer): u32 {
+export fn crc32(data) {
     if (typeof(data) != "buffer") {
         throw "crc32() requires buffer argument";
     }
@@ -100,7 +100,7 @@ export fn crc32(data: buffer): u32 {
 }
 
 // Calculate Adler-32 checksum of buffer data
-export fn adler32(data: buffer): u32 {
+export fn adler32(data) {
     if (typeof(data) != "buffer") {
         throw "adler32() requires buffer argument";
     }
@@ -148,13 +148,16 @@ define TarEntry {
 }
 
 // Helper: Convert string to octal number
-fn octal_to_int(s: string): i64 {
+fn octal_to_int(s) {
     let result: i64 = 0;
     let i = 0;
     while (i < s.length) {
         let ch = s.char_at(i);
         if (ch >= '0' && ch <= '7') {
-            result = result * 8 + (ch - '0');
+            // Convert rune to digit: first convert to i32, then subtract
+            let code: i32 = ch;
+            let digit: i32 = code - 48;
+            result = result * 8 + digit;
         } else if (ch == ' ' || ch == '\0') {
             // Skip padding
         } else {
@@ -166,7 +169,7 @@ fn octal_to_int(s: string): i64 {
 }
 
 // Helper: Convert integer to octal string with padding
-fn int_to_octal(val: i64, width: i32): string {
+fn int_to_octal(val, width) {
     if (val == 0) {
         let result = "0";
         while (result.length < width - 1) {
@@ -178,8 +181,10 @@ fn int_to_octal(val: i64, width: i32): string {
     let result = "";
     let v = val;
     while (v > 0) {
-        let digit: i32 = v % 8;
-        result = typeof(digit) + result;
+        let digit = v % 8;
+        // Convert digit to character by adding '0'
+        let ch: rune = 48 + digit;  // 48 is ASCII '0'
+        result = ch + result;
         v = v / 8;
     }
 
@@ -192,7 +197,7 @@ fn int_to_octal(val: i64, width: i32): string {
 }
 
 // Helper: Extract null-terminated string from buffer
-fn extract_string(buf: buffer, offset: i64, max_len: i32): string {
+fn extract_string(buf, offset, max_len) {
     let result = "";
     let i = 0;
     while (i < max_len) {
@@ -208,10 +213,11 @@ fn extract_string(buf: buffer, offset: i64, max_len: i32): string {
 }
 
 // Calculate tar header checksum
-fn tar_checksum(header: buffer): i32 {
+fn tar_checksum(header) {
+    let BLOCK_SIZE = 512;
     let sum: i32 = 0;
     let i = 0;
-    while (i < TAR_BLOCK_SIZE) {
+    while (i < BLOCK_SIZE) {
         // For checksum calculation, treat checksum field (offset 148-155) as spaces
         if (i >= 148 && i < 156) {
             sum = sum + 32;  // ' '
@@ -224,12 +230,18 @@ fn tar_checksum(header: buffer): i32 {
 }
 
 // Create a TarWriter for building tar archives
-export fn TarWriter(): object {
+export fn TarWriter() {
+    // Define constants locally to ensure closure capture
+    let BLOCK_SIZE = 512;
+    let NAME_SIZE = 100;
+    let MODE_SIZE = 8;
+    let SIZE_SIZE = 12;
+
     let entries: array = [];
 
     return {
         // Add a file to the archive
-        add_file: fn(name: string, content: string, mode?: 420): null {
+        add_file: fn(name: string, content: string, mode?: 420) {
             // 420 = 0644 octal
             let entry: TarEntry = {
                 name: name,
@@ -244,7 +256,7 @@ export fn TarWriter(): object {
         },
 
         // Add a directory to the archive
-        add_directory: fn(name: string, mode?: 493): null {
+        add_directory: fn(name: string, mode?: 493) {
             // 493 = 0755 octal
             let dir_name = name;
             if (!name.ends_with("/")) {
@@ -263,20 +275,20 @@ export fn TarWriter(): object {
         },
 
         // Build the tar archive and return as buffer
-        build: fn(): buffer {
+        build: fn() {
             // Calculate total size
             let total_size: i64 = 0;
             let i = 0;
             while (i < entries.length) {
                 let entry: TarEntry = entries[i];
-                total_size = total_size + TAR_BLOCK_SIZE;  // Header
+                total_size = total_size + BLOCK_SIZE;  // Header
                 // Round content up to block size
-                let content_blocks = (entry.size + TAR_BLOCK_SIZE - 1) / TAR_BLOCK_SIZE;
-                total_size = total_size + content_blocks * TAR_BLOCK_SIZE;
+                let content_blocks = (entry.size + BLOCK_SIZE - 1) / BLOCK_SIZE;
+                total_size = total_size + content_blocks * BLOCK_SIZE;
                 i = i + 1;
             }
             // Add two empty blocks at end
-            total_size = total_size + TAR_BLOCK_SIZE * 2;
+            total_size = total_size + BLOCK_SIZE * 2;
 
             // Allocate output buffer
             let output = buffer(total_size);
@@ -288,9 +300,9 @@ export fn TarWriter(): object {
                 let entry: TarEntry = entries[i];
 
                 // Create header block (512 bytes)
-                let header = buffer(TAR_BLOCK_SIZE);
+                let header = buffer(BLOCK_SIZE);
                 let h: i64 = 0;
-                while (h < TAR_BLOCK_SIZE) {
+                while (h < BLOCK_SIZE) {
                     header[h] = 0;
                     h = h + 1;
                 }
@@ -298,16 +310,16 @@ export fn TarWriter(): object {
                 // Name (offset 0, 100 bytes)
                 let name_bytes = entry.name.bytes();
                 let j = 0;
-                while (j < name_bytes.length && j < TAR_NAME_SIZE) {
+                while (j < name_bytes.length && j < NAME_SIZE) {
                     header[j] = name_bytes[j];
                     j = j + 1;
                 }
 
                 // Mode (offset 100, 8 bytes) - octal string
-                let mode_str = int_to_octal(entry.mode, TAR_MODE_SIZE);
+                let mode_str = int_to_octal(entry.mode, MODE_SIZE);
                 let mode_bytes = mode_str.bytes();
                 j = 0;
-                while (j < mode_bytes.length && j < TAR_MODE_SIZE - 1) {
+                while (j < mode_bytes.length && j < MODE_SIZE - 1) {
                     header[100 + j] = mode_bytes[j];
                     j = j + 1;
                 }
@@ -323,10 +335,10 @@ export fn TarWriter(): object {
                 header[122] = 48;
 
                 // Size (offset 124, 12 bytes) - octal string
-                let size_str = int_to_octal(entry.size, TAR_SIZE_SIZE);
+                let size_str = int_to_octal(entry.size, SIZE_SIZE);
                 let size_bytes = size_str.bytes();
                 j = 0;
-                while (j < size_bytes.length && j < TAR_SIZE_SIZE - 1) {
+                while (j < size_bytes.length && j < SIZE_SIZE - 1) {
                     header[124 + j] = size_bytes[j];
                     j = j + 1;
                 }
@@ -369,11 +381,11 @@ export fn TarWriter(): object {
 
                 // Copy header to output
                 j = 0;
-                while (j < TAR_BLOCK_SIZE) {
+                while (j < BLOCK_SIZE) {
                     output[offset + j] = header[j];
                     j = j + 1;
                 }
-                offset = offset + TAR_BLOCK_SIZE;
+                offset = offset + BLOCK_SIZE;
 
                 // Copy content
                 if (entry.size > 0) {
@@ -384,11 +396,10 @@ export fn TarWriter(): object {
                         j = j + 1;
                     }
                     // Pad to block boundary
-                    let content_blocks = (entry.size + TAR_BLOCK_SIZE - 1) / TAR_BLOCK_SIZE;
-                    offset = offset + content_blocks * TAR_BLOCK_SIZE;
+                    let content_blocks = (entry.size + BLOCK_SIZE - 1) / BLOCK_SIZE;
+                    offset = offset + content_blocks * BLOCK_SIZE;
                 }
 
-                free(header);
                 i = i + 1;
             }
 
@@ -398,24 +409,30 @@ export fn TarWriter(): object {
         },
 
         // Get number of entries
-        count: fn(): i32 {
+        count: fn() {
             return entries.length;
         },
     };
 }
 
 // Create a TarReader for reading tar archives
-export fn TarReader(data: buffer): object {
+export fn TarReader(data) {
+    // Define constants locally to ensure visibility
+    let BLOCK_SIZE = 512;
+    let NAME_SIZE = 100;
+    let MODE_SIZE = 8;
+    let SIZE_SIZE = 12;
+
     let entries: array = [];
     let offset: i64 = 0;
     let data_len: i64 = data.length;
 
     // Parse all entries
-    while (offset + TAR_BLOCK_SIZE <= data_len) {
+    while (offset + BLOCK_SIZE <= data_len) {
         // Check for end-of-archive (two empty blocks)
         let is_empty = true;
         let k = 0;
-        while (k < TAR_BLOCK_SIZE && is_empty) {
+        while (k < BLOCK_SIZE && is_empty) {
             if (data[offset + k] != 0) {
                 is_empty = false;
             }
@@ -427,9 +444,9 @@ export fn TarReader(data: buffer): object {
         }
 
         // Parse header
-        let name = extract_string(data, offset, TAR_NAME_SIZE);
-        let mode_str = extract_string(data, offset + 100, TAR_MODE_SIZE);
-        let size_str = extract_string(data, offset + 124, TAR_SIZE_SIZE);
+        let name = extract_string(data, offset, NAME_SIZE);
+        let mode_str = extract_string(data, offset + 100, MODE_SIZE);
+        let size_str = extract_string(data, offset + 124, SIZE_SIZE);
         let typeflag: rune = data[offset + 156];
 
         // Parse size
@@ -437,7 +454,7 @@ export fn TarReader(data: buffer): object {
         let mode = octal_to_int(mode_str);
 
         // Move past header
-        offset = offset + TAR_BLOCK_SIZE;
+        offset = offset + BLOCK_SIZE;
 
         // Read content
         let content = "";
@@ -450,8 +467,8 @@ export fn TarReader(data: buffer): object {
                 i = i + 1;
             }
             // Skip content blocks
-            let content_blocks = (size + TAR_BLOCK_SIZE - 1) / TAR_BLOCK_SIZE;
-            offset = offset + content_blocks * TAR_BLOCK_SIZE;
+            let content_blocks = (size + BLOCK_SIZE - 1) / BLOCK_SIZE;
+            offset = offset + content_blocks * BLOCK_SIZE;
         }
 
         // Handle legacy typeflag (null or '0' both mean regular file)
@@ -472,17 +489,17 @@ export fn TarReader(data: buffer): object {
 
     return {
         // Get all entries
-        entries: fn(): array {
+        entries: fn() {
             return entries;
         },
 
         // Get number of entries
-        count: fn(): i32 {
+        count: fn() {
             return entries.length;
         },
 
         // Get entry by name
-        get: fn(name: string): object {
+        get: fn(name: string) {
             let i = 0;
             while (i < entries.length) {
                 let entry: TarEntry = entries[i];
@@ -495,7 +512,7 @@ export fn TarReader(data: buffer): object {
         },
 
         // List all file names
-        list: fn(): array {
+        list: fn() {
             let names: array = [];
             let i = 0;
             while (i < entries.length) {
@@ -507,7 +524,7 @@ export fn TarReader(data: buffer): object {
         },
 
         // Check if archive contains entry
-        contains: fn(name: string): bool {
+        contains: fn(name: string) {
             let i = 0;
             while (i < entries.length) {
                 let entry: TarEntry = entries[i];
@@ -538,7 +555,7 @@ fn string_to_buffer(s: string): buffer {
 }
 
 // Compress a file to gzip format
-export fn gzip_file(input_path: string, output_path: string, level?: 6): null {
+export fn gzip_file(input_path: string, output_path: string, level?: 6) {
     let file = open(input_path, "r");
     let content = file.read();
     file.close();
@@ -554,7 +571,7 @@ export fn gzip_file(input_path: string, output_path: string, level?: 6): null {
 }
 
 // Decompress a gzip file
-export fn gunzip_file(input_path: string, output_path: string, max_size?: 10485760): null {
+export fn gunzip_file(input_path: string, output_path: string, max_size?: 10485760) {
     let file = open(input_path, "r");
     let content = file.read();
     file.close();

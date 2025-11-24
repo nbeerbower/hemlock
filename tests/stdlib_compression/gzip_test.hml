@@ -25,9 +25,4 @@ let compressed3 = gzip(original3, 1);
 let restored3 = gunzip(compressed3);
 print(restored3 == original3);  // true
 
-// Cleanup
-free(compressed);
-free(compressed2);
-free(compressed3);
-
 print("Gzip tests passed!");
