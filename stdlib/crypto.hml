@@ -199,20 +199,39 @@ export fn aes_encrypt(plaintext, key, iv) {
     // NOTE: Buffers can be passed directly to extern functions expecting ptr
     // Hemlock handles the conversion automatically
 
+    // Validate inputs
+    if (key.length != 32) {
+        throw "aes_encrypt() requires 32-byte (256-bit) key";
+    }
+    if (iv.length != 16) {
+        throw "aes_encrypt() requires 16-byte (128-bit) iv";
+    }
+
     // Convert plaintext to bytes
     let plaintext_bytes = string_to_bytes(plaintext);
     let plaintext_len = plaintext_bytes.length;
 
+    // Convert buffers to raw pointers for OpenSSL
+    let plaintext_ptr = buffer_to_ptr(plaintext_bytes);
+    let key_ptr = buffer_to_ptr(key);
+    let iv_ptr = buffer_to_ptr(iv);
+
     // Create cipher context
     let ctx = EVP_CIPHER_CTX_new();
     if (ctx == null) {
+        free(plaintext_ptr);
+        free(key_ptr);
+        free(iv_ptr);
         throw "Failed to create cipher context";
     }
 
-    // Initialize encryption - pass buffers directly
+    // Initialize encryption - use raw pointers
     let cipher = EVP_aes_256_cbc();
-    let result = EVP_EncryptInit_ex(ctx, cipher, null, key, iv);
+    let result = EVP_EncryptInit_ex(ctx, cipher, null, key_ptr, iv_ptr);
     if (result != 1) {
+        free(plaintext_ptr);
+        free(key_ptr);
+        free(iv_ptr);
         EVP_CIPHER_CTX_free(ctx);
         throw "EVP_EncryptInit_ex() failed";
     }
@@ -222,9 +241,12 @@ export fn aes_encrypt(plaintext, key, iv) {
     let ciphertext = alloc(max_output_len);
     let outlen_ptr = alloc(4);  // int* for output length
 
-    // Encrypt - pass buffer directly
-    result = EVP_EncryptUpdate(ctx, ciphertext, outlen_ptr, plaintext_bytes, plaintext_len);
+    // Encrypt - use raw pointer
+    result = EVP_EncryptUpdate(ctx, ciphertext, outlen_ptr, plaintext_ptr, plaintext_len);
     if (result != 1) {
+        free(plaintext_ptr);
+        free(key_ptr);
+        free(iv_ptr);
         free(ciphertext);
         free(outlen_ptr);
         EVP_CIPHER_CTX_free(ctx);
@@ -239,6 +261,9 @@ export fn aes_encrypt(plaintext, key, iv) {
     let final_len_ptr = alloc(4);
     result = EVP_EncryptFinal_ex(ctx, final_ptr, final_len_ptr);
     if (result != 1) {
+        free(plaintext_ptr);
+        free(key_ptr);
+        free(iv_ptr);
         free(ciphertext);
         free(outlen_ptr);
         free(final_len_ptr);
@@ -264,6 +289,9 @@ export fn aes_encrypt(plaintext, key, iv) {
     }
 
     // Cleanup
+    free(plaintext_ptr);
+    free(key_ptr);
+    free(iv_ptr);
     free(ciphertext);
     free(outlen_ptr);
     free(final_len_ptr);
@@ -281,18 +309,37 @@ export fn aes_decrypt(ciphertext, key, iv) {
     // NOTE: Buffers can be passed directly to extern functions expecting ptr
     // Hemlock handles the conversion automatically
 
+    // Validate inputs
+    if (key.length != 32) {
+        throw "aes_decrypt() requires 32-byte (256-bit) key";
+    }
+    if (iv.length != 16) {
+        throw "aes_decrypt() requires 16-byte (128-bit) iv";
+    }
+
     let ciphertext_len = ciphertext.length;
+
+    // Convert buffers to raw pointers for OpenSSL
+    let ciphertext_ptr = buffer_to_ptr(ciphertext);
+    let key_ptr = buffer_to_ptr(key);
+    let iv_ptr = buffer_to_ptr(iv);
 
     // Create cipher context
     let ctx = EVP_CIPHER_CTX_new();
     if (ctx == null) {
+        free(ciphertext_ptr);
+        free(key_ptr);
+        free(iv_ptr);
         throw "Failed to create cipher context";
     }
 
-    // Initialize decryption - pass buffers directly
+    // Initialize decryption - use raw pointers
     let cipher = EVP_aes_256_cbc();
-    let result = EVP_DecryptInit_ex(ctx, cipher, null, key, iv);
+    let result = EVP_DecryptInit_ex(ctx, cipher, null, key_ptr, iv_ptr);
     if (result != 1) {
+        free(ciphertext_ptr);
+        free(key_ptr);
+        free(iv_ptr);
         EVP_CIPHER_CTX_free(ctx);
         throw "EVP_DecryptInit_ex() failed";
     }
@@ -302,9 +349,12 @@ export fn aes_decrypt(ciphertext, key, iv) {
     let plaintext = alloc(max_output_len);
     let outlen_ptr = alloc(4);
 
-    // Decrypt - pass buffer directly
-    result = EVP_DecryptUpdate(ctx, plaintext, outlen_ptr, ciphertext, ciphertext_len);
+    // Decrypt - use raw pointer for ciphertext
+    result = EVP_DecryptUpdate(ctx, plaintext, outlen_ptr, ciphertext_ptr, ciphertext_len);
     if (result != 1) {
+        free(ciphertext_ptr);
+        free(key_ptr);
+        free(iv_ptr);
         free(plaintext);
         free(outlen_ptr);
         EVP_CIPHER_CTX_free(ctx);
@@ -319,6 +369,9 @@ export fn aes_decrypt(ciphertext, key, iv) {
     let final_len_ptr = alloc(4);
     result = EVP_DecryptFinal_ex(ctx, final_ptr, final_len_ptr);
     if (result != 1) {
+        free(ciphertext_ptr);
+        free(key_ptr);
+        free(iv_ptr);
         free(plaintext);
         free(outlen_ptr);
         free(final_len_ptr);
@@ -354,6 +407,9 @@ export fn aes_decrypt(ciphertext, key, iv) {
     }
 
     // Cleanup
+    free(ciphertext_ptr);
+    free(key_ptr);
+    free(iv_ptr);
     free(plaintext);
     free(outlen_ptr);
     free(final_len_ptr);
