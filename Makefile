@@ -48,13 +48,31 @@ $(BUILD_DIR)/%.o: $(SRC_DIR)/%.c | $(BUILD_DIR)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 clean:
-	rm -rf $(BUILD_DIR) $(TARGET)
+	rm -rf $(BUILD_DIR) $(TARGET) stdlib/c/*.so
 
 run: $(TARGET)
 	./$(TARGET)
 
-test: $(TARGET)
+test: $(TARGET) stdlib
 	@bash tests/run_tests.sh
+
+# ========== STDLIB C MODULES ==========
+
+# Build stdlib C modules (lws_wrapper.so for HTTP/WebSocket)
+.PHONY: stdlib
+stdlib:
+ifeq ($(HAS_LIBWEBSOCKETS),1)
+	@echo "Building stdlib/c/lws_wrapper.so..."
+	$(CC) -shared -fPIC -o stdlib/c/lws_wrapper.so stdlib/c/lws_wrapper.c -lwebsockets
+	@echo "✓ lws_wrapper.so built successfully"
+else
+	@echo "⊘ Skipping lws_wrapper.so (libwebsockets not installed)"
+endif
+
+# Clean stdlib builds
+.PHONY: stdlib-clean
+stdlib-clean:
+	rm -f stdlib/c/*.so
 
 # ========== VALGRIND MEMORY LEAK CHECKING ==========
 
