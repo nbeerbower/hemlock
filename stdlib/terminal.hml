@@ -73,27 +73,27 @@ export let RESET_HIDDEN = ESC + "[28m";
 
 // Move cursor to position (1-indexed)
 export fn move_to(row: i32, col: i32): string {
-    return esc(typeof(row) + ";" + typeof(col) + "H");
+    return esc(("" + row) + ";" + ("" + col) + "H");
 }
 
 // Move cursor up by n lines
 export fn move_up(n: i32): string {
-    return esc(typeof(n) + "A");
+    return esc(("" + n) + "A");
 }
 
 // Move cursor down by n lines
 export fn move_down(n: i32): string {
-    return esc(typeof(n) + "B");
+    return esc(("" + n) + "B");
 }
 
 // Move cursor forward (right) by n columns
 export fn move_right(n: i32): string {
-    return esc(typeof(n) + "C");
+    return esc(("" + n) + "C");
 }
 
 // Move cursor backward (left) by n columns
 export fn move_left(n: i32): string {
-    return esc(typeof(n) + "D");
+    return esc(("" + n) + "D");
 }
 
 // Save cursor position
@@ -130,12 +130,12 @@ export let CLEAR_LINE_TO_START = ESC + "[1K";
 
 // Scroll up by n lines
 export fn scroll_up(n: i32): string {
-    return esc(typeof(n) + "S");
+    return esc(("" + n) + "S");
 }
 
 // Scroll down by n lines
 export fn scroll_down(n: i32): string {
-    return esc(typeof(n) + "T");
+    return esc(("" + n) + "T");
 }
 
 // ========== COLOR HELPERS ==========
@@ -152,20 +152,20 @@ export fn color_bg(text: string, fg: string, bg: string): string {
 
 // RGB color support (24-bit true color)
 export fn rgb(r: i32, g: i32, b: i32): string {
-    return esc("38;2;" + typeof(r) + ";" + typeof(g) + ";" + typeof(b) + "m");
+    return esc("38;2;" + ("" + r) + ";" + ("" + g) + ";" + ("" + b) + "m");
 }
 
 export fn bg_rgb(r: i32, g: i32, b: i32): string {
-    return esc("48;2;" + typeof(r) + ";" + typeof(g) + ";" + typeof(b) + "m");
+    return esc("48;2;" + ("" + r) + ";" + ("" + g) + ";" + ("" + b) + "m");
 }
 
 // 256-color palette support
 export fn color_256(n: i32): string {
-    return esc("38;5;" + typeof(n) + "m");
+    return esc("38;5;" + ("" + n) + "m");
 }
 
 export fn bg_color_256(n: i32): string {
-    return esc("48;5;" + typeof(n) + "m");
+    return esc("48;5;" + ("" + n) + "m");
 }
 
 // ========== TERMINAL INFO ==========
@@ -295,7 +295,7 @@ export fn ProgressBar(total: i32, width?: 40) {
             bar = bar + "]";
 
             // Format percentage
-            let percent_str = typeof(percent);
+            let percent_str = ("" + percent);
             if (percent_str.length < 5) {
                 let decimal_pos = percent_str.find(".");
                 if (decimal_pos >= 0) {
@@ -304,7 +304,7 @@ export fn ProgressBar(total: i32, width?: 40) {
             }
 
             // Print with carriage return to overwrite
-            exec("printf '\r" + bar + " " + percent_str + "%% " + typeof(current) + "/" + typeof(total) + "'");
+            exec("printf '\r" + bar + " " + percent_str + "%% " + ("" + current) + "/" + ("" + total) + "'");
             return null;
         },
 
