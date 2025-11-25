@@ -223,8 +223,13 @@ int main(int argc, char **argv) {
     if (opts.c_output) {
         c_file = (char*)opts.c_output;
     } else if (opts.emit_c_only) {
-        c_file = make_c_filename(opts.input_file);
-        c_file_allocated = 1;
+        // When -c is used with -o, use the output file as C output
+        if (strcmp(opts.output_file, "a.out") != 0) {
+            c_file = (char*)opts.output_file;
+        } else {
+            c_file = make_c_filename(opts.input_file);
+            c_file_allocated = 1;
+        }
     } else {
         // Generate temp file
         c_file = strdup("/tmp/hemlock_XXXXXX");

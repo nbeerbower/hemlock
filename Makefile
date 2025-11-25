@@ -191,12 +191,7 @@ fullclean: clean compiler-clean runtime-clean
 # Build everything (interpreter + compiler + runtime)
 all-compiler: all compiler
 
-# Test compiled output
+# Run compiler test suite
 .PHONY: test-compiler
 test-compiler: compiler
-	@echo "Testing compiler with simple program..."
-	@echo 'let x = 42; print(x);' > /tmp/test_compiler.hml
-	./$(COMPILER_TARGET) -c /tmp/test_compiler.hml -o /tmp/test_compiler.c
-	@echo "Generated C code:"
-	@cat /tmp/test_compiler.c
-	@rm -f /tmp/test_compiler.hml /tmp/test_compiler.c
+	@bash tests/compiler/run_compiler_tests.sh
