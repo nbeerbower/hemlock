@@ -221,10 +221,22 @@ static int compile_c(const Options *opts, const char *c_file) {
         }
     }
 
+    // Build link command
+    // Check if zlib is available by looking for the library
+    char zlib_flag[16] = "";
+    FILE *zcheck = popen("pkg-config --exists zlib 2>/dev/null && echo yes || ([ -f /usr/lib/libz.so ] || [ -f /usr/lib/x86_64-linux-gnu/libz.so ] || [ -f /usr/lib/libz.a ]) && echo yes", "r");
+    if (zcheck) {
+        char zbuf[8] = {0};
+        if (fgets(zbuf, sizeof(zbuf), zcheck) && strstr(zbuf, "yes")) {
+            strcpy(zlib_flag, " -lz");
+        }
+        pclose(zcheck);
+    }
+
     snprintf(cmd, sizeof(cmd),
-        "%s %s -o %s %s -I%s/runtime/include -L%s -lhemlock_runtime -lm -lpthread -lffi -ldl -lz",
+        "%s %s -o %s %s -I%s/runtime/include -L%s -lhemlock_runtime -lm -lpthread -lffi -ldl%s",
         opts->cc, opt_flag, opts->output_file, c_file,
-        runtime_path, runtime_path);
+        runtime_path, runtime_path, zlib_flag);
 
     if (opts->verbose) {
         printf("Running: %s\n", cmd);

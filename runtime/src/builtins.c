@@ -22,7 +22,10 @@
 #include <dlfcn.h>
 #include <ffi.h>
 #include <pwd.h>
+
+#ifdef HML_HAVE_ZLIB
 #include <zlib.h>
+#endif
 
 #ifdef __linux__
 #include <sys/sysinfo.h>
@@ -4499,6 +4502,8 @@ HmlValue hml_ffi_call(void *func_ptr, HmlValue *args, int num_args, HmlFFIType *
 
 // ========== COMPRESSION OPERATIONS ==========
 
+#ifdef HML_HAVE_ZLIB
+
 // zlib_compress(data: string, level: i32) -> buffer
 HmlValue hml_zlib_compress(HmlValue data, HmlValue level_val) {
     if (data.type != HML_VAL_STRING || !data.as.as_string) {
@@ -4814,6 +4819,88 @@ HmlValue hml_builtin_adler32(HmlClosureEnv *env, HmlValue data) {
     (void)env;
     return hml_adler32_val(data);
 }
+
+#else /* !HML_HAVE_ZLIB */
+
+// Stub implementations when zlib is not available
+HmlValue hml_zlib_compress(HmlValue data, HmlValue level_val) {
+    (void)data; (void)level_val;
+    fprintf(stderr, "Runtime error: zlib_compress() not available - zlib not installed\n");
+    exit(1);
+}
+
+HmlValue hml_zlib_decompress(HmlValue data, HmlValue max_size_val) {
+    (void)data; (void)max_size_val;
+    fprintf(stderr, "Runtime error: zlib_decompress() not available - zlib not installed\n");
+    exit(1);
+}
+
+HmlValue hml_gzip_compress(HmlValue data, HmlValue level_val) {
+    (void)data; (void)level_val;
+    fprintf(stderr, "Runtime error: gzip_compress() not available - zlib not installed\n");
+    exit(1);
+}
+
+HmlValue hml_gzip_decompress(HmlValue data, HmlValue max_size_val) {
+    (void)data; (void)max_size_val;
+    fprintf(stderr, "Runtime error: gzip_decompress() not available - zlib not installed\n");
+    exit(1);
+}
+
+HmlValue hml_zlib_compress_bound(HmlValue source_len_val) {
+    (void)source_len_val;
+    fprintf(stderr, "Runtime error: zlib_compress_bound() not available - zlib not installed\n");
+    exit(1);
+}
+
+HmlValue hml_crc32_val(HmlValue data) {
+    (void)data;
+    fprintf(stderr, "Runtime error: crc32() not available - zlib not installed\n");
+    exit(1);
+}
+
+HmlValue hml_adler32_val(HmlValue data) {
+    (void)data;
+    fprintf(stderr, "Runtime error: adler32() not available - zlib not installed\n");
+    exit(1);
+}
+
+HmlValue hml_builtin_zlib_compress(HmlClosureEnv *env, HmlValue data, HmlValue level) {
+    (void)env;
+    return hml_zlib_compress(data, level);
+}
+
+HmlValue hml_builtin_zlib_decompress(HmlClosureEnv *env, HmlValue data, HmlValue max_size) {
+    (void)env;
+    return hml_zlib_decompress(data, max_size);
+}
+
+HmlValue hml_builtin_gzip_compress(HmlClosureEnv *env, HmlValue data, HmlValue level) {
+    (void)env;
+    return hml_gzip_compress(data, level);
+}
+
+HmlValue hml_builtin_gzip_decompress(HmlClosureEnv *env, HmlValue data, HmlValue max_size) {
+    (void)env;
+    return hml_gzip_decompress(data, max_size);
+}
+
+HmlValue hml_builtin_zlib_compress_bound(HmlClosureEnv *env, HmlValue source_len) {
+    (void)env;
+    return hml_zlib_compress_bound(source_len);
+}
+
+HmlValue hml_builtin_crc32(HmlClosureEnv *env, HmlValue data) {
+    (void)env;
+    return hml_crc32_val(data);
+}
+
+HmlValue hml_builtin_adler32(HmlClosureEnv *env, HmlValue data) {
+    (void)env;
+    return hml_adler32_val(data);
+}
+
+#endif /* HML_HAVE_ZLIB */
 
 // ========== INTERNAL HELPER OPERATIONS ==========
 

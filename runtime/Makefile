@@ -2,7 +2,14 @@
 
 CC = gcc
 CFLAGS = -Wall -Wextra -std=c11 -g -fPIC -Iinclude -D_POSIX_C_SOURCE=200809L -D_DEFAULT_SOURCE
-LDFLAGS = -lm -lpthread -lz
+LDFLAGS = -lm -lpthread
+
+# Check if zlib is available
+ZLIB_CHECK := $(shell echo '\#include <zlib.h>' | $(CC) -E - >/dev/null 2>&1 && echo yes)
+ifeq ($(ZLIB_CHECK),yes)
+    CFLAGS += -DHML_HAVE_ZLIB
+    LDFLAGS += -lz
+endif
 
 SRC_DIR = src
 BUILD_DIR = build
