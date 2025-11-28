@@ -4,8 +4,8 @@ CC = gcc
 CFLAGS = -Wall -Wextra -std=c11 -g -fPIC -Iinclude -D_POSIX_C_SOURCE=200809L -D_DEFAULT_SOURCE
 LDFLAGS = -lm -lpthread
 
-# Check if zlib is available
-ZLIB_CHECK := $(shell echo '\#include <zlib.h>' | $(CC) -E - >/dev/null 2>&1 && echo yes)
+# Check if zlib is available (both header AND library must exist)
+ZLIB_CHECK := $(shell echo 'int main(){return 0;}' | $(CC) -x c - -lz -o /dev/null 2>/dev/null && echo yes)
 ifeq ($(ZLIB_CHECK),yes)
     CFLAGS += -DHML_HAVE_ZLIB
     LDFLAGS += -lz
