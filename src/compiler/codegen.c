@@ -1390,7 +1390,40 @@ void codegen_stmt(CodegenContext *ctx, Stmt *stmt) {
             codegen_add_local(ctx, stmt->as.let.name);
             if (stmt->as.let.value) {
                 char *value = codegen_expr(ctx, stmt->as.let.value);
-                codegen_writeln(ctx, "HmlValue %s = %s;", stmt->as.let.name, value);
+                // Check if there's a custom object type annotation (for duck typing)
+                if (stmt->as.let.type_annotation &&
+                    stmt->as.let.type_annotation->kind == TYPE_CUSTOM_OBJECT &&
+                    stmt->as.let.type_annotation->type_name) {
+                    codegen_writeln(ctx, "HmlValue %s = hml_validate_object_type(%s, \"%s\");",
+                                  stmt->as.let.name, value, stmt->as.let.type_annotation->type_name);
+                } else if (stmt->as.let.type_annotation &&
+                           stmt->as.let.type_annotation->kind == TYPE_ARRAY) {
+                    // Typed array: let arr: array<type> = [...]
+                    Type *elem_type = stmt->as.let.type_annotation->element_type;
+                    const char *hml_type = "HML_VAL_NULL";  // Default to untyped
+                    if (elem_type) {
+                        switch (elem_type->kind) {
+                            case TYPE_I8:    hml_type = "HML_VAL_I8"; break;
+                            case TYPE_I16:   hml_type = "HML_VAL_I16"; break;
+                            case TYPE_I32:   hml_type = "HML_VAL_I32"; break;
+                            case TYPE_I64:   hml_type = "HML_VAL_I64"; break;
+                            case TYPE_U8:    hml_type = "HML_VAL_U8"; break;
+                            case TYPE_U16:   hml_type = "HML_VAL_U16"; break;
+                            case TYPE_U32:   hml_type = "HML_VAL_U32"; break;
+                            case TYPE_U64:   hml_type = "HML_VAL_U64"; break;
+                            case TYPE_F32:   hml_type = "HML_VAL_F32"; break;
+                            case TYPE_F64:   hml_type = "HML_VAL_F64"; break;
+                            case TYPE_BOOL:  hml_type = "HML_VAL_BOOL"; break;
+                            case TYPE_STRING: hml_type = "HML_VAL_STRING"; break;
+                            case TYPE_RUNE:  hml_type = "HML_VAL_RUNE"; break;
+                            default: hml_type = "HML_VAL_NULL"; break;
+                        }
+                    }
+                    codegen_writeln(ctx, "HmlValue %s = hml_validate_typed_array(%s, %s);",
+                                  stmt->as.let.name, value, hml_type);
+                } else {
+                    codegen_writeln(ctx, "HmlValue %s = %s;", stmt->as.let.name, value);
+                }
                 free(value);
             } else {
                 codegen_writeln(ctx, "HmlValue %s = hml_val_null();", stmt->as.let.name);
@@ -1747,6 +1780,95 @@ void codegen_stmt(CodegenContext *ctx, Stmt *stmt) {
             codegen_add_local(ctx, enum_name);
             break;
         }
+
+        case STMT_DEFINE_OBJECT: {
+            // Generate type definition registration at runtime
+            char *type_name = stmt->as.define_object.name;
+            int num_fields = stmt->as.define_object.num_fields;
+
+            // Generate field definitions array
+            codegen_writeln(ctx, "{");
+            ctx->indent++;
+            codegen_writeln(ctx, "HmlTypeField _type_fields_%s[%d];",
+                          type_name, num_fields > 0 ? num_fields : 1);
+
+            for (int i = 0; i < num_fields; i++) {
+                char *field_name = stmt->as.define_object.field_names[i];
+                Type *field_type = stmt->as.define_object.field_types[i];
+                int is_optional = stmt->as.define_object.field_optional[i];
+                Expr *default_expr = stmt->as.define_object.field_defaults[i];
+
+                // Map Type to HML_VAL_* type
+                int type_kind = -1;  // -1 means any type
+                if (field_type) {
+                    switch (field_type->kind) {
+                        case TYPE_I8:  type_kind = 0; break;  // HML_VAL_I8
+                        case TYPE_I16: type_kind = 1; break;  // HML_VAL_I16
+                        case TYPE_I32: type_kind = 2; break;  // HML_VAL_I32
+                        case TYPE_I64: type_kind = 3; break;  // HML_VAL_I64
+                        case TYPE_U8:  type_kind = 4; break;  // HML_VAL_U8
+                        case TYPE_U16: type_kind = 5; break;  // HML_VAL_U16
+                        case TYPE_U32: type_kind = 6; break;  // HML_VAL_U32
+                        case TYPE_U64: type_kind = 7; break;  // HML_VAL_U64
+                        case TYPE_F32: type_kind = 8; break;  // HML_VAL_F32
+                        case TYPE_F64: type_kind = 9; break;  // HML_VAL_F64
+                        case TYPE_BOOL: type_kind = 10; break; // HML_VAL_BOOL
+                        case TYPE_STRING: type_kind = 11; break; // HML_VAL_STRING
+                        default: type_kind = -1; break;
+                    }
+                }
+
+                codegen_writeln(ctx, "_type_fields_%s[%d].name = \"%s\";",
+                              type_name, i, field_name);
+                codegen_writeln(ctx, "_type_fields_%s[%d].type_kind = %d;",
+                              type_name, i, type_kind);
+                codegen_writeln(ctx, "_type_fields_%s[%d].is_optional = %d;",
+                              type_name, i, is_optional);
+
+                // Generate default value if present
+                if (default_expr) {
+                    char *default_val = codegen_expr(ctx, default_expr);
+                    codegen_writeln(ctx, "_type_fields_%s[%d].default_value = %s;",
+                                  type_name, i, default_val);
+                    free(default_val);
+                } else {
+                    codegen_writeln(ctx, "_type_fields_%s[%d].default_value = hml_val_null();",
+                                  type_name, i);
+                }
+            }
+
+            // Register the type
+            codegen_writeln(ctx, "hml_register_type(\"%s\", _type_fields_%s, %d);",
+                          type_name, type_name, num_fields);
+            ctx->indent--;
+            codegen_writeln(ctx, "}");
+            break;
+        }
+
+        case STMT_IMPORT:
+            // Module imports not yet supported in compiler
+            codegen_writeln(ctx, "// TODO: import \"%s\"", stmt->as.import_stmt.module_path);
+            break;
+
+        case STMT_EXPORT:
+            // Export statements not yet supported in compiler
+            // If it's an export of a declaration, generate the declaration
+            if (stmt->as.export_stmt.is_declaration && stmt->as.export_stmt.declaration) {
+                codegen_stmt(ctx, stmt->as.export_stmt.declaration);
+            } else {
+                codegen_writeln(ctx, "// TODO: export statement");
+            }
+            break;
+
+        case STMT_IMPORT_FFI:
+            // FFI imports not yet supported in compiler
+            codegen_writeln(ctx, "// TODO: FFI import \"%s\"", stmt->as.import_ffi.library_path);
+            break;
+
+        case STMT_EXTERN_FN:
+            // External function declarations not yet supported in compiler
+            codegen_writeln(ctx, "// TODO: extern fn %s", stmt->as.extern_fn.function_name);
+            break;
 
         default:
             codegen_writeln(ctx, "// Unsupported statement type %d", stmt->type);

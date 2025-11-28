@@ -1357,6 +1357,50 @@ void hml_array_clear(HmlValue arr) {
     a->length = 0;
 }
 
+// ========== TYPED ARRAY SUPPORT ==========
+
+void hml_array_set_element_type(HmlValue arr, HmlValueType element_type) {
+    if (arr.type != HML_VAL_ARRAY || !arr.as.as_array) {
+        fprintf(stderr, "Runtime error: cannot set element type on non-array\n");
+        exit(1);
+    }
+    arr.as.as_array->element_type = element_type;
+}
+
+// Helper: Check if value type matches expected element type
+static int hml_type_matches(HmlValue val, HmlValueType expected) {
+    if (expected == HML_VAL_NULL) return 1;  // Untyped, accept anything
+    return val.type == expected;
+}
+
+// Validate and set element type constraint on array
+HmlValue hml_validate_typed_array(HmlValue arr, HmlValueType element_type) {
+    if (arr.type != HML_VAL_ARRAY || !arr.as.as_array) {
+        fprintf(stderr, "Runtime error: Expected array\n");
+        exit(1);
+    }
+
+    HmlArray *a = arr.as.as_array;
+
+    // If HML_VAL_NULL, it's an untyped array - no constraint
+    if (element_type == HML_VAL_NULL) {
+        return arr;
+    }
+
+    // Validate all existing elements match the type constraint
+    for (int i = 0; i < a->length; i++) {
+        if (!hml_type_matches(a->elements[i], element_type)) {
+            fprintf(stderr, "Runtime error: Array element type mismatch at index %d: expected %s, got %s\n",
+                    i, hml_type_name(element_type), hml_type_name(a->elements[i].type));
+            exit(1);
+        }
+    }
+
+    // Set the element type constraint
+    a->element_type = element_type;
+    return arr;
+}
+
 // ========== HIGHER-ORDER ARRAY FUNCTIONS ==========
 
 HmlValue hml_array_map(HmlValue arr, HmlValue callback) {
@@ -2131,3 +2175,124 @@ double hml_ceil(double x) { return ceil(x); }
 double hml_round(double x) { return round(x); }
 double hml_abs_f64(double x) { return fabs(x); }
 int64_t hml_abs_i64(int64_t x) { return llabs(x); }
+
+// ========== TYPE DEFINITIONS (DUCK TYPING) ==========
+
+// Type registry
+static HmlTypeDef *g_type_registry = NULL;
+static int g_type_count = 0;
+static int g_type_capacity = 0;
+
+void hml_register_type(const char *name, HmlTypeField *fields, int num_fields) {
+    // Initialize registry if needed
+    if (g_type_registry == NULL) {
+        g_type_capacity = 16;
+        g_type_registry = malloc(sizeof(HmlTypeDef) * g_type_capacity);
+    }
+
+    // Grow if needed
+    if (g_type_count >= g_type_capacity) {
+        g_type_capacity *= 2;
+        g_type_registry = realloc(g_type_registry, sizeof(HmlTypeDef) * g_type_capacity);
+    }
+
+    // Add type definition
+    HmlTypeDef *type = &g_type_registry[g_type_count++];
+    type->name = strdup(name);
+    type->num_fields = num_fields;
+    type->fields = malloc(sizeof(HmlTypeField) * num_fields);
+
+    for (int i = 0; i < num_fields; i++) {
+        type->fields[i].name = strdup(fields[i].name);
+        type->fields[i].type_kind = fields[i].type_kind;
+        type->fields[i].is_optional = fields[i].is_optional;
+        type->fields[i].default_value = fields[i].default_value;
+        hml_retain(&type->fields[i].default_value);
+    }
+}
+
+HmlTypeDef* hml_lookup_type(const char *name) {
+    for (int i = 0; i < g_type_count; i++) {
+        if (strcmp(g_type_registry[i].name, name) == 0) {
+            return &g_type_registry[i];
+        }
+    }
+    return NULL;
+}
+
+HmlValue hml_validate_object_type(HmlValue obj, const char *type_name) {
+    if (obj.type != HML_VAL_OBJECT) {
+        fprintf(stderr, "Error: Expected object for type '%s', got %s\n",
+                type_name, hml_typeof(obj));
+        exit(1);
+    }
+
+    HmlTypeDef *type = hml_lookup_type(type_name);
+    if (!type) {
+        fprintf(stderr, "Error: Unknown type '%s'\n", type_name);
+        exit(1);
+    }
+
+    HmlObject *o = obj.as.as_object;
+
+    // Check each required field
+    for (int i = 0; i < type->num_fields; i++) {
+        HmlTypeField *field = &type->fields[i];
+
+        // Find field in object
+        int found = 0;
+        for (int j = 0; j < o->num_fields; j++) {
+            if (strcmp(o->field_names[j], field->name) == 0) {
+                found = 1;
+                // Type check if field has a specific type
+                if (field->type_kind >= 0) {
+                    HmlValue val = o->field_values[j];
+                    int type_ok = 0;
+
+                    switch (field->type_kind) {
+                        case HML_VAL_I8: case HML_VAL_I16: case HML_VAL_I32: case HML_VAL_I64:
+                        case HML_VAL_U8: case HML_VAL_U16: case HML_VAL_U32: case HML_VAL_U64:
+                            type_ok = (val.type >= HML_VAL_I8 && val.type <= HML_VAL_U64);
+                            break;
+                        case HML_VAL_F32: case HML_VAL_F64:
+                            type_ok = (val.type == HML_VAL_F32 || val.type == HML_VAL_F64);
+                            break;
+                        case HML_VAL_BOOL:
+                            type_ok = (val.type == HML_VAL_BOOL);
+                            break;
+                        case HML_VAL_STRING:
+                            type_ok = (val.type == HML_VAL_STRING);
+                            break;
+                        default:
+                            type_ok = 1;  // Accept any type
+                            break;
+                    }
+
+                    if (!type_ok) {
+                        fprintf(stderr, "Error: Field '%s' has wrong type for '%s'\n",
+                                field->name, type_name);
+                        exit(1);
+                    }
+                }
+                break;
+            }
+        }
+
+        if (!found) {
+            if (field->is_optional) {
+                // Add default value
+                hml_object_set_field(obj, field->name, field->default_value);
+            } else {
+                fprintf(stderr, "Error: Object missing required field '%s' for type '%s'\n",
+                        field->name, type_name);
+                exit(1);
+            }
+        }
+    }
+
+    // Set the object's type name
+    if (o->type_name) free(o->type_name);
+    o->type_name = strdup(type_name);
+
+    return obj;
+}

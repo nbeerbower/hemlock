@@ -122,6 +122,10 @@ HmlValue hml_array_length(HmlValue arr);
 HmlValue hml_array_get(HmlValue arr, HmlValue index);
 void hml_array_set(HmlValue arr, HmlValue index, HmlValue val);
 
+// Typed array support
+void hml_array_set_element_type(HmlValue arr, HmlValueType element_type);
+HmlValue hml_validate_typed_array(HmlValue arr, HmlValueType element_type);
+
 // Higher-order array operations
 HmlValue hml_array_map(HmlValue arr, HmlValue callback);
 HmlValue hml_array_filter(HmlValue arr, HmlValue predicate);
@@ -220,6 +224,18 @@ double hml_ceil(double x);
 double hml_round(double x);
 double hml_abs_f64(double x);
 int64_t hml_abs_i64(int64_t x);
+
+// ========== TYPE DEFINITIONS (DUCK TYPING) ==========
+
+// Register a type definition
+void hml_register_type(const char *name, HmlTypeField *fields, int num_fields);
+
+// Lookup a type definition by name
+HmlTypeDef* hml_lookup_type(const char *name);
+
+// Validate an object against a type definition (duck typing)
+// Returns the object with optional fields filled in, or exits on type error
+HmlValue hml_validate_object_type(HmlValue obj, const char *type_name);
 
 // ========== CLOSURE SUPPORT ==========
 

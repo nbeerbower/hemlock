@@ -172,6 +172,20 @@ struct HmlChannel {
     int ref_count;
 };
 
+// Type definition for duck typing
+typedef struct HmlTypeField {
+    char *name;
+    int type_kind;          // HML_VAL_* type or -1 for any
+    int is_optional;
+    HmlValue default_value;
+} HmlTypeField;
+
+typedef struct HmlTypeDef {
+    char *name;
+    HmlTypeField *fields;
+    int num_fields;
+} HmlTypeDef;
+
 // ========== VALUE CONSTRUCTORS ==========
 
 HmlValue hml_val_i8(int8_t val);
