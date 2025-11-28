@@ -155,6 +155,38 @@ static BuiltinInfo builtins[] = {
     {"__os_name", builtin_os_name},
     {"__tmpdir", builtin_tmpdir},
     {"__uptime", builtin_uptime},
+    // Unprefixed aliases for parity with compiler (also exposes public API)
+    // Math functions
+    {"sin", builtin_sin},
+    {"cos", builtin_cos},
+    {"tan", builtin_tan},
+    {"asin", builtin_asin},
+    {"acos", builtin_acos},
+    {"atan", builtin_atan},
+    {"atan2", builtin_atan2},
+    {"sqrt", builtin_sqrt},
+    {"pow", builtin_pow},
+    {"exp", builtin_exp},
+    {"log", builtin_log},
+    {"log10", builtin_log10},
+    {"log2", builtin_log2},
+    {"floor", builtin_floor},
+    {"ceil", builtin_ceil},
+    {"round", builtin_round},
+    {"trunc", builtin_trunc},
+    // Note: abs, min, max, clamp are NOT aliased without prefix
+    // because they conflict with common variable names.
+    // Use __abs, __min, __max, __clamp instead.
+    // Environment functions
+    {"getenv", builtin_getenv},
+    {"setenv", builtin_setenv},
+    {"unsetenv", builtin_unsetenv},
+    {"get_pid", builtin_get_pid},
+    // Time functions
+    {"now", builtin_now},
+    {"time_ms", builtin_time_ms},
+    {"sleep", builtin_sleep},
+    {"clock", builtin_clock},
     {NULL, NULL}  // Sentinel
 };
 
