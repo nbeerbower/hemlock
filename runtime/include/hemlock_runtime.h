@@ -282,6 +282,31 @@ HmlValue hml_closure_env_get(HmlClosureEnv *env, int index);
 // Set captured value in environment
 void hml_closure_env_set(HmlClosureEnv *env, int index, HmlValue val);
 
+// ========== FFI (Foreign Function Interface) ==========
+
+// FFI type identifiers for argument/return types
+typedef enum {
+    HML_FFI_VOID,
+    HML_FFI_I8, HML_FFI_I16, HML_FFI_I32, HML_FFI_I64,
+    HML_FFI_U8, HML_FFI_U16, HML_FFI_U32, HML_FFI_U64,
+    HML_FFI_F32, HML_FFI_F64,
+    HML_FFI_PTR,
+    HML_FFI_STRING,
+} HmlFFIType;
+
+// Load a shared library, returns opaque handle
+HmlValue hml_ffi_load(const char *path);
+
+// Close a library handle
+void hml_ffi_close(HmlValue lib);
+
+// Get a function pointer from a library
+void* hml_ffi_sym(HmlValue lib, const char *name);
+
+// Call an FFI function with given arguments and types
+// types array contains: [return_type, arg1_type, arg2_type, ...]
+HmlValue hml_ffi_call(void *func_ptr, HmlValue *args, int num_args, HmlFFIType *types);
+
 // ========== UTILITY MACROS ==========
 
 // Create a string literal value (compile-time optimization)

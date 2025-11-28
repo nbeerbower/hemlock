@@ -91,7 +91,7 @@ for test_file in "$TEST_DIR"/*.hml; do
 
     # Compile C to executable
     exe_file="$TEMP_DIR/${test_name}"
-    if ! gcc -o "$exe_file" "$c_file" -I./runtime/include -L. -lhemlock_runtime -lm -lpthread > /tmp/gcc_err.log 2>&1; then
+    if ! gcc -o "$exe_file" "$c_file" -I./runtime/include -L. -lhemlock_runtime -lm -lpthread -lffi -ldl > /tmp/gcc_err.log 2>&1; then
         echo -e "${RED}✗${NC} $test_name ${RED}(C compilation failed)${NC}"
         cat /tmp/gcc_err.log
         ((FAIL_COUNT++))

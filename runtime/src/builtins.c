@@ -10,6 +10,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
+#include <dlfcn.h>
+#include <ffi.h>
 
 // ========== GLOBAL STATE ==========
 
@@ -2925,4 +2927,176 @@ HmlValue hml_validate_object_type(HmlValue obj, const char *type_name) {
     o->type_name = strdup(type_name);
 
     return obj;
+}
+
+// ========== FFI (Foreign Function Interface) ==========
+
+HmlValue hml_ffi_load(const char *path) {
+    void *handle = dlopen(path, RTLD_LAZY);
+    if (!handle) {
+        fprintf(stderr, "Runtime error: Failed to load library '%s': %s\n", path, dlerror());
+        exit(1);
+    }
+    return hml_val_ptr(handle);
+}
+
+void hml_ffi_close(HmlValue lib) {
+    if (lib.type == HML_VAL_PTR && lib.as.as_ptr) {
+        dlclose(lib.as.as_ptr);
+    }
+}
+
+void* hml_ffi_sym(HmlValue lib, const char *name) {
+    if (lib.type != HML_VAL_PTR || !lib.as.as_ptr) {
+        fprintf(stderr, "Runtime error: ffi_sym requires library handle\n");
+        exit(1);
+    }
+    dlerror(); // Clear errors
+    void *sym = dlsym(lib.as.as_ptr, name);
+    char *error = dlerror();
+    if (error) {
+        fprintf(stderr, "Runtime error: Failed to find symbol '%s': %s\n", name, error);
+        exit(1);
+    }
+    return sym;
+}
+
+// Convert HmlFFIType to libffi type
+static ffi_type* hml_ffi_type_to_ffi(HmlFFIType type) {
+    switch (type) {
+        case HML_FFI_VOID:   return &ffi_type_void;
+        case HML_FFI_I8:     return &ffi_type_sint8;
+        case HML_FFI_I16:    return &ffi_type_sint16;
+        case HML_FFI_I32:    return &ffi_type_sint32;
+        case HML_FFI_I64:    return &ffi_type_sint64;
+        case HML_FFI_U8:     return &ffi_type_uint8;
+        case HML_FFI_U16:    return &ffi_type_uint16;
+        case HML_FFI_U32:    return &ffi_type_uint32;
+        case HML_FFI_U64:    return &ffi_type_uint64;
+        case HML_FFI_F32:    return &ffi_type_float;
+        case HML_FFI_F64:    return &ffi_type_double;
+        case HML_FFI_PTR:    return &ffi_type_pointer;
+        case HML_FFI_STRING: return &ffi_type_pointer;
+        default:
+            fprintf(stderr, "Runtime error: Unknown FFI type: %d\n", type);
+            exit(1);
+    }
+}
+
+// Convert HmlValue to C value for FFI call
+static void hml_value_to_ffi(HmlValue val, HmlFFIType type, void *out) {
+    switch (type) {
+        case HML_FFI_I8:     *(int8_t*)out = (int8_t)hml_to_i32(val); break;
+        case HML_FFI_I16:    *(int16_t*)out = (int16_t)hml_to_i32(val); break;
+        case HML_FFI_I32:    *(int32_t*)out = hml_to_i32(val); break;
+        case HML_FFI_I64:    *(int64_t*)out = hml_to_i64(val); break;
+        case HML_FFI_U8:     *(uint8_t*)out = (uint8_t)hml_to_i32(val); break;
+        case HML_FFI_U16:    *(uint16_t*)out = (uint16_t)hml_to_i32(val); break;
+        case HML_FFI_U32:    *(uint32_t*)out = (uint32_t)hml_to_i32(val); break;
+        case HML_FFI_U64:    *(uint64_t*)out = (uint64_t)hml_to_i64(val); break;
+        case HML_FFI_F32:    *(float*)out = (float)hml_to_f64(val); break;
+        case HML_FFI_F64:    *(double*)out = hml_to_f64(val); break;
+        case HML_FFI_PTR:
+            if (val.type == HML_VAL_PTR) *(void**)out = val.as.as_ptr;
+            else if (val.type == HML_VAL_BUFFER) *(void**)out = val.as.as_buffer->data;
+            else *(void**)out = NULL;
+            break;
+        case HML_FFI_STRING:
+            if (val.type == HML_VAL_STRING && val.as.as_string)
+                *(char**)out = val.as.as_string->data;
+            else
+                *(char**)out = NULL;
+            break;
+        default:
+            fprintf(stderr, "Runtime error: Cannot convert to FFI type: %d\n", type);
+            exit(1);
+    }
+}
+
+// Convert C value to HmlValue after FFI call
+static HmlValue hml_ffi_to_value(void *result, HmlFFIType type) {
+    switch (type) {
+        case HML_FFI_VOID:   return hml_val_null();
+        case HML_FFI_I8:     return hml_val_i32(*(int8_t*)result);
+        case HML_FFI_I16:    return hml_val_i32(*(int16_t*)result);
+        case HML_FFI_I32:    return hml_val_i32(*(int32_t*)result);
+        case HML_FFI_I64:    return hml_val_i64(*(int64_t*)result);
+        case HML_FFI_U8:     return hml_val_u8(*(uint8_t*)result);
+        case HML_FFI_U16:    return hml_val_u16(*(uint16_t*)result);
+        case HML_FFI_U32:    return hml_val_u32(*(uint32_t*)result);
+        case HML_FFI_U64:    return hml_val_u64(*(uint64_t*)result);
+        case HML_FFI_F32:    return hml_val_f32(*(float*)result);
+        case HML_FFI_F64:    return hml_val_f64(*(double*)result);
+        case HML_FFI_PTR:    return hml_val_ptr(*(void**)result);
+        case HML_FFI_STRING: {
+            char *s = *(char**)result;
+            if (s) return hml_val_string(s);
+            return hml_val_null();
+        }
+        default:
+            fprintf(stderr, "Runtime error: Cannot convert from FFI type: %d\n", type);
+            exit(1);
+    }
+}
+
+HmlValue hml_ffi_call(void *func_ptr, HmlValue *args, int num_args, HmlFFIType *types) {
+    if (!func_ptr) {
+        fprintf(stderr, "Runtime error: FFI call with null function pointer\n");
+        exit(1);
+    }
+
+    // types[0] is return type, types[1..] are arg types
+    HmlFFIType return_type = types[0];
+
+    // Prepare libffi call interface
+    ffi_cif cif;
+    ffi_type **arg_types = NULL;
+    void **arg_values = NULL;
+    void **arg_storage = NULL;
+
+    if (num_args > 0) {
+        arg_types = malloc(num_args * sizeof(ffi_type*));
+        arg_values = malloc(num_args * sizeof(void*));
+        arg_storage = malloc(num_args * sizeof(void*));
+
+        for (int i = 0; i < num_args; i++) {
+            arg_types[i] = hml_ffi_type_to_ffi(types[i + 1]);
+            arg_storage[i] = malloc(8); // Max size for any arg
+            hml_value_to_ffi(args[i], types[i + 1], arg_storage[i]);
+            arg_values[i] = arg_storage[i];
+        }
+    }
+
+    ffi_type *ret_type = hml_ffi_type_to_ffi(return_type);
+    ffi_status status = ffi_prep_cif(&cif, FFI_DEFAULT_ABI, num_args, ret_type, arg_types);
+
+    if (status != FFI_OK) {
+        fprintf(stderr, "Runtime error: Failed to prepare FFI call\n");
+        exit(1);
+    }
+
+    // Call the function
+    union {
+        int8_t i8; int16_t i16; int32_t i32; int64_t i64;
+        uint8_t u8; uint16_t u16; uint32_t u32; uint64_t u64;
+        float f32; double f64;
+        void *ptr;
+    } result;
+
+    ffi_call(&cif, func_ptr, &result, arg_values);
+
+    // Convert result
+    HmlValue ret = hml_ffi_to_value(&result, return_type);
+
+    // Cleanup
+    if (num_args > 0) {
+        for (int i = 0; i < num_args; i++) {
+            free(arg_storage[i]);
+        }
+        free(arg_types);
+        free(arg_values);
+        free(arg_storage);
+    }
+
+    return ret;
 }
