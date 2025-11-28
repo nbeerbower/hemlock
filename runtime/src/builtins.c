@@ -412,6 +412,18 @@ HmlValue hml_log(HmlValue x) {
     return hml_val_f64(log(hml_to_f64(x)));
 }
 
+HmlValue hml_log10(HmlValue x) {
+    return hml_val_f64(log10(hml_to_f64(x)));
+}
+
+HmlValue hml_log2(HmlValue x) {
+    return hml_val_f64(log2(hml_to_f64(x)));
+}
+
+HmlValue hml_atan2(HmlValue y, HmlValue x) {
+    return hml_val_f64(atan2(hml_to_f64(y), hml_to_f64(x)));
+}
+
 HmlValue hml_min(HmlValue a, HmlValue b) {
     double va = hml_to_f64(a);
     double vb = hml_to_f64(b);
@@ -424,6 +436,15 @@ HmlValue hml_max(HmlValue a, HmlValue b) {
     return hml_val_f64(va > vb ? va : vb);
 }
 
+HmlValue hml_clamp(HmlValue x, HmlValue min_val, HmlValue max_val) {
+    double v = hml_to_f64(x);
+    double lo = hml_to_f64(min_val);
+    double hi = hml_to_f64(max_val);
+    if (v < lo) return hml_val_f64(lo);
+    if (v > hi) return hml_val_f64(hi);
+    return hml_val_f64(v);
+}
+
 static int g_rand_seeded = 0;
 
 HmlValue hml_rand(void) {
@@ -434,9 +455,149 @@ HmlValue hml_rand(void) {
     return hml_val_f64((double)rand() / RAND_MAX);
 }
 
+HmlValue hml_rand_range(HmlValue min_val, HmlValue max_val) {
+    if (!g_rand_seeded) {
+        srand((unsigned int)time(NULL));
+        g_rand_seeded = 1;
+    }
+    double lo = hml_to_f64(min_val);
+    double hi = hml_to_f64(max_val);
+    double r = (double)rand() / RAND_MAX;
+    return hml_val_f64(lo + r * (hi - lo));
+}
+
+HmlValue hml_seed_val(HmlValue seed) {
+    srand((unsigned int)hml_to_i32(seed));
+    g_rand_seeded = 1;
+    return hml_val_null();
+}
+
 void hml_seed(HmlValue seed) {
     srand((unsigned int)hml_to_i32(seed));
     g_rand_seeded = 1;
+}
+
+// ========== BUILTIN WRAPPERS FOR COMPILER ==========
+// These match the compiler's function calling convention: (HmlClosureEnv*, HmlValue args...)
+
+HmlValue hml_builtin_sin(HmlClosureEnv *env, HmlValue x) {
+    (void)env;
+    return hml_sin(x);
+}
+
+HmlValue hml_builtin_cos(HmlClosureEnv *env, HmlValue x) {
+    (void)env;
+    return hml_cos(x);
+}
+
+HmlValue hml_builtin_tan(HmlClosureEnv *env, HmlValue x) {
+    (void)env;
+    return hml_tan(x);
+}
+
+HmlValue hml_builtin_asin(HmlClosureEnv *env, HmlValue x) {
+    (void)env;
+    return hml_asin(x);
+}
+
+HmlValue hml_builtin_acos(HmlClosureEnv *env, HmlValue x) {
+    (void)env;
+    return hml_acos(x);
+}
+
+HmlValue hml_builtin_atan(HmlClosureEnv *env, HmlValue x) {
+    (void)env;
+    return hml_atan(x);
+}
+
+HmlValue hml_builtin_atan2(HmlClosureEnv *env, HmlValue y, HmlValue x) {
+    (void)env;
+    return hml_atan2(y, x);
+}
+
+HmlValue hml_builtin_sqrt(HmlClosureEnv *env, HmlValue x) {
+    (void)env;
+    return hml_sqrt(x);
+}
+
+HmlValue hml_builtin_pow(HmlClosureEnv *env, HmlValue base, HmlValue exp) {
+    (void)env;
+    return hml_pow(base, exp);
+}
+
+HmlValue hml_builtin_exp(HmlClosureEnv *env, HmlValue x) {
+    (void)env;
+    return hml_exp(x);
+}
+
+HmlValue hml_builtin_log(HmlClosureEnv *env, HmlValue x) {
+    (void)env;
+    return hml_log(x);
+}
+
+HmlValue hml_builtin_log10(HmlClosureEnv *env, HmlValue x) {
+    (void)env;
+    return hml_log10(x);
+}
+
+HmlValue hml_builtin_log2(HmlClosureEnv *env, HmlValue x) {
+    (void)env;
+    return hml_log2(x);
+}
+
+HmlValue hml_builtin_floor(HmlClosureEnv *env, HmlValue x) {
+    (void)env;
+    return hml_floor(x);
+}
+
+HmlValue hml_builtin_ceil(HmlClosureEnv *env, HmlValue x) {
+    (void)env;
+    return hml_ceil(x);
+}
+
+HmlValue hml_builtin_round(HmlClosureEnv *env, HmlValue x) {
+    (void)env;
+    return hml_round(x);
+}
+
+HmlValue hml_builtin_trunc(HmlClosureEnv *env, HmlValue x) {
+    (void)env;
+    return hml_trunc(x);
+}
+
+HmlValue hml_builtin_abs(HmlClosureEnv *env, HmlValue x) {
+    (void)env;
+    return hml_abs(x);
+}
+
+HmlValue hml_builtin_min(HmlClosureEnv *env, HmlValue a, HmlValue b) {
+    (void)env;
+    return hml_min(a, b);
+}
+
+HmlValue hml_builtin_max(HmlClosureEnv *env, HmlValue a, HmlValue b) {
+    (void)env;
+    return hml_max(a, b);
+}
+
+HmlValue hml_builtin_clamp(HmlClosureEnv *env, HmlValue x, HmlValue lo, HmlValue hi) {
+    (void)env;
+    return hml_clamp(x, lo, hi);
+}
+
+HmlValue hml_builtin_rand(HmlClosureEnv *env) {
+    (void)env;
+    return hml_rand();
+}
+
+HmlValue hml_builtin_rand_range(HmlClosureEnv *env, HmlValue min_val, HmlValue max_val) {
+    (void)env;
+    return hml_rand_range(min_val, max_val);
+}
+
+HmlValue hml_builtin_seed(HmlClosureEnv *env, HmlValue seed) {
+    (void)env;
+    return hml_seed_val(seed);
 }
 
 // ========== TIME OPERATIONS ==========

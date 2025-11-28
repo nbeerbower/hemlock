@@ -11,6 +11,9 @@
 #include "hemlock_value.h"
 #include <setjmp.h>
 
+// Forward declarations
+typedef struct HmlClosureEnv HmlClosureEnv;
+
 // ========== RUNTIME INITIALIZATION ==========
 
 // Initialize the Hemlock runtime (call at start of main)
@@ -96,8 +99,40 @@ HmlValue hml_exp(HmlValue x);
 HmlValue hml_log(HmlValue x);
 HmlValue hml_min(HmlValue a, HmlValue b);
 HmlValue hml_max(HmlValue a, HmlValue b);
+HmlValue hml_clamp(HmlValue x, HmlValue min_val, HmlValue max_val);
+HmlValue hml_log10(HmlValue x);
+HmlValue hml_log2(HmlValue x);
+HmlValue hml_atan2(HmlValue y, HmlValue x);
 HmlValue hml_rand(void);
+HmlValue hml_rand_range(HmlValue min_val, HmlValue max_val);
+HmlValue hml_seed_val(HmlValue seed);
 void hml_seed(HmlValue seed);
+
+// Builtin wrappers for compiler (match calling convention: HmlClosureEnv*, args...)
+HmlValue hml_builtin_sin(HmlClosureEnv *env, HmlValue x);
+HmlValue hml_builtin_cos(HmlClosureEnv *env, HmlValue x);
+HmlValue hml_builtin_tan(HmlClosureEnv *env, HmlValue x);
+HmlValue hml_builtin_asin(HmlClosureEnv *env, HmlValue x);
+HmlValue hml_builtin_acos(HmlClosureEnv *env, HmlValue x);
+HmlValue hml_builtin_atan(HmlClosureEnv *env, HmlValue x);
+HmlValue hml_builtin_atan2(HmlClosureEnv *env, HmlValue y, HmlValue x);
+HmlValue hml_builtin_sqrt(HmlClosureEnv *env, HmlValue x);
+HmlValue hml_builtin_pow(HmlClosureEnv *env, HmlValue base, HmlValue exp);
+HmlValue hml_builtin_exp(HmlClosureEnv *env, HmlValue x);
+HmlValue hml_builtin_log(HmlClosureEnv *env, HmlValue x);
+HmlValue hml_builtin_log10(HmlClosureEnv *env, HmlValue x);
+HmlValue hml_builtin_log2(HmlClosureEnv *env, HmlValue x);
+HmlValue hml_builtin_floor(HmlClosureEnv *env, HmlValue x);
+HmlValue hml_builtin_ceil(HmlClosureEnv *env, HmlValue x);
+HmlValue hml_builtin_round(HmlClosureEnv *env, HmlValue x);
+HmlValue hml_builtin_trunc(HmlClosureEnv *env, HmlValue x);
+HmlValue hml_builtin_abs(HmlClosureEnv *env, HmlValue x);
+HmlValue hml_builtin_min(HmlClosureEnv *env, HmlValue a, HmlValue b);
+HmlValue hml_builtin_max(HmlClosureEnv *env, HmlValue a, HmlValue b);
+HmlValue hml_builtin_clamp(HmlClosureEnv *env, HmlValue x, HmlValue lo, HmlValue hi);
+HmlValue hml_builtin_rand(HmlClosureEnv *env);
+HmlValue hml_builtin_rand_range(HmlClosureEnv *env, HmlValue min_val, HmlValue max_val);
+HmlValue hml_builtin_seed(HmlClosureEnv *env, HmlValue seed);
 
 // ========== TIME OPERATIONS ==========
 

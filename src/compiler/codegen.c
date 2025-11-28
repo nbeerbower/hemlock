@@ -692,6 +692,66 @@ char* codegen_expr(CodegenContext *ctx, Expr *expr) {
                 codegen_writeln(ctx, "HmlValue %s = hml_val_i32(SIGSTOP);", result);
             } else if (strcmp(expr->as.ident, "SIGTSTP") == 0) {
                 codegen_writeln(ctx, "HmlValue %s = hml_val_i32(SIGTSTP);", result);
+            // Handle math constants (builtins)
+            } else if (strcmp(expr->as.ident, "__PI") == 0) {
+                codegen_writeln(ctx, "HmlValue %s = hml_val_f64(3.14159265358979323846);", result);
+            } else if (strcmp(expr->as.ident, "__E") == 0) {
+                codegen_writeln(ctx, "HmlValue %s = hml_val_f64(2.71828182845904523536);", result);
+            } else if (strcmp(expr->as.ident, "__TAU") == 0) {
+                codegen_writeln(ctx, "HmlValue %s = hml_val_f64(6.28318530717958647692);", result);
+            } else if (strcmp(expr->as.ident, "__INF") == 0) {
+                codegen_writeln(ctx, "HmlValue %s = hml_val_f64(1.0/0.0);", result);
+            } else if (strcmp(expr->as.ident, "__NAN") == 0) {
+                codegen_writeln(ctx, "HmlValue %s = hml_val_f64(0.0/0.0);", result);
+            // Handle math functions (builtins)
+            } else if (strcmp(expr->as.ident, "__sin") == 0) {
+                codegen_writeln(ctx, "HmlValue %s = hml_val_function((void*)hml_builtin_sin, 1, 0);", result);
+            } else if (strcmp(expr->as.ident, "__cos") == 0) {
+                codegen_writeln(ctx, "HmlValue %s = hml_val_function((void*)hml_builtin_cos, 1, 0);", result);
+            } else if (strcmp(expr->as.ident, "__tan") == 0) {
+                codegen_writeln(ctx, "HmlValue %s = hml_val_function((void*)hml_builtin_tan, 1, 0);", result);
+            } else if (strcmp(expr->as.ident, "__asin") == 0) {
+                codegen_writeln(ctx, "HmlValue %s = hml_val_function((void*)hml_builtin_asin, 1, 0);", result);
+            } else if (strcmp(expr->as.ident, "__acos") == 0) {
+                codegen_writeln(ctx, "HmlValue %s = hml_val_function((void*)hml_builtin_acos, 1, 0);", result);
+            } else if (strcmp(expr->as.ident, "__atan") == 0) {
+                codegen_writeln(ctx, "HmlValue %s = hml_val_function((void*)hml_builtin_atan, 1, 0);", result);
+            } else if (strcmp(expr->as.ident, "__atan2") == 0) {
+                codegen_writeln(ctx, "HmlValue %s = hml_val_function((void*)hml_builtin_atan2, 2, 0);", result);
+            } else if (strcmp(expr->as.ident, "__sqrt") == 0) {
+                codegen_writeln(ctx, "HmlValue %s = hml_val_function((void*)hml_builtin_sqrt, 1, 0);", result);
+            } else if (strcmp(expr->as.ident, "__pow") == 0) {
+                codegen_writeln(ctx, "HmlValue %s = hml_val_function((void*)hml_builtin_pow, 2, 0);", result);
+            } else if (strcmp(expr->as.ident, "__exp") == 0) {
+                codegen_writeln(ctx, "HmlValue %s = hml_val_function((void*)hml_builtin_exp, 1, 0);", result);
+            } else if (strcmp(expr->as.ident, "__log") == 0) {
+                codegen_writeln(ctx, "HmlValue %s = hml_val_function((void*)hml_builtin_log, 1, 0);", result);
+            } else if (strcmp(expr->as.ident, "__log10") == 0) {
+                codegen_writeln(ctx, "HmlValue %s = hml_val_function((void*)hml_builtin_log10, 1, 0);", result);
+            } else if (strcmp(expr->as.ident, "__log2") == 0) {
+                codegen_writeln(ctx, "HmlValue %s = hml_val_function((void*)hml_builtin_log2, 1, 0);", result);
+            } else if (strcmp(expr->as.ident, "__floor") == 0) {
+                codegen_writeln(ctx, "HmlValue %s = hml_val_function((void*)hml_builtin_floor, 1, 0);", result);
+            } else if (strcmp(expr->as.ident, "__ceil") == 0) {
+                codegen_writeln(ctx, "HmlValue %s = hml_val_function((void*)hml_builtin_ceil, 1, 0);", result);
+            } else if (strcmp(expr->as.ident, "__round") == 0) {
+                codegen_writeln(ctx, "HmlValue %s = hml_val_function((void*)hml_builtin_round, 1, 0);", result);
+            } else if (strcmp(expr->as.ident, "__trunc") == 0) {
+                codegen_writeln(ctx, "HmlValue %s = hml_val_function((void*)hml_builtin_trunc, 1, 0);", result);
+            } else if (strcmp(expr->as.ident, "__abs") == 0) {
+                codegen_writeln(ctx, "HmlValue %s = hml_val_function((void*)hml_builtin_abs, 1, 0);", result);
+            } else if (strcmp(expr->as.ident, "__min") == 0) {
+                codegen_writeln(ctx, "HmlValue %s = hml_val_function((void*)hml_builtin_min, 2, 0);", result);
+            } else if (strcmp(expr->as.ident, "__max") == 0) {
+                codegen_writeln(ctx, "HmlValue %s = hml_val_function((void*)hml_builtin_max, 2, 0);", result);
+            } else if (strcmp(expr->as.ident, "__clamp") == 0) {
+                codegen_writeln(ctx, "HmlValue %s = hml_val_function((void*)hml_builtin_clamp, 3, 0);", result);
+            } else if (strcmp(expr->as.ident, "__rand") == 0) {
+                codegen_writeln(ctx, "HmlValue %s = hml_val_function((void*)hml_builtin_rand, 0, 0);", result);
+            } else if (strcmp(expr->as.ident, "__rand_range") == 0) {
+                codegen_writeln(ctx, "HmlValue %s = hml_val_function((void*)hml_builtin_rand_range, 2, 0);", result);
+            } else if (strcmp(expr->as.ident, "__seed") == 0) {
+                codegen_writeln(ctx, "HmlValue %s = hml_val_function((void*)hml_builtin_seed, 1, 0);", result);
             } else {
                 codegen_writeln(ctx, "HmlValue %s = %s;", result, expr->as.ident);
             }
