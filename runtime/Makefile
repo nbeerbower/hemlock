@@ -2,7 +2,7 @@
 
 CC = gcc
 CFLAGS = -Wall -Wextra -std=c11 -g -fPIC -Iinclude -D_POSIX_C_SOURCE=200809L -D_DEFAULT_SOURCE
-LDFLAGS = -lm -lpthread
+LDFLAGS = -lm -lpthread -lz
 
 SRC_DIR = src
 BUILD_DIR = build

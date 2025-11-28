@@ -22,6 +22,7 @@
 #include <dlfcn.h>
 #include <ffi.h>
 #include <pwd.h>
+#include <zlib.h>
 
 #ifdef __linux__
 #include <sys/sysinfo.h>
@@ -4494,4 +4495,322 @@ HmlValue hml_ffi_call(void *func_ptr, HmlValue *args, int num_args, HmlFFIType *
     }
 
     return ret;
+}
+
+// ========== COMPRESSION OPERATIONS ==========
+
+// zlib_compress(data: string, level: i32) -> buffer
+HmlValue hml_zlib_compress(HmlValue data, HmlValue level_val) {
+    if (data.type != HML_VAL_STRING || !data.as.as_string) {
+        fprintf(stderr, "Runtime error: zlib_compress() first argument must be string\n");
+        exit(1);
+    }
+
+    int level = (int)level_val.as.as_i32;
+    if (level < -1 || level > 9) {
+        fprintf(stderr, "Runtime error: zlib_compress() level must be -1 to 9\n");
+        exit(1);
+    }
+
+    HmlString *str = data.as.as_string;
+
+    // Handle empty input
+    if (str->length == 0) {
+        HmlValue buf = hml_val_buffer(1);
+        buf.as.as_buffer->length = 0;
+        return buf;
+    }
+
+    // Calculate maximum compressed size
+    uLong source_len = str->length;
+    uLong dest_len = compressBound(source_len);
+
+    // Allocate destination buffer
+    Bytef *dest = malloc(dest_len);
+    if (!dest) {
+        fprintf(stderr, "Runtime error: zlib_compress() memory allocation failed\n");
+        exit(1);
+    }
+
+    // Compress
+    int result = compress2(dest, &dest_len, (const Bytef *)str->data, source_len, level);
+
+    if (result != Z_OK) {
+        free(dest);
+        fprintf(stderr, "Runtime error: zlib_compress() compression failed\n");
+        exit(1);
+    }
+
+    // Create buffer with compressed data
+    HmlValue buf = hml_val_buffer((int32_t)dest_len);
+    memcpy(buf.as.as_buffer->data, dest, dest_len);
+    free(dest);
+
+    return buf;
+}
+
+// zlib_decompress(data: buffer, max_size: i64) -> string
+HmlValue hml_zlib_decompress(HmlValue data, HmlValue max_size_val) {
+    if (data.type != HML_VAL_BUFFER || !data.as.as_buffer) {
+        fprintf(stderr, "Runtime error: zlib_decompress() first argument must be buffer\n");
+        exit(1);
+    }
+
+    size_t max_size = (size_t)max_size_val.as.as_i64;
+    HmlBuffer *buf = data.as.as_buffer;
+
+    // Handle empty input
+    if (buf->length == 0) {
+        return hml_val_string("");
+    }
+
+    // Allocate destination buffer
+    uLong dest_len = max_size;
+    Bytef *dest = malloc(dest_len);
+    if (!dest) {
+        fprintf(stderr, "Runtime error: zlib_decompress() memory allocation failed\n");
+        exit(1);
+    }
+
+    // Decompress
+    int result = uncompress(dest, &dest_len, (const Bytef *)buf->data, buf->length);
+
+    if (result != Z_OK) {
+        free(dest);
+        fprintf(stderr, "Runtime error: zlib_decompress() decompression failed\n");
+        exit(1);
+    }
+
+    // Create string from decompressed data
+    char *result_str = malloc(dest_len + 1);
+    if (!result_str) {
+        free(dest);
+        fprintf(stderr, "Runtime error: zlib_decompress() memory allocation failed\n");
+        exit(1);
+    }
+    memcpy(result_str, dest, dest_len);
+    result_str[dest_len] = '\0';
+    free(dest);
+
+    HmlValue ret = hml_val_string(result_str);
+    free(result_str);
+    return ret;
+}
+
+// gzip_compress(data: string, level: i32) -> buffer
+HmlValue hml_gzip_compress(HmlValue data, HmlValue level_val) {
+    if (data.type != HML_VAL_STRING || !data.as.as_string) {
+        fprintf(stderr, "Runtime error: gzip_compress() first argument must be string\n");
+        exit(1);
+    }
+
+    int level = (int)level_val.as.as_i32;
+    if (level < -1 || level > 9) {
+        fprintf(stderr, "Runtime error: gzip_compress() level must be -1 to 9\n");
+        exit(1);
+    }
+
+    HmlString *str = data.as.as_string;
+
+    // Handle empty input - gzip still produces header/trailer
+    if (str->length == 0) {
+        unsigned char empty_gzip[] = {
+            0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xff,
+            0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
+        };
+        HmlValue buf = hml_val_buffer(sizeof(empty_gzip));
+        memcpy(buf.as.as_buffer->data, empty_gzip, sizeof(empty_gzip));
+        return buf;
+    }
+
+    // Initialize z_stream for gzip compression
+    z_stream strm;
+    memset(&strm, 0, sizeof(strm));
+
+    // windowBits = 15 + 16 = 31 for gzip format
+    int ret = deflateInit2(&strm, level, Z_DEFLATED, 15 + 16, 8, Z_DEFAULT_STRATEGY);
+    if (ret != Z_OK) {
+        fprintf(stderr, "Runtime error: gzip_compress() initialization failed\n");
+        exit(1);
+    }
+
+    // Calculate output buffer size
+    uLong dest_len = compressBound(str->length) + 18;
+    Bytef *dest = malloc(dest_len);
+    if (!dest) {
+        deflateEnd(&strm);
+        fprintf(stderr, "Runtime error: gzip_compress() memory allocation failed\n");
+        exit(1);
+    }
+
+    // Set input/output
+    strm.next_in = (Bytef *)str->data;
+    strm.avail_in = str->length;
+    strm.next_out = dest;
+    strm.avail_out = dest_len;
+
+    // Compress all at once
+    ret = deflate(&strm, Z_FINISH);
+    if (ret != Z_STREAM_END) {
+        free(dest);
+        deflateEnd(&strm);
+        fprintf(stderr, "Runtime error: gzip_compress() compression failed\n");
+        exit(1);
+    }
+
+    size_t output_len = strm.total_out;
+    deflateEnd(&strm);
+
+    HmlValue buf = hml_val_buffer((int32_t)output_len);
+    memcpy(buf.as.as_buffer->data, dest, output_len);
+    free(dest);
+
+    return buf;
+}
+
+// gzip_decompress(data: buffer, max_size: i64) -> string
+HmlValue hml_gzip_decompress(HmlValue data, HmlValue max_size_val) {
+    if (data.type != HML_VAL_BUFFER || !data.as.as_buffer) {
+        fprintf(stderr, "Runtime error: gzip_decompress() first argument must be buffer\n");
+        exit(1);
+    }
+
+    size_t max_size = (size_t)max_size_val.as.as_i64;
+    HmlBuffer *buf = data.as.as_buffer;
+
+    // Handle empty input
+    if (buf->length == 0) {
+        fprintf(stderr, "Runtime error: gzip_decompress() requires non-empty input\n");
+        exit(1);
+    }
+
+    // Verify gzip magic bytes
+    unsigned char *buf_data = (unsigned char *)buf->data;
+    if (buf->length < 10 || buf_data[0] != 0x1f || buf_data[1] != 0x8b) {
+        fprintf(stderr, "Runtime error: gzip_decompress() invalid gzip data\n");
+        exit(1);
+    }
+
+    // Initialize z_stream for gzip decompression
+    z_stream strm;
+    memset(&strm, 0, sizeof(strm));
+
+    // windowBits = 15 + 16 = 31 for gzip format
+    int ret = inflateInit2(&strm, 15 + 16);
+    if (ret != Z_OK) {
+        fprintf(stderr, "Runtime error: gzip_decompress() initialization failed\n");
+        exit(1);
+    }
+
+    // Allocate destination buffer
+    Bytef *dest = malloc(max_size);
+    if (!dest) {
+        inflateEnd(&strm);
+        fprintf(stderr, "Runtime error: gzip_decompress() memory allocation failed\n");
+        exit(1);
+    }
+
+    // Set input/output
+    strm.next_in = (Bytef *)buf->data;
+    strm.avail_in = buf->length;
+    strm.next_out = dest;
+    strm.avail_out = max_size;
+
+    // Decompress
+    ret = inflate(&strm, Z_FINISH);
+    if (ret != Z_STREAM_END) {
+        free(dest);
+        inflateEnd(&strm);
+        fprintf(stderr, "Runtime error: gzip_decompress() decompression failed\n");
+        exit(1);
+    }
+
+    size_t output_len = strm.total_out;
+    inflateEnd(&strm);
+
+    // Create string from decompressed data
+    char *result_str = malloc(output_len + 1);
+    if (!result_str) {
+        free(dest);
+        fprintf(stderr, "Runtime error: gzip_decompress() memory allocation failed\n");
+        exit(1);
+    }
+    memcpy(result_str, dest, output_len);
+    result_str[output_len] = '\0';
+    free(dest);
+
+    HmlValue result = hml_val_string(result_str);
+    free(result_str);
+    return result;
+}
+
+// zlib_compress_bound(source_len: i64) -> i64
+HmlValue hml_zlib_compress_bound(HmlValue source_len_val) {
+    uLong source_len = (uLong)source_len_val.as.as_i64;
+    uLong bound = compressBound(source_len);
+    return hml_val_i64((int64_t)bound);
+}
+
+// crc32(data: buffer) -> u32
+HmlValue hml_crc32_val(HmlValue data) {
+    if (data.type != HML_VAL_BUFFER || !data.as.as_buffer) {
+        fprintf(stderr, "Runtime error: crc32() argument must be buffer\n");
+        exit(1);
+    }
+
+    HmlBuffer *buf = data.as.as_buffer;
+    uLong crc = crc32(0L, Z_NULL, 0);
+    crc = crc32(crc, (const Bytef *)buf->data, buf->length);
+
+    return hml_val_u32((uint32_t)crc);
+}
+
+// adler32(data: buffer) -> u32
+HmlValue hml_adler32_val(HmlValue data) {
+    if (data.type != HML_VAL_BUFFER || !data.as.as_buffer) {
+        fprintf(stderr, "Runtime error: adler32() argument must be buffer\n");
+        exit(1);
+    }
+
+    HmlBuffer *buf = data.as.as_buffer;
+    uLong adler = adler32(0L, Z_NULL, 0);
+    adler = adler32(adler, (const Bytef *)buf->data, buf->length);
+
+    return hml_val_u32((uint32_t)adler);
+}
+
+// Compression builtin wrappers
+HmlValue hml_builtin_zlib_compress(HmlClosureEnv *env, HmlValue data, HmlValue level) {
+    (void)env;
+    return hml_zlib_compress(data, level);
+}
+
+HmlValue hml_builtin_zlib_decompress(HmlClosureEnv *env, HmlValue data, HmlValue max_size) {
+    (void)env;
+    return hml_zlib_decompress(data, max_size);
+}
+
+HmlValue hml_builtin_gzip_compress(HmlClosureEnv *env, HmlValue data, HmlValue level) {
+    (void)env;
+    return hml_gzip_compress(data, level);
+}
+
+HmlValue hml_builtin_gzip_decompress(HmlClosureEnv *env, HmlValue data, HmlValue max_size) {
+    (void)env;
+    return hml_gzip_decompress(data, max_size);
+}
+
+HmlValue hml_builtin_zlib_compress_bound(HmlClosureEnv *env, HmlValue source_len) {
+    (void)env;
+    return hml_zlib_compress_bound(source_len);
+}
+
+HmlValue hml_builtin_crc32(HmlClosureEnv *env, HmlValue data) {
+    (void)env;
+    return hml_crc32_val(data);
+}
+
+HmlValue hml_builtin_adler32(HmlClosureEnv *env, HmlValue data) {
+    (void)env;
+    return hml_adler32_val(data);
 }

@@ -423,6 +423,25 @@ HmlValue hml_builtin_os_name(HmlClosureEnv *env);
 HmlValue hml_builtin_tmpdir(HmlClosureEnv *env);
 HmlValue hml_builtin_uptime(HmlClosureEnv *env);
 
+// ========== COMPRESSION OPERATIONS ==========
+
+HmlValue hml_zlib_compress(HmlValue data, HmlValue level);
+HmlValue hml_zlib_decompress(HmlValue data, HmlValue max_size);
+HmlValue hml_gzip_compress(HmlValue data, HmlValue level);
+HmlValue hml_gzip_decompress(HmlValue data, HmlValue max_size);
+HmlValue hml_zlib_compress_bound(HmlValue source_len);
+HmlValue hml_crc32_val(HmlValue data);
+HmlValue hml_adler32_val(HmlValue data);
+
+// Compression builtin wrappers
+HmlValue hml_builtin_zlib_compress(HmlClosureEnv *env, HmlValue data, HmlValue level);
+HmlValue hml_builtin_zlib_decompress(HmlClosureEnv *env, HmlValue data, HmlValue max_size);
+HmlValue hml_builtin_gzip_compress(HmlClosureEnv *env, HmlValue data, HmlValue level);
+HmlValue hml_builtin_gzip_decompress(HmlClosureEnv *env, HmlValue data, HmlValue max_size);
+HmlValue hml_builtin_zlib_compress_bound(HmlClosureEnv *env, HmlValue source_len);
+HmlValue hml_builtin_crc32(HmlClosureEnv *env, HmlValue data);
+HmlValue hml_builtin_adler32(HmlClosureEnv *env, HmlValue data);
+
 // ========== SIGNAL HANDLING ==========
 
 // Maximum signal number supported

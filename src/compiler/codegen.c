@@ -863,6 +863,21 @@ char* codegen_expr(CodegenContext *ctx, Expr *expr) {
                 codegen_writeln(ctx, "HmlValue %s = hml_val_function((void*)hml_builtin_tmpdir, 0, 0);", result);
             } else if (strcmp(expr->as.ident, "__uptime") == 0) {
                 codegen_writeln(ctx, "HmlValue %s = hml_val_function((void*)hml_builtin_uptime, 0, 0);", result);
+            // Handle compression functions (builtins)
+            } else if (strcmp(expr->as.ident, "__zlib_compress") == 0) {
+                codegen_writeln(ctx, "HmlValue %s = hml_val_function((void*)hml_builtin_zlib_compress, 2, 0);", result);
+            } else if (strcmp(expr->as.ident, "__zlib_decompress") == 0) {
+                codegen_writeln(ctx, "HmlValue %s = hml_val_function((void*)hml_builtin_zlib_decompress, 2, 0);", result);
+            } else if (strcmp(expr->as.ident, "__gzip_compress") == 0) {
+                codegen_writeln(ctx, "HmlValue %s = hml_val_function((void*)hml_builtin_gzip_compress, 2, 0);", result);
+            } else if (strcmp(expr->as.ident, "__gzip_decompress") == 0) {
+                codegen_writeln(ctx, "HmlValue %s = hml_val_function((void*)hml_builtin_gzip_decompress, 2, 0);", result);
+            } else if (strcmp(expr->as.ident, "__zlib_compress_bound") == 0) {
+                codegen_writeln(ctx, "HmlValue %s = hml_val_function((void*)hml_builtin_zlib_compress_bound, 1, 0);", result);
+            } else if (strcmp(expr->as.ident, "__crc32") == 0) {
+                codegen_writeln(ctx, "HmlValue %s = hml_val_function((void*)hml_builtin_crc32, 1, 0);", result);
+            } else if (strcmp(expr->as.ident, "__adler32") == 0) {
+                codegen_writeln(ctx, "HmlValue %s = hml_val_function((void*)hml_builtin_adler32, 1, 0);", result);
             } else {
                 codegen_writeln(ctx, "HmlValue %s = %s;", result, expr->as.ident);
             }

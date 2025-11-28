@@ -195,7 +195,7 @@ static int compile_c(const Options *opts, const char *c_file) {
     }
 
     snprintf(cmd, sizeof(cmd),
-        "%s %s -o %s %s -I%s/runtime/include -L%s -lhemlock_runtime -lm -lpthread -lffi -ldl",
+        "%s %s -o %s %s -I%s/runtime/include -L%s -lhemlock_runtime -lm -lpthread -lffi -ldl -lz",
         opts->cc, opt_flag, opts->output_file, c_file,
         runtime_path, runtime_path);
 
