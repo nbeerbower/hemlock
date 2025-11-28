@@ -68,6 +68,7 @@ HmlValue hml_read_line(void);
 // Type checking
 const char* hml_typeof(HmlValue val);
 void hml_check_type(HmlValue val, HmlValueType expected, const char *var_name);
+int hml_values_equal(HmlValue left, HmlValue right);
 
 // Assertions
 void hml_assert(HmlValue condition, HmlValue message);

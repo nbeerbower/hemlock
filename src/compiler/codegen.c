@@ -785,19 +785,39 @@ char* codegen_expr(CodegenContext *ctx, Expr *expr) {
                     arg_temps[i] = codegen_expr(ctx, expr->as.call.args[i]);
                 }
 
-                // String methods
-                if (strcmp(method, "substr") == 0 && expr->as.call.num_args == 2) {
+                // Methods that work on both strings and arrays - need runtime type check
+                if (strcmp(method, "slice") == 0 && expr->as.call.num_args == 2) {
+                    codegen_writeln(ctx, "HmlValue %s;", result);
+                    codegen_writeln(ctx, "if (%s.type == HML_VAL_STRING) {", obj_val);
+                    codegen_writeln(ctx, "    %s = hml_string_slice(%s, %s, %s);",
+                                  result, obj_val, arg_temps[0], arg_temps[1]);
+                    codegen_writeln(ctx, "} else {");
+                    codegen_writeln(ctx, "    %s = hml_array_slice(%s, %s, %s);",
+                                  result, obj_val, arg_temps[0], arg_temps[1]);
+                    codegen_writeln(ctx, "}");
+                } else if ((strcmp(method, "find") == 0 || strcmp(method, "indexOf") == 0)
+                           && expr->as.call.num_args == 1) {
+                    codegen_writeln(ctx, "HmlValue %s;", result);
+                    codegen_writeln(ctx, "if (%s.type == HML_VAL_STRING) {", obj_val);
+                    codegen_writeln(ctx, "    %s = hml_string_find(%s, %s);",
+                                  result, obj_val, arg_temps[0]);
+                    codegen_writeln(ctx, "} else {");
+                    codegen_writeln(ctx, "    %s = hml_array_find(%s, %s);",
+                                  result, obj_val, arg_temps[0]);
+                    codegen_writeln(ctx, "}");
+                } else if (strcmp(method, "contains") == 0 && expr->as.call.num_args == 1) {
+                    codegen_writeln(ctx, "HmlValue %s;", result);
+                    codegen_writeln(ctx, "if (%s.type == HML_VAL_STRING) {", obj_val);
+                    codegen_writeln(ctx, "    %s = hml_string_contains(%s, %s);",
+                                  result, obj_val, arg_temps[0]);
+                    codegen_writeln(ctx, "} else {");
+                    codegen_writeln(ctx, "    %s = hml_array_contains(%s, %s);",
+                                  result, obj_val, arg_temps[0]);
+                    codegen_writeln(ctx, "}");
+                // String-only methods
+                } else if (strcmp(method, "substr") == 0 && expr->as.call.num_args == 2) {
                     codegen_writeln(ctx, "HmlValue %s = hml_string_substr(%s, %s, %s);",
                                   result, obj_val, arg_temps[0], arg_temps[1]);
-                } else if (strcmp(method, "slice") == 0 && expr->as.call.num_args == 2) {
-                    codegen_writeln(ctx, "HmlValue %s = hml_string_slice(%s, %s, %s);",
-                                  result, obj_val, arg_temps[0], arg_temps[1]);
-                } else if (strcmp(method, "find") == 0 && expr->as.call.num_args == 1) {
-                    codegen_writeln(ctx, "HmlValue %s = hml_string_find(%s, %s);",
-                                  result, obj_val, arg_temps[0]);
-                } else if (strcmp(method, "contains") == 0 && expr->as.call.num_args == 1) {
-                    codegen_writeln(ctx, "HmlValue %s = hml_string_contains(%s, %s);",
-                                  result, obj_val, arg_temps[0]);
                 } else if (strcmp(method, "split") == 0 && expr->as.call.num_args == 1) {
                     codegen_writeln(ctx, "HmlValue %s = hml_string_split(%s, %s);",
                                   result, obj_val, arg_temps[0]);
@@ -846,16 +866,7 @@ char* codegen_expr(CodegenContext *ctx, Expr *expr) {
                 } else if (strcmp(method, "remove") == 0 && expr->as.call.num_args == 1) {
                     codegen_writeln(ctx, "HmlValue %s = hml_array_remove(%s, %s);",
                                   result, obj_val, arg_temps[0]);
-                } else if ((strcmp(method, "find") == 0 || strcmp(method, "indexOf") == 0)
-                           && expr->as.call.num_args == 1) {
-                    codegen_writeln(ctx, "HmlValue %s = hml_array_find(%s, %s);",
-                                  result, obj_val, arg_temps[0]);
-                } else if (strcmp(method, "contains") == 0 && expr->as.call.num_args == 1) {
-                    codegen_writeln(ctx, "HmlValue %s = hml_array_contains(%s, %s);",
-                                  result, obj_val, arg_temps[0]);
-                } else if (strcmp(method, "slice") == 0 && expr->as.call.num_args == 2) {
-                    codegen_writeln(ctx, "HmlValue %s = hml_array_slice(%s, %s, %s);",
-                                  result, obj_val, arg_temps[0], arg_temps[1]);
+                // Note: find, contains, slice are handled above with runtime type checks
                 } else if (strcmp(method, "join") == 0 && expr->as.call.num_args == 1) {
                     codegen_writeln(ctx, "HmlValue %s = hml_array_join(%s, %s);",
                                   result, obj_val, arg_temps[0]);

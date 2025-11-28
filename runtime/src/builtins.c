@@ -200,6 +200,44 @@ HmlValue hml_read_line(void) {
     return hml_val_null();
 }
 
+// ========== VALUE COMPARISON ==========
+
+int hml_values_equal(HmlValue left, HmlValue right) {
+    // Null comparison
+    if (left.type == HML_VAL_NULL || right.type == HML_VAL_NULL) {
+        return (left.type == HML_VAL_NULL && right.type == HML_VAL_NULL);
+    }
+
+    // Boolean comparison
+    if (left.type == HML_VAL_BOOL && right.type == HML_VAL_BOOL) {
+        return (left.as.as_bool == right.as.as_bool);
+    }
+
+    // String comparison
+    if (left.type == HML_VAL_STRING && right.type == HML_VAL_STRING) {
+        if (!left.as.as_string || !right.as.as_string) return 0;
+        return (strcmp(left.as.as_string->data, right.as.as_string->data) == 0);
+    }
+
+    // Numeric comparison
+    if (hml_is_numeric(left) && hml_is_numeric(right)) {
+        double l = hml_to_f64(left);
+        double r = hml_to_f64(right);
+        return (l == r);
+    }
+
+    // Reference equality for arrays/objects
+    if (left.type == HML_VAL_ARRAY && right.type == HML_VAL_ARRAY) {
+        return (left.as.as_array == right.as.as_array);
+    }
+    if (left.type == HML_VAL_OBJECT && right.type == HML_VAL_OBJECT) {
+        return (left.as.as_object == right.as.as_object);
+    }
+
+    // Different types are not equal
+    return 0;
+}
+
 // ========== TYPE CHECKING ==========
 
 const char* hml_typeof(HmlValue val) {
@@ -525,6 +563,352 @@ HmlValue hml_to_string(HmlValue val) {
     return hml_val_string(buffer);
 }
 
+// ========== STRING METHODS ==========
+
+HmlValue hml_string_length(HmlValue str) {
+    if (str.type != HML_VAL_STRING || !str.as.as_string) {
+        return hml_val_i32(0);
+    }
+    HmlString *s = str.as.as_string;
+    // For now, return byte length (UTF-8 codepoint counting can be added later)
+    return hml_val_i32(s->length);
+}
+
+HmlValue hml_string_byte_length(HmlValue str) {
+    if (str.type != HML_VAL_STRING || !str.as.as_string) {
+        return hml_val_i32(0);
+    }
+    return hml_val_i32(str.as.as_string->length);
+}
+
+HmlValue hml_string_char_at(HmlValue str, HmlValue index) {
+    if (str.type != HML_VAL_STRING || !str.as.as_string) {
+        return hml_val_null();
+    }
+    HmlString *s = str.as.as_string;
+    int32_t idx = hml_to_i32(index);
+    if (idx < 0 || idx >= s->length) {
+        return hml_val_null();
+    }
+    // Return as rune (byte value for ASCII)
+    return hml_val_rune((uint32_t)(unsigned char)s->data[idx]);
+}
+
+HmlValue hml_string_byte_at(HmlValue str, HmlValue index) {
+    if (str.type != HML_VAL_STRING || !str.as.as_string) {
+        return hml_val_null();
+    }
+    HmlString *s = str.as.as_string;
+    int32_t idx = hml_to_i32(index);
+    if (idx < 0 || idx >= s->length) {
+        return hml_val_null();
+    }
+    return hml_val_u8((uint8_t)s->data[idx]);
+}
+
+HmlValue hml_string_substr(HmlValue str, HmlValue start, HmlValue length) {
+    if (str.type != HML_VAL_STRING || !str.as.as_string) {
+        return hml_val_string("");
+    }
+    HmlString *s = str.as.as_string;
+    int32_t start_idx = hml_to_i32(start);
+    int32_t len = hml_to_i32(length);
+
+    // Clamp bounds
+    if (start_idx < 0) start_idx = 0;
+    if (start_idx >= s->length) return hml_val_string("");
+    if (len < 0) len = 0;
+    if (start_idx + len > s->length) len = s->length - start_idx;
+
+    char *result = malloc(len + 1);
+    memcpy(result, s->data + start_idx, len);
+    result[len] = '\0';
+    return hml_val_string_owned(result, len, len + 1);
+}
+
+HmlValue hml_string_slice(HmlValue str, HmlValue start, HmlValue end) {
+    if (str.type != HML_VAL_STRING || !str.as.as_string) {
+        return hml_val_string("");
+    }
+    HmlString *s = str.as.as_string;
+    int32_t start_idx = hml_to_i32(start);
+    int32_t end_idx = hml_to_i32(end);
+
+    // Clamp bounds
+    if (start_idx < 0) start_idx = 0;
+    if (start_idx > s->length) start_idx = s->length;
+    if (end_idx < start_idx) end_idx = start_idx;
+    if (end_idx > s->length) end_idx = s->length;
+
+    int len = end_idx - start_idx;
+    char *result = malloc(len + 1);
+    memcpy(result, s->data + start_idx, len);
+    result[len] = '\0';
+    return hml_val_string_owned(result, len, len + 1);
+}
+
+HmlValue hml_string_find(HmlValue str, HmlValue needle) {
+    if (str.type != HML_VAL_STRING || !str.as.as_string ||
+        needle.type != HML_VAL_STRING || !needle.as.as_string) {
+        return hml_val_i32(-1);
+    }
+    HmlString *s = str.as.as_string;
+    HmlString *n = needle.as.as_string;
+
+    if (n->length == 0) return hml_val_i32(0);
+    if (n->length > s->length) return hml_val_i32(-1);
+
+    for (int i = 0; i <= s->length - n->length; i++) {
+        if (memcmp(s->data + i, n->data, n->length) == 0) {
+            return hml_val_i32(i);
+        }
+    }
+    return hml_val_i32(-1);
+}
+
+HmlValue hml_string_contains(HmlValue str, HmlValue needle) {
+    HmlValue pos = hml_string_find(str, needle);
+    return hml_val_bool(pos.as.as_i32 >= 0);
+}
+
+HmlValue hml_string_split(HmlValue str, HmlValue delimiter) {
+    HmlValue result = hml_val_array();
+
+    if (str.type != HML_VAL_STRING || !str.as.as_string ||
+        delimiter.type != HML_VAL_STRING || !delimiter.as.as_string) {
+        return result;
+    }
+
+    HmlString *s = str.as.as_string;
+    HmlString *d = delimiter.as.as_string;
+
+    if (d->length == 0) {
+        // Split into individual characters
+        for (int i = 0; i < s->length; i++) {
+            char *c = malloc(2);
+            c[0] = s->data[i];
+            c[1] = '\0';
+            HmlValue part_val = hml_val_string_owned(c, 1, 2);
+            hml_array_push(result, part_val);
+        }
+        return result;
+    }
+
+    int start = 0;
+    for (int i = 0; i <= s->length - d->length; i++) {
+        if (memcmp(s->data + i, d->data, d->length) == 0) {
+            int len = i - start;
+            char *part = malloc(len + 1);
+            memcpy(part, s->data + start, len);
+            part[len] = '\0';
+            HmlValue part_val = hml_val_string_owned(part, len, len + 1);
+            hml_array_push(result, part_val);
+            i += d->length - 1;
+            start = i + 1;
+        }
+    }
+
+    // Add remaining part
+    int len = s->length - start;
+    char *part = malloc(len + 1);
+    memcpy(part, s->data + start, len);
+    part[len] = '\0';
+    HmlValue part_val = hml_val_string_owned(part, len, len + 1);
+    hml_array_push(result, part_val);
+
+    return result;
+}
+
+HmlValue hml_string_trim(HmlValue str) {
+    if (str.type != HML_VAL_STRING || !str.as.as_string) {
+        return hml_val_string("");
+    }
+    HmlString *s = str.as.as_string;
+    int start = 0;
+    int end = s->length - 1;
+
+    while (start < s->length && (s->data[start] == ' ' || s->data[start] == '\t' ||
+                                  s->data[start] == '\n' || s->data[start] == '\r')) {
+        start++;
+    }
+
+    while (end >= start && (s->data[end] == ' ' || s->data[end] == '\t' ||
+                            s->data[end] == '\n' || s->data[end] == '\r')) {
+        end--;
+    }
+
+    int len = end - start + 1;
+    if (len <= 0) return hml_val_string("");
+
+    char *result = malloc(len + 1);
+    memcpy(result, s->data + start, len);
+    result[len] = '\0';
+    return hml_val_string_owned(result, len, len + 1);
+}
+
+HmlValue hml_string_to_upper(HmlValue str) {
+    if (str.type != HML_VAL_STRING || !str.as.as_string) {
+        return hml_val_string("");
+    }
+    HmlString *s = str.as.as_string;
+    char *result = malloc(s->length + 1);
+    for (int i = 0; i < s->length; i++) {
+        char c = s->data[i];
+        if (c >= 'a' && c <= 'z') {
+            result[i] = c - 32;
+        } else {
+            result[i] = c;
+        }
+    }
+    result[s->length] = '\0';
+    return hml_val_string_owned(result, s->length, s->length + 1);
+}
+
+HmlValue hml_string_to_lower(HmlValue str) {
+    if (str.type != HML_VAL_STRING || !str.as.as_string) {
+        return hml_val_string("");
+    }
+    HmlString *s = str.as.as_string;
+    char *result = malloc(s->length + 1);
+    for (int i = 0; i < s->length; i++) {
+        char c = s->data[i];
+        if (c >= 'A' && c <= 'Z') {
+            result[i] = c + 32;
+        } else {
+            result[i] = c;
+        }
+    }
+    result[s->length] = '\0';
+    return hml_val_string_owned(result, s->length, s->length + 1);
+}
+
+HmlValue hml_string_starts_with(HmlValue str, HmlValue prefix) {
+    if (str.type != HML_VAL_STRING || !str.as.as_string ||
+        prefix.type != HML_VAL_STRING || !prefix.as.as_string) {
+        return hml_val_bool(0);
+    }
+    HmlString *s = str.as.as_string;
+    HmlString *p = prefix.as.as_string;
+    if (p->length > s->length) return hml_val_bool(0);
+    return hml_val_bool(memcmp(s->data, p->data, p->length) == 0);
+}
+
+HmlValue hml_string_ends_with(HmlValue str, HmlValue suffix) {
+    if (str.type != HML_VAL_STRING || !str.as.as_string ||
+        suffix.type != HML_VAL_STRING || !suffix.as.as_string) {
+        return hml_val_bool(0);
+    }
+    HmlString *s = str.as.as_string;
+    HmlString *p = suffix.as.as_string;
+    if (p->length > s->length) return hml_val_bool(0);
+    int offset = s->length - p->length;
+    return hml_val_bool(memcmp(s->data + offset, p->data, p->length) == 0);
+}
+
+HmlValue hml_string_replace(HmlValue str, HmlValue old, HmlValue new_str) {
+    if (str.type != HML_VAL_STRING || !str.as.as_string ||
+        old.type != HML_VAL_STRING || !old.as.as_string ||
+        new_str.type != HML_VAL_STRING || !new_str.as.as_string) {
+        return str;
+    }
+    HmlString *s = str.as.as_string;
+    HmlString *o = old.as.as_string;
+    HmlString *n = new_str.as.as_string;
+
+    if (o->length == 0) {
+        hml_retain(&str);
+        return str;
+    }
+
+    // Find first occurrence
+    int pos = -1;
+    for (int i = 0; i <= s->length - o->length; i++) {
+        if (memcmp(s->data + i, o->data, o->length) == 0) {
+            pos = i;
+            break;
+        }
+    }
+
+    if (pos == -1) {
+        hml_retain(&str);
+        return str;
+    }
+
+    int new_len = s->length - o->length + n->length;
+    char *result = malloc(new_len + 1);
+    memcpy(result, s->data, pos);
+    memcpy(result + pos, n->data, n->length);
+    memcpy(result + pos + n->length, s->data + pos + o->length, s->length - pos - o->length);
+    result[new_len] = '\0';
+
+    return hml_val_string_owned(result, new_len, new_len + 1);
+}
+
+HmlValue hml_string_replace_all(HmlValue str, HmlValue old, HmlValue new_str) {
+    if (str.type != HML_VAL_STRING || !str.as.as_string ||
+        old.type != HML_VAL_STRING || !old.as.as_string ||
+        new_str.type != HML_VAL_STRING || !new_str.as.as_string) {
+        return str;
+    }
+    HmlString *s = str.as.as_string;
+    HmlString *o = old.as.as_string;
+    HmlString *n = new_str.as.as_string;
+
+    if (o->length == 0) {
+        hml_retain(&str);
+        return str;
+    }
+
+    // Count occurrences
+    int count = 0;
+    for (int i = 0; i <= s->length - o->length; i++) {
+        if (memcmp(s->data + i, o->data, o->length) == 0) {
+            count++;
+            i += o->length - 1;
+        }
+    }
+
+    if (count == 0) {
+        hml_retain(&str);
+        return str;
+    }
+
+    int new_len = s->length - (count * o->length) + (count * n->length);
+    char *result = malloc(new_len + 1);
+    int result_pos = 0;
+
+    for (int i = 0; i < s->length; ) {
+        if (i <= s->length - o->length && memcmp(s->data + i, o->data, o->length) == 0) {
+            memcpy(result + result_pos, n->data, n->length);
+            result_pos += n->length;
+            i += o->length;
+        } else {
+            result[result_pos++] = s->data[i++];
+        }
+    }
+    result[new_len] = '\0';
+
+    return hml_val_string_owned(result, new_len, new_len + 1);
+}
+
+HmlValue hml_string_repeat(HmlValue str, HmlValue count) {
+    if (str.type != HML_VAL_STRING || !str.as.as_string) {
+        return hml_val_string("");
+    }
+    HmlString *s = str.as.as_string;
+    int32_t n = hml_to_i32(count);
+    if (n <= 0) return hml_val_string("");
+
+    int new_len = s->length * n;
+    char *result = malloc(new_len + 1);
+    for (int i = 0; i < n; i++) {
+        memcpy(result + i * s->length, s->data, s->length);
+    }
+    result[new_len] = '\0';
+
+    return hml_val_string_owned(result, new_len, new_len + 1);
+}
+
 // ========== ARRAY OPERATIONS ==========
 
 void hml_array_push(HmlValue arr, HmlValue val) {
@@ -590,6 +974,317 @@ HmlValue hml_array_length(HmlValue arr) {
         return hml_val_i32(0);
     }
     return hml_val_i32(arr.as.as_array->length);
+}
+
+HmlValue hml_array_pop(HmlValue arr) {
+    if (arr.type != HML_VAL_ARRAY || !arr.as.as_array) {
+        fprintf(stderr, "Runtime error: pop() requires array\n");
+        exit(1);
+    }
+
+    HmlArray *a = arr.as.as_array;
+    if (a->length == 0) {
+        return hml_val_null();
+    }
+
+    HmlValue result = a->elements[a->length - 1];
+    // Don't release - we're transferring ownership
+    a->length--;
+    return result;
+}
+
+HmlValue hml_array_shift(HmlValue arr) {
+    if (arr.type != HML_VAL_ARRAY || !arr.as.as_array) {
+        fprintf(stderr, "Runtime error: shift() requires array\n");
+        exit(1);
+    }
+
+    HmlArray *a = arr.as.as_array;
+    if (a->length == 0) {
+        return hml_val_null();
+    }
+
+    HmlValue result = a->elements[0];
+    // Shift elements left
+    for (int i = 0; i < a->length - 1; i++) {
+        a->elements[i] = a->elements[i + 1];
+    }
+    a->length--;
+    return result;
+}
+
+void hml_array_unshift(HmlValue arr, HmlValue val) {
+    if (arr.type != HML_VAL_ARRAY || !arr.as.as_array) {
+        fprintf(stderr, "Runtime error: unshift() requires array\n");
+        exit(1);
+    }
+
+    HmlArray *a = arr.as.as_array;
+
+    // Grow if needed
+    if (a->length >= a->capacity) {
+        int new_cap = (a->capacity == 0) ? 8 : a->capacity * 2;
+        a->elements = realloc(a->elements, new_cap * sizeof(HmlValue));
+        a->capacity = new_cap;
+    }
+
+    // Shift elements right
+    for (int i = a->length; i > 0; i--) {
+        a->elements[i] = a->elements[i - 1];
+    }
+
+    a->elements[0] = val;
+    hml_retain(&a->elements[0]);
+    a->length++;
+}
+
+void hml_array_insert(HmlValue arr, HmlValue index, HmlValue val) {
+    if (arr.type != HML_VAL_ARRAY || !arr.as.as_array) {
+        fprintf(stderr, "Runtime error: insert() requires array\n");
+        exit(1);
+    }
+
+    int idx = hml_to_i32(index);
+    HmlArray *a = arr.as.as_array;
+
+    if (idx < 0 || idx > a->length) {
+        fprintf(stderr, "Runtime error: insert index %d out of bounds (length %d)\n", idx, a->length);
+        exit(1);
+    }
+
+    // Grow if needed
+    if (a->length >= a->capacity) {
+        int new_cap = (a->capacity == 0) ? 8 : a->capacity * 2;
+        a->elements = realloc(a->elements, new_cap * sizeof(HmlValue));
+        a->capacity = new_cap;
+    }
+
+    // Shift elements right from idx
+    for (int i = a->length; i > idx; i--) {
+        a->elements[i] = a->elements[i - 1];
+    }
+
+    a->elements[idx] = val;
+    hml_retain(&a->elements[idx]);
+    a->length++;
+}
+
+HmlValue hml_array_remove(HmlValue arr, HmlValue index) {
+    if (arr.type != HML_VAL_ARRAY || !arr.as.as_array) {
+        fprintf(stderr, "Runtime error: remove() requires array\n");
+        exit(1);
+    }
+
+    int idx = hml_to_i32(index);
+    HmlArray *a = arr.as.as_array;
+
+    if (idx < 0 || idx >= a->length) {
+        fprintf(stderr, "Runtime error: remove index %d out of bounds (length %d)\n", idx, a->length);
+        exit(1);
+    }
+
+    HmlValue result = a->elements[idx];
+    // Shift elements left
+    for (int i = idx; i < a->length - 1; i++) {
+        a->elements[i] = a->elements[i + 1];
+    }
+    a->length--;
+    return result;
+}
+
+HmlValue hml_array_find(HmlValue arr, HmlValue val) {
+    if (arr.type != HML_VAL_ARRAY || !arr.as.as_array) {
+        fprintf(stderr, "Runtime error: find() requires array\n");
+        exit(1);
+    }
+
+    HmlArray *a = arr.as.as_array;
+    for (int i = 0; i < a->length; i++) {
+        if (hml_values_equal(a->elements[i], val)) {
+            return hml_val_i32(i);
+        }
+    }
+    return hml_val_i32(-1);
+}
+
+HmlValue hml_array_contains(HmlValue arr, HmlValue val) {
+    HmlValue idx = hml_array_find(arr, val);
+    return hml_val_bool(idx.as.as_i32 >= 0);
+}
+
+HmlValue hml_array_slice(HmlValue arr, HmlValue start, HmlValue end) {
+    if (arr.type != HML_VAL_ARRAY || !arr.as.as_array) {
+        fprintf(stderr, "Runtime error: slice() requires array\n");
+        exit(1);
+    }
+
+    HmlArray *a = arr.as.as_array;
+    int s = hml_to_i32(start);
+    int e = hml_to_i32(end);
+
+    // Clamp values
+    if (s < 0) s = 0;
+    if (e > a->length) e = a->length;
+    if (s > e) s = e;
+
+    int new_len = e - s;
+    HmlArray *result = malloc(sizeof(HmlArray));
+    result->ref_count = 1;
+    result->length = new_len;
+    result->capacity = (new_len > 0) ? new_len : 1;
+    result->elements = malloc(result->capacity * sizeof(HmlValue));
+    result->element_type = HML_VAL_NULL;
+
+    for (int i = 0; i < new_len; i++) {
+        result->elements[i] = a->elements[s + i];
+        hml_retain(&result->elements[i]);
+    }
+
+    HmlValue val;
+    val.type = HML_VAL_ARRAY;
+    val.as.as_array = result;
+    return val;
+}
+
+HmlValue hml_array_join(HmlValue arr, HmlValue delimiter) {
+    if (arr.type != HML_VAL_ARRAY || !arr.as.as_array) {
+        fprintf(stderr, "Runtime error: join() requires array\n");
+        exit(1);
+    }
+    if (delimiter.type != HML_VAL_STRING) {
+        fprintf(stderr, "Runtime error: join() requires string delimiter\n");
+        exit(1);
+    }
+
+    HmlArray *a = arr.as.as_array;
+    const char *delim = delimiter.as.as_string->data;
+    int delim_len = delimiter.as.as_string->length;
+
+    if (a->length == 0) {
+        return hml_val_string("");
+    }
+
+    // Calculate total length
+    int total_len = 0;
+    for (int i = 0; i < a->length; i++) {
+        HmlValue str = hml_to_string(a->elements[i]);
+        total_len += str.as.as_string->length;
+        if (i < a->length - 1) {
+            total_len += delim_len;
+        }
+        hml_release(&str);
+    }
+
+    char *result = malloc(total_len + 1);
+    int pos = 0;
+    for (int i = 0; i < a->length; i++) {
+        HmlValue str = hml_to_string(a->elements[i]);
+        memcpy(result + pos, str.as.as_string->data, str.as.as_string->length);
+        pos += str.as.as_string->length;
+        hml_release(&str);
+        if (i < a->length - 1) {
+            memcpy(result + pos, delim, delim_len);
+            pos += delim_len;
+        }
+    }
+    result[total_len] = '\0';
+
+    return hml_val_string_owned(result, total_len, total_len + 1);
+}
+
+HmlValue hml_array_concat(HmlValue arr1, HmlValue arr2) {
+    if (arr1.type != HML_VAL_ARRAY || !arr1.as.as_array) {
+        fprintf(stderr, "Runtime error: concat() requires array\n");
+        exit(1);
+    }
+    if (arr2.type != HML_VAL_ARRAY || !arr2.as.as_array) {
+        fprintf(stderr, "Runtime error: concat() requires array argument\n");
+        exit(1);
+    }
+
+    HmlArray *a1 = arr1.as.as_array;
+    HmlArray *a2 = arr2.as.as_array;
+    int new_len = a1->length + a2->length;
+
+    HmlArray *result = malloc(sizeof(HmlArray));
+    result->ref_count = 1;
+    result->length = new_len;
+    result->capacity = (new_len > 0) ? new_len : 1;
+    result->elements = malloc(result->capacity * sizeof(HmlValue));
+    result->element_type = HML_VAL_NULL;
+
+    for (int i = 0; i < a1->length; i++) {
+        result->elements[i] = a1->elements[i];
+        hml_retain(&result->elements[i]);
+    }
+    for (int i = 0; i < a2->length; i++) {
+        result->elements[a1->length + i] = a2->elements[i];
+        hml_retain(&result->elements[a1->length + i]);
+    }
+
+    HmlValue val;
+    val.type = HML_VAL_ARRAY;
+    val.as.as_array = result;
+    return val;
+}
+
+void hml_array_reverse(HmlValue arr) {
+    if (arr.type != HML_VAL_ARRAY || !arr.as.as_array) {
+        fprintf(stderr, "Runtime error: reverse() requires array\n");
+        exit(1);
+    }
+
+    HmlArray *a = arr.as.as_array;
+    for (int i = 0; i < a->length / 2; i++) {
+        HmlValue tmp = a->elements[i];
+        a->elements[i] = a->elements[a->length - 1 - i];
+        a->elements[a->length - 1 - i] = tmp;
+    }
+}
+
+HmlValue hml_array_first(HmlValue arr) {
+    if (arr.type != HML_VAL_ARRAY || !arr.as.as_array) {
+        fprintf(stderr, "Runtime error: first() requires array\n");
+        exit(1);
+    }
+
+    HmlArray *a = arr.as.as_array;
+    if (a->length == 0) {
+        return hml_val_null();
+    }
+
+    HmlValue result = a->elements[0];
+    hml_retain(&result);
+    return result;
+}
+
+HmlValue hml_array_last(HmlValue arr) {
+    if (arr.type != HML_VAL_ARRAY || !arr.as.as_array) {
+        fprintf(stderr, "Runtime error: last() requires array\n");
+        exit(1);
+    }
+
+    HmlArray *a = arr.as.as_array;
+    if (a->length == 0) {
+        return hml_val_null();
+    }
+
+    HmlValue result = a->elements[a->length - 1];
+    hml_retain(&result);
+    return result;
+}
+
+void hml_array_clear(HmlValue arr) {
+    if (arr.type != HML_VAL_ARRAY || !arr.as.as_array) {
+        fprintf(stderr, "Runtime error: clear() requires array\n");
+        exit(1);
+    }
+
+    HmlArray *a = arr.as.as_array;
+    for (int i = 0; i < a->length; i++) {
+        hml_release(&a->elements[i]);
+    }
+    a->length = 0;
 }
 
 // ========== OBJECT OPERATIONS ==========

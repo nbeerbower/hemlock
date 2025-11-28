@@ -98,8 +98,8 @@ for test_file in "$TEST_DIR"/*.hml; do
         continue
     fi
 
-    # Run executable and capture output
-    actual_output=$("$exe_file" 2>&1)
+    # Run executable and capture output (set LD_LIBRARY_PATH for shared library)
+    actual_output=$(LD_LIBRARY_PATH="$PWD:$LD_LIBRARY_PATH" "$exe_file" 2>&1)
     expected_output=$(cat "$expected_file")
 
     # Compare output
