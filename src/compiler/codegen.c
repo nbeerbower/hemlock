@@ -894,6 +894,50 @@ char* codegen_expr(CodegenContext *ctx, Expr *expr) {
             // DNS/Networking builtins
             } else if (strcmp(expr->as.ident, "dns_resolve") == 0) {
                 codegen_writeln(ctx, "HmlValue %s = hml_val_function((void*)hml_builtin_dns_resolve, 1, 0);", result);
+            // Unprefixed aliases for math functions (for parity with interpreter)
+            } else if (strcmp(expr->as.ident, "sin") == 0) {
+                codegen_writeln(ctx, "HmlValue %s = hml_val_function((void*)hml_builtin_sin, 1, 0);", result);
+            } else if (strcmp(expr->as.ident, "cos") == 0) {
+                codegen_writeln(ctx, "HmlValue %s = hml_val_function((void*)hml_builtin_cos, 1, 0);", result);
+            } else if (strcmp(expr->as.ident, "tan") == 0) {
+                codegen_writeln(ctx, "HmlValue %s = hml_val_function((void*)hml_builtin_tan, 1, 0);", result);
+            } else if (strcmp(expr->as.ident, "asin") == 0) {
+                codegen_writeln(ctx, "HmlValue %s = hml_val_function((void*)hml_builtin_asin, 1, 0);", result);
+            } else if (strcmp(expr->as.ident, "acos") == 0) {
+                codegen_writeln(ctx, "HmlValue %s = hml_val_function((void*)hml_builtin_acos, 1, 0);", result);
+            } else if (strcmp(expr->as.ident, "atan") == 0) {
+                codegen_writeln(ctx, "HmlValue %s = hml_val_function((void*)hml_builtin_atan, 1, 0);", result);
+            } else if (strcmp(expr->as.ident, "atan2") == 0) {
+                codegen_writeln(ctx, "HmlValue %s = hml_val_function((void*)hml_builtin_atan2, 2, 0);", result);
+            } else if (strcmp(expr->as.ident, "sqrt") == 0) {
+                codegen_writeln(ctx, "HmlValue %s = hml_val_function((void*)hml_builtin_sqrt, 1, 0);", result);
+            } else if (strcmp(expr->as.ident, "pow") == 0) {
+                codegen_writeln(ctx, "HmlValue %s = hml_val_function((void*)hml_builtin_pow, 2, 0);", result);
+            } else if (strcmp(expr->as.ident, "exp") == 0) {
+                codegen_writeln(ctx, "HmlValue %s = hml_val_function((void*)hml_builtin_exp, 1, 0);", result);
+            } else if (strcmp(expr->as.ident, "log") == 0) {
+                codegen_writeln(ctx, "HmlValue %s = hml_val_function((void*)hml_builtin_log, 1, 0);", result);
+            } else if (strcmp(expr->as.ident, "log10") == 0) {
+                codegen_writeln(ctx, "HmlValue %s = hml_val_function((void*)hml_builtin_log10, 1, 0);", result);
+            } else if (strcmp(expr->as.ident, "log2") == 0) {
+                codegen_writeln(ctx, "HmlValue %s = hml_val_function((void*)hml_builtin_log2, 1, 0);", result);
+            } else if (strcmp(expr->as.ident, "floor") == 0) {
+                codegen_writeln(ctx, "HmlValue %s = hml_val_function((void*)hml_builtin_floor, 1, 0);", result);
+            } else if (strcmp(expr->as.ident, "ceil") == 0) {
+                codegen_writeln(ctx, "HmlValue %s = hml_val_function((void*)hml_builtin_ceil, 1, 0);", result);
+            } else if (strcmp(expr->as.ident, "round") == 0) {
+                codegen_writeln(ctx, "HmlValue %s = hml_val_function((void*)hml_builtin_round, 1, 0);", result);
+            } else if (strcmp(expr->as.ident, "trunc") == 0) {
+                codegen_writeln(ctx, "HmlValue %s = hml_val_function((void*)hml_builtin_trunc, 1, 0);", result);
+            // Unprefixed aliases for environment functions (for parity with interpreter)
+            } else if (strcmp(expr->as.ident, "getenv") == 0) {
+                codegen_writeln(ctx, "HmlValue %s = hml_val_function((void*)hml_builtin_getenv, 1, 0);", result);
+            } else if (strcmp(expr->as.ident, "setenv") == 0) {
+                codegen_writeln(ctx, "HmlValue %s = hml_val_function((void*)hml_builtin_setenv, 2, 0);", result);
+            } else if (strcmp(expr->as.ident, "unsetenv") == 0) {
+                codegen_writeln(ctx, "HmlValue %s = hml_val_function((void*)hml_builtin_unsetenv, 1, 0);", result);
+            } else if (strcmp(expr->as.ident, "get_pid") == 0) {
+                codegen_writeln(ctx, "HmlValue %s = hml_val_function((void*)hml_builtin_get_pid, 0, 0);", result);
             } else {
                 codegen_writeln(ctx, "HmlValue %s = %s;", result, expr->as.ident);
             }
@@ -1442,6 +1486,18 @@ char* codegen_expr(CodegenContext *ctx, Expr *expr) {
                     codegen_writeln(ctx, "HmlValue %s = hml_sizeof(%s);", result, arg);
                     codegen_writeln(ctx, "hml_release(&%s);", arg);
                     free(arg);
+                    break;
+                }
+
+                // talloc(type_name, count)
+                if (strcmp(fn_name, "talloc") == 0 && expr->as.call.num_args == 2) {
+                    char *type_arg = codegen_expr(ctx, expr->as.call.args[0]);
+                    char *count_arg = codegen_expr(ctx, expr->as.call.args[1]);
+                    codegen_writeln(ctx, "HmlValue %s = hml_talloc(%s, %s);", result, type_arg, count_arg);
+                    codegen_writeln(ctx, "hml_release(&%s);", type_arg);
+                    codegen_writeln(ctx, "hml_release(&%s);", count_arg);
+                    free(type_arg);
+                    free(count_arg);
                     break;
                 }
 

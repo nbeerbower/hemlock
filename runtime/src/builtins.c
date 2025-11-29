@@ -1840,6 +1840,89 @@ void hml_memcpy(HmlValue dest, HmlValue src, int32_t size) {
     memcpy(dest_ptr, src_ptr, size);
 }
 
+int32_t hml_sizeof_type(HmlValueType type) {
+    switch (type) {
+        case HML_VAL_I8:    return 1;
+        case HML_VAL_U8:    return 1;
+        case HML_VAL_I16:   return 2;
+        case HML_VAL_U16:   return 2;
+        case HML_VAL_I32:   return 4;
+        case HML_VAL_U32:   return 4;
+        case HML_VAL_I64:   return 8;
+        case HML_VAL_U64:   return 8;
+        case HML_VAL_F32:   return 4;
+        case HML_VAL_F64:   return 8;
+        case HML_VAL_BOOL:  return 1;
+        case HML_VAL_PTR:   return 8;
+        case HML_VAL_RUNE:  return 4;
+        default:            return 0;
+    }
+}
+
+// Helper to convert string type name to HmlValueType
+static HmlValueType hml_type_from_string(const char *name) {
+    if (strcmp(name, "i8") == 0) return HML_VAL_I8;
+    if (strcmp(name, "i16") == 0) return HML_VAL_I16;
+    if (strcmp(name, "i32") == 0 || strcmp(name, "integer") == 0) return HML_VAL_I32;
+    if (strcmp(name, "i64") == 0) return HML_VAL_I64;
+    if (strcmp(name, "u8") == 0 || strcmp(name, "byte") == 0) return HML_VAL_U8;
+    if (strcmp(name, "u16") == 0) return HML_VAL_U16;
+    if (strcmp(name, "u32") == 0) return HML_VAL_U32;
+    if (strcmp(name, "u64") == 0) return HML_VAL_U64;
+    if (strcmp(name, "f32") == 0) return HML_VAL_F32;
+    if (strcmp(name, "f64") == 0 || strcmp(name, "number") == 0) return HML_VAL_F64;
+    if (strcmp(name, "bool") == 0) return HML_VAL_BOOL;
+    if (strcmp(name, "ptr") == 0) return HML_VAL_PTR;
+    if (strcmp(name, "rune") == 0) return HML_VAL_RUNE;
+    return HML_VAL_NULL;  // Unknown type
+}
+
+HmlValue hml_talloc(HmlValue type_name, HmlValue count) {
+    // Type name must be a string
+    if (type_name.type != HML_VAL_STRING || !type_name.as.as_string) {
+        fprintf(stderr, "Runtime error: talloc() first argument must be a type name string\n");
+        exit(1);
+    }
+
+    // Count must be an integer
+    if (!hml_is_integer(count)) {
+        fprintf(stderr, "Runtime error: talloc() second argument must be an integer count\n");
+        exit(1);
+    }
+
+    int32_t n = hml_to_i32(count);
+    if (n <= 0) {
+        fprintf(stderr, "Runtime error: talloc() count must be positive\n");
+        exit(1);
+    }
+
+    HmlValueType elem_type = hml_type_from_string(type_name.as.as_string->data);
+    if (elem_type == HML_VAL_NULL) {
+        fprintf(stderr, "Runtime error: talloc() unknown type '%s'\n", type_name.as.as_string->data);
+        exit(1);
+    }
+
+    int32_t elem_size = hml_sizeof_type(elem_type);
+    if (elem_size == 0) {
+        fprintf(stderr, "Runtime error: talloc() type '%s' has no known size\n", type_name.as.as_string->data);
+        exit(1);
+    }
+
+    size_t total_size = (size_t)elem_size * (size_t)n;
+    void *ptr = malloc(total_size);
+    if (!ptr) {
+        fprintf(stderr, "Runtime error: talloc() failed to allocate %zu bytes\n", total_size);
+        exit(1);
+    }
+
+    return hml_val_ptr(ptr);
+}
+
+HmlValue hml_builtin_talloc(HmlClosureEnv *env, HmlValue type_name, HmlValue count) {
+    (void)env;
+    return hml_talloc(type_name, count);
+}
+
 // ========== ARRAY OPERATIONS ==========
 
 void hml_array_push(HmlValue arr, HmlValue val) {

@@ -289,6 +289,8 @@ HmlValue hml_realloc(HmlValue ptr, int32_t new_size);
 void hml_memset(HmlValue ptr, uint8_t byte_val, int32_t size);
 void hml_memcpy(HmlValue dest, HmlValue src, int32_t size);
 int32_t hml_sizeof_type(HmlValueType type);
+HmlValue hml_talloc(HmlValue type_name, HmlValue count);
+HmlValue hml_builtin_talloc(HmlClosureEnv *env, HmlValue type_name, HmlValue count);
 
 // Buffer operations
 HmlValue hml_buffer_get(HmlValue buf, HmlValue index);
