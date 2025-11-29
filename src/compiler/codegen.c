@@ -917,6 +917,19 @@ char* codegen_expr(CodegenContext *ctx, Expr *expr) {
             // DNS/Networking builtins
             } else if (strcmp(expr->as.ident, "dns_resolve") == 0) {
                 codegen_writeln(ctx, "HmlValue %s = hml_val_function((void*)hml_builtin_dns_resolve, 1, 0);", result);
+            // HTTP builtins (libwebsockets)
+            } else if (strcmp(expr->as.ident, "__lws_http_get") == 0) {
+                codegen_writeln(ctx, "HmlValue %s = hml_val_function((void*)hml_builtin_lws_http_get, 1, 0);", result);
+            } else if (strcmp(expr->as.ident, "__lws_http_post") == 0) {
+                codegen_writeln(ctx, "HmlValue %s = hml_val_function((void*)hml_builtin_lws_http_post, 3, 0);", result);
+            } else if (strcmp(expr->as.ident, "__lws_response_status") == 0) {
+                codegen_writeln(ctx, "HmlValue %s = hml_val_function((void*)hml_builtin_lws_response_status, 1, 0);", result);
+            } else if (strcmp(expr->as.ident, "__lws_response_body") == 0) {
+                codegen_writeln(ctx, "HmlValue %s = hml_val_function((void*)hml_builtin_lws_response_body, 1, 0);", result);
+            } else if (strcmp(expr->as.ident, "__lws_response_headers") == 0) {
+                codegen_writeln(ctx, "HmlValue %s = hml_val_function((void*)hml_builtin_lws_response_headers, 1, 0);", result);
+            } else if (strcmp(expr->as.ident, "__lws_response_free") == 0) {
+                codegen_writeln(ctx, "HmlValue %s = hml_val_function((void*)hml_builtin_lws_response_free, 1, 0);", result);
             // Socket builtins
             } else if (strcmp(expr->as.ident, "socket_create") == 0) {
                 codegen_writeln(ctx, "HmlValue %s = hml_val_function((void*)hml_builtin_socket_create, 3, 0);", result);
@@ -1989,6 +2002,68 @@ char* codegen_expr(CodegenContext *ctx, Expr *expr) {
                     codegen_writeln(ctx, "HmlValue %s = hml_cstr_to_string(%s);", result, ptr);
                     codegen_writeln(ctx, "hml_release(&%s);", ptr);
                     free(ptr);
+                    break;
+                }
+
+                // ========== HTTP/WEBSOCKET BUILTINS ==========
+
+                // __lws_http_get(url)
+                if (strcmp(fn_name, "__lws_http_get") == 0 && expr->as.call.num_args == 1) {
+                    char *url = codegen_expr(ctx, expr->as.call.args[0]);
+                    codegen_writeln(ctx, "HmlValue %s = hml_lws_http_get(%s);", result, url);
+                    codegen_writeln(ctx, "hml_release(&%s);", url);
+                    free(url);
+                    break;
+                }
+
+                // __lws_http_post(url, body, content_type)
+                if (strcmp(fn_name, "__lws_http_post") == 0 && expr->as.call.num_args == 3) {
+                    char *url = codegen_expr(ctx, expr->as.call.args[0]);
+                    char *body = codegen_expr(ctx, expr->as.call.args[1]);
+                    char *content_type = codegen_expr(ctx, expr->as.call.args[2]);
+                    codegen_writeln(ctx, "HmlValue %s = hml_lws_http_post(%s, %s, %s);", result, url, body, content_type);
+                    codegen_writeln(ctx, "hml_release(&%s);", url);
+                    codegen_writeln(ctx, "hml_release(&%s);", body);
+                    codegen_writeln(ctx, "hml_release(&%s);", content_type);
+                    free(url);
+                    free(body);
+                    free(content_type);
+                    break;
+                }
+
+                // __lws_response_status(resp)
+                if (strcmp(fn_name, "__lws_response_status") == 0 && expr->as.call.num_args == 1) {
+                    char *resp = codegen_expr(ctx, expr->as.call.args[0]);
+                    codegen_writeln(ctx, "HmlValue %s = hml_lws_response_status(%s);", result, resp);
+                    codegen_writeln(ctx, "hml_release(&%s);", resp);
+                    free(resp);
+                    break;
+                }
+
+                // __lws_response_body(resp)
+                if (strcmp(fn_name, "__lws_response_body") == 0 && expr->as.call.num_args == 1) {
+                    char *resp = codegen_expr(ctx, expr->as.call.args[0]);
+                    codegen_writeln(ctx, "HmlValue %s = hml_lws_response_body(%s);", result, resp);
+                    codegen_writeln(ctx, "hml_release(&%s);", resp);
+                    free(resp);
+                    break;
+                }
+
+                // __lws_response_headers(resp)
+                if (strcmp(fn_name, "__lws_response_headers") == 0 && expr->as.call.num_args == 1) {
+                    char *resp = codegen_expr(ctx, expr->as.call.args[0]);
+                    codegen_writeln(ctx, "HmlValue %s = hml_lws_response_headers(%s);", result, resp);
+                    codegen_writeln(ctx, "hml_release(&%s);", resp);
+                    free(resp);
+                    break;
+                }
+
+                // __lws_response_free(resp)
+                if (strcmp(fn_name, "__lws_response_free") == 0 && expr->as.call.num_args == 1) {
+                    char *resp = codegen_expr(ctx, expr->as.call.args[0]);
+                    codegen_writeln(ctx, "HmlValue %s = hml_lws_response_free(%s);", result, resp);
+                    codegen_writeln(ctx, "hml_release(&%s);", resp);
+                    free(resp);
                     break;
                 }
 

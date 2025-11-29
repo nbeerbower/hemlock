@@ -585,6 +585,35 @@ void* hml_ffi_sym(HmlValue lib, const char *name);
 // types array contains: [return_type, arg1_type, arg2_type, ...]
 HmlValue hml_ffi_call(void *func_ptr, HmlValue *args, int num_args, HmlFFIType *types);
 
+// ========== HTTP/WEBSOCKET FUNCTIONS ==========
+// These require libwebsockets at runtime
+
+// HTTP GET request
+HmlValue hml_lws_http_get(HmlValue url);
+
+// HTTP POST request
+HmlValue hml_lws_http_post(HmlValue url, HmlValue body, HmlValue content_type);
+
+// Get HTTP response status code
+HmlValue hml_lws_response_status(HmlValue resp);
+
+// Get HTTP response body
+HmlValue hml_lws_response_body(HmlValue resp);
+
+// Get HTTP response headers
+HmlValue hml_lws_response_headers(HmlValue resp);
+
+// Free HTTP response
+HmlValue hml_lws_response_free(HmlValue resp);
+
+// Builtin wrappers for function-as-value
+HmlValue hml_builtin_lws_http_get(HmlClosureEnv *env, HmlValue url);
+HmlValue hml_builtin_lws_http_post(HmlClosureEnv *env, HmlValue url, HmlValue body, HmlValue content_type);
+HmlValue hml_builtin_lws_response_status(HmlClosureEnv *env, HmlValue resp);
+HmlValue hml_builtin_lws_response_body(HmlClosureEnv *env, HmlValue resp);
+HmlValue hml_builtin_lws_response_headers(HmlClosureEnv *env, HmlValue resp);
+HmlValue hml_builtin_lws_response_free(HmlClosureEnv *env, HmlValue resp);
+
 // ========== UTILITY MACROS ==========
 
 // Create a string literal value (compile-time optimization)

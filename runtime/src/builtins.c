@@ -5678,3 +5678,465 @@ HmlValue hml_builtin_socket_get_closed(HmlClosureEnv *env, HmlValue socket_val) 
     (void)env;
     return hml_socket_get_closed(socket_val);
 }
+
+// ========== HTTP/WEBSOCKET SUPPORT ==========
+// Requires libwebsockets
+
+#ifdef HML_HAVE_LIBWEBSOCKETS
+
+#include <libwebsockets.h>
+
+// HTTP response structure
+typedef struct {
+    char *body;
+    size_t body_len;
+    size_t body_capacity;
+    int status_code;
+    int complete;
+    int failed;
+} hml_http_response_t;
+
+// HTTP callback
+static int hml_http_callback(struct lws *wsi, enum lws_callback_reasons reason,
+                             void *user, void *in, size_t len) {
+    hml_http_response_t *resp = (hml_http_response_t *)user;
+
+    switch (reason) {
+        case LWS_CALLBACK_CLIENT_CONNECTION_ERROR:
+            resp->failed = 1;
+            resp->complete = 1;
+            break;
+
+        case LWS_CALLBACK_ESTABLISHED_CLIENT_HTTP:
+            resp->status_code = lws_http_client_http_response(wsi);
+            break;
+
+        case LWS_CALLBACK_RECEIVE_CLIENT_HTTP_READ:
+            if (resp->body_len + len >= resp->body_capacity) {
+                resp->body_capacity = (resp->body_len + len + 1) * 2;
+                char *new_body = realloc(resp->body, resp->body_capacity);
+                if (!new_body) {
+                    resp->failed = 1;
+                    resp->complete = 1;
+                    return -1;
+                }
+                resp->body = new_body;
+            }
+            memcpy(resp->body + resp->body_len, in, len);
+            resp->body_len += len;
+            resp->body[resp->body_len] = '\0';
+            return 0;
+
+        case LWS_CALLBACK_COMPLETED_CLIENT_HTTP:
+        case LWS_CALLBACK_CLOSED_CLIENT_HTTP:
+            resp->complete = 1;
+            break;
+
+        default:
+            break;
+    }
+
+    return 0;
+}
+
+// Parse URL into components
+static int hml_parse_url(const char *url, char *host, int *port, char *path, int *ssl) {
+    *ssl = 0;
+    *port = 80;
+    strcpy(path, "/");
+
+    if (strncmp(url, "https://", 8) == 0) {
+        *ssl = 1;
+        *port = 443;
+        const char *rest = url + 8;
+        const char *slash = strchr(rest, '/');
+        const char *colon = strchr(rest, ':');
+
+        if (colon && (!slash || colon < slash)) {
+            size_t host_len = colon - rest;
+            if (host_len >= 256) return -1;
+            strncpy(host, rest, host_len);
+            host[host_len] = '\0';
+            *port = atoi(colon + 1);
+            if (slash) {
+                strncpy(path, slash, 511);
+                path[511] = '\0';
+            }
+        } else if (slash) {
+            size_t host_len = slash - rest;
+            if (host_len >= 256) return -1;
+            strncpy(host, rest, host_len);
+            host[host_len] = '\0';
+            strncpy(path, slash, 511);
+            path[511] = '\0';
+        } else {
+            strncpy(host, rest, 255);
+            host[255] = '\0';
+        }
+    } else if (strncmp(url, "http://", 7) == 0) {
+        const char *rest = url + 7;
+        const char *slash = strchr(rest, '/');
+        const char *colon = strchr(rest, ':');
+
+        if (colon && (!slash || colon < slash)) {
+            size_t host_len = colon - rest;
+            if (host_len >= 256) return -1;
+            strncpy(host, rest, host_len);
+            host[host_len] = '\0';
+            *port = atoi(colon + 1);
+            if (slash) {
+                strncpy(path, slash, 511);
+                path[511] = '\0';
+            }
+        } else if (slash) {
+            size_t host_len = slash - rest;
+            if (host_len >= 256) return -1;
+            strncpy(host, rest, host_len);
+            host[host_len] = '\0';
+            strncpy(path, slash, 511);
+            path[511] = '\0';
+        } else {
+            strncpy(host, rest, 255);
+            host[255] = '\0';
+        }
+    } else {
+        return -1;
+    }
+
+    return 0;
+}
+
+// HTTP GET
+HmlValue hml_lws_http_get(HmlValue url_val) {
+    if (url_val.type != HML_VAL_STRING || !url_val.as.as_string) {
+        fprintf(stderr, "Runtime error: __lws_http_get() expects string URL\n");
+        exit(1);
+    }
+
+    const char *url = url_val.as.as_string;
+    char host[256], path[512];
+    int port, ssl;
+
+    if (hml_parse_url(url, host, &port, path, &ssl) < 0) {
+        fprintf(stderr, "Runtime error: Invalid URL format\n");
+        exit(1);
+    }
+
+    hml_http_response_t *resp = calloc(1, sizeof(hml_http_response_t));
+    if (!resp) {
+        fprintf(stderr, "Runtime error: Failed to allocate response\n");
+        exit(1);
+    }
+
+    resp->body_capacity = 4096;
+    resp->body = malloc(resp->body_capacity);
+    if (!resp->body) {
+        free(resp);
+        fprintf(stderr, "Runtime error: Failed to allocate body buffer\n");
+        exit(1);
+    }
+    resp->body[0] = '\0';
+
+    struct lws_context_creation_info info;
+    memset(&info, 0, sizeof(info));
+    info.options = LWS_SERVER_OPTION_DO_SSL_GLOBAL_INIT;
+    info.port = CONTEXT_PORT_NO_LISTEN;
+
+    static const struct lws_protocols protocols[] = {
+        { "http", hml_http_callback, 0, 4096, 0, NULL, 0 },
+        { NULL, NULL, 0, 0, 0, NULL, 0 }
+    };
+    info.protocols = protocols;
+
+    struct lws_context *context = lws_create_context(&info);
+    if (!context) {
+        free(resp->body);
+        free(resp);
+        fprintf(stderr, "Runtime error: Failed to create libwebsockets context\n");
+        exit(1);
+    }
+
+    struct lws_client_connect_info connect_info;
+    memset(&connect_info, 0, sizeof(connect_info));
+    connect_info.context = context;
+    connect_info.address = host;
+    connect_info.port = port;
+    connect_info.path = path;
+    connect_info.host = host;
+    connect_info.origin = host;
+    connect_info.method = "GET";
+    connect_info.protocol = protocols[0].name;
+    connect_info.userdata = resp;
+
+    struct lws *wsi;
+    connect_info.pwsi = &wsi;
+
+    if (ssl) {
+        connect_info.ssl_connection = LCCSCF_USE_SSL |
+                                       LCCSCF_ALLOW_SELFSIGNED |
+                                       LCCSCF_SKIP_SERVER_CERT_HOSTNAME_CHECK;
+    }
+
+    if (!lws_client_connect_via_info(&connect_info)) {
+        lws_context_destroy(context);
+        free(resp->body);
+        free(resp);
+        fprintf(stderr, "Runtime error: Failed to connect\n");
+        exit(1);
+    }
+
+    int timeout = 3000;
+    while (!resp->complete && !resp->failed && timeout-- > 0) {
+        lws_service(context, 10);
+    }
+
+    lws_context_destroy(context);
+
+    if (resp->failed || timeout <= 0) {
+        free(resp->body);
+        free(resp);
+        fprintf(stderr, "Runtime error: HTTP request failed or timed out\n");
+        exit(1);
+    }
+
+    return hml_val_ptr(resp);
+}
+
+// HTTP POST
+HmlValue hml_lws_http_post(HmlValue url_val, HmlValue body_val, HmlValue content_type_val) {
+    if (url_val.type != HML_VAL_STRING || body_val.type != HML_VAL_STRING || content_type_val.type != HML_VAL_STRING) {
+        fprintf(stderr, "Runtime error: __lws_http_post() expects string arguments\n");
+        exit(1);
+    }
+
+    const char *url = url_val.as.as_string;
+    (void)body_val;  // Not fully implemented yet
+    (void)content_type_val;
+    
+    char host[256], path[512];
+    int port, ssl;
+
+    if (hml_parse_url(url, host, &port, path, &ssl) < 0) {
+        fprintf(stderr, "Runtime error: Invalid URL format\n");
+        exit(1);
+    }
+
+    hml_http_response_t *resp = calloc(1, sizeof(hml_http_response_t));
+    if (!resp) {
+        fprintf(stderr, "Runtime error: Failed to allocate response\n");
+        exit(1);
+    }
+
+    resp->body_capacity = 4096;
+    resp->body = malloc(resp->body_capacity);
+    if (!resp->body) {
+        free(resp);
+        fprintf(stderr, "Runtime error: Failed to allocate body buffer\n");
+        exit(1);
+    }
+    resp->body[0] = '\0';
+
+    struct lws_context_creation_info info;
+    memset(&info, 0, sizeof(info));
+    info.options = LWS_SERVER_OPTION_DO_SSL_GLOBAL_INIT;
+    info.port = CONTEXT_PORT_NO_LISTEN;
+
+    static const struct lws_protocols protocols[] = {
+        { "http", hml_http_callback, 0, 4096, 0, NULL, 0 },
+        { NULL, NULL, 0, 0, 0, NULL, 0 }
+    };
+    info.protocols = protocols;
+
+    struct lws_context *context = lws_create_context(&info);
+    if (!context) {
+        free(resp->body);
+        free(resp);
+        fprintf(stderr, "Runtime error: Failed to create libwebsockets context\n");
+        exit(1);
+    }
+
+    struct lws_client_connect_info connect_info;
+    memset(&connect_info, 0, sizeof(connect_info));
+    connect_info.context = context;
+    connect_info.address = host;
+    connect_info.port = port;
+    connect_info.path = path;
+    connect_info.host = host;
+    connect_info.origin = host;
+    connect_info.method = "POST";
+    connect_info.protocol = protocols[0].name;
+    connect_info.userdata = resp;
+
+    struct lws *wsi;
+    connect_info.pwsi = &wsi;
+
+    if (ssl) {
+        connect_info.ssl_connection = LCCSCF_USE_SSL |
+                                       LCCSCF_ALLOW_SELFSIGNED |
+                                       LCCSCF_SKIP_SERVER_CERT_HOSTNAME_CHECK;
+    }
+
+    if (!lws_client_connect_via_info(&connect_info)) {
+        lws_context_destroy(context);
+        free(resp->body);
+        free(resp);
+        fprintf(stderr, "Runtime error: Failed to connect\n");
+        exit(1);
+    }
+
+    int timeout = 3000;
+    while (!resp->complete && !resp->failed && timeout-- > 0) {
+        lws_service(context, 10);
+    }
+
+    lws_context_destroy(context);
+
+    if (resp->failed || timeout <= 0) {
+        free(resp->body);
+        free(resp);
+        fprintf(stderr, "Runtime error: HTTP request failed or timed out\n");
+        exit(1);
+    }
+
+    return hml_val_ptr(resp);
+}
+
+// Get response status code
+HmlValue hml_lws_response_status(HmlValue resp_val) {
+    if (resp_val.type != HML_VAL_PTR) {
+        return hml_val_i32(0);
+    }
+    hml_http_response_t *resp = (hml_http_response_t *)resp_val.as.as_ptr;
+    return hml_val_i32(resp ? resp->status_code : 0);
+}
+
+// Get response body
+HmlValue hml_lws_response_body(HmlValue resp_val) {
+    if (resp_val.type != HML_VAL_PTR) {
+        return hml_val_string("");
+    }
+    hml_http_response_t *resp = (hml_http_response_t *)resp_val.as.as_ptr;
+    if (!resp || !resp->body) {
+        return hml_val_string("");
+    }
+    return hml_val_string(resp->body);
+}
+
+// Get response headers (not implemented yet)
+HmlValue hml_lws_response_headers(HmlValue resp_val) {
+    (void)resp_val;
+    return hml_val_string("");
+}
+
+// Free response
+HmlValue hml_lws_response_free(HmlValue resp_val) {
+    if (resp_val.type == HML_VAL_PTR) {
+        hml_http_response_t *resp = (hml_http_response_t *)resp_val.as.as_ptr;
+        if (resp) {
+            if (resp->body) free(resp->body);
+            free(resp);
+        }
+    }
+    return hml_val_null();
+}
+
+// Builtin wrappers
+HmlValue hml_builtin_lws_http_get(HmlClosureEnv *env, HmlValue url) {
+    (void)env;
+    return hml_lws_http_get(url);
+}
+
+HmlValue hml_builtin_lws_http_post(HmlClosureEnv *env, HmlValue url, HmlValue body, HmlValue content_type) {
+    (void)env;
+    return hml_lws_http_post(url, body, content_type);
+}
+
+HmlValue hml_builtin_lws_response_status(HmlClosureEnv *env, HmlValue resp) {
+    (void)env;
+    return hml_lws_response_status(resp);
+}
+
+HmlValue hml_builtin_lws_response_body(HmlClosureEnv *env, HmlValue resp) {
+    (void)env;
+    return hml_lws_response_body(resp);
+}
+
+HmlValue hml_builtin_lws_response_headers(HmlClosureEnv *env, HmlValue resp) {
+    (void)env;
+    return hml_lws_response_headers(resp);
+}
+
+HmlValue hml_builtin_lws_response_free(HmlClosureEnv *env, HmlValue resp) {
+    (void)env;
+    return hml_lws_response_free(resp);
+}
+
+#else  // !HML_HAVE_LIBWEBSOCKETS
+
+// Stub implementations
+HmlValue hml_lws_http_get(HmlValue url_val) {
+    (void)url_val;
+    fprintf(stderr, "Runtime error: HTTP support not available (libwebsockets not installed)\n");
+    exit(1);
+}
+
+HmlValue hml_lws_http_post(HmlValue url_val, HmlValue body_val, HmlValue content_type_val) {
+    (void)url_val; (void)body_val; (void)content_type_val;
+    fprintf(stderr, "Runtime error: HTTP support not available (libwebsockets not installed)\n");
+    exit(1);
+}
+
+HmlValue hml_lws_response_status(HmlValue resp_val) {
+    (void)resp_val;
+    fprintf(stderr, "Runtime error: HTTP support not available (libwebsockets not installed)\n");
+    exit(1);
+}
+
+HmlValue hml_lws_response_body(HmlValue resp_val) {
+    (void)resp_val;
+    fprintf(stderr, "Runtime error: HTTP support not available (libwebsockets not installed)\n");
+    exit(1);
+}
+
+HmlValue hml_lws_response_headers(HmlValue resp_val) {
+    (void)resp_val;
+    fprintf(stderr, "Runtime error: HTTP support not available (libwebsockets not installed)\n");
+    exit(1);
+}
+
+HmlValue hml_lws_response_free(HmlValue resp_val) {
+    (void)resp_val;
+    return hml_val_null();
+}
+
+HmlValue hml_builtin_lws_http_get(HmlClosureEnv *env, HmlValue url) {
+    (void)env;
+    return hml_lws_http_get(url);
+}
+
+HmlValue hml_builtin_lws_http_post(HmlClosureEnv *env, HmlValue url, HmlValue body, HmlValue content_type) {
+    (void)env;
+    return hml_lws_http_post(url, body, content_type);
+}
+
+HmlValue hml_builtin_lws_response_status(HmlClosureEnv *env, HmlValue resp) {
+    (void)env;
+    return hml_lws_response_status(resp);
+}
+
+HmlValue hml_builtin_lws_response_body(HmlClosureEnv *env, HmlValue resp) {
+    (void)env;
+    return hml_lws_response_body(resp);
+}
+
+HmlValue hml_builtin_lws_response_headers(HmlClosureEnv *env, HmlValue resp) {
+    (void)env;
+    return hml_lws_response_headers(resp);
+}
+
+HmlValue hml_builtin_lws_response_free(HmlClosureEnv *env, HmlValue resp) {
+    (void)env;
+    return hml_lws_response_free(resp);
+}
+
+#endif  // HML_HAVE_LIBWEBSOCKETS
