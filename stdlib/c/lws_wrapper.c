@@ -3,6 +3,14 @@
 
 #define _DEFAULT_SOURCE  // For usleep()
 
+// Debug output - set to 1 to enable WebSocket debugging
+#define LWS_DEBUG 0
+#if LWS_DEBUG
+#define DEBUG_PRINT(...) fprintf(stderr, __VA_ARGS__)
+#else
+#define DEBUG_PRINT(...) ((void)0)
+#endif
+
 #include <libwebsockets.h>
 #include <string.h>
 #include <stdlib.h>
@@ -391,11 +399,11 @@ static int ws_callback(struct lws *wsi, enum lws_callback_reasons reason,
                        void *user, void *in, size_t len) {
     ws_connection_t *conn = (ws_connection_t *)user;
 
-    fprintf(stderr, "[DEBUG] ws_callback: reason=%d, conn=%p, wsi=%p\n", reason, (void*)conn, (void*)wsi);
+    DEBUG_PRINT("[DEBUG] ws_callback: reason=%d, conn=%p, wsi=%p\n", reason, (void*)conn, (void*)wsi);
 
     switch (reason) {
         case LWS_CALLBACK_CLIENT_ESTABLISHED:
-            fprintf(stderr, "[DEBUG] CLIENT_ESTABLISHED: conn=%p\n", (void*)conn);
+            DEBUG_PRINT("[DEBUG] CLIENT_ESTABLISHED: conn=%p\n", (void*)conn);
             if (conn) {
                 conn->wsi = wsi;
                 conn->established = 1;  // Mark connection as fully established
@@ -403,7 +411,7 @@ static int ws_callback(struct lws *wsi, enum lws_callback_reasons reason,
             break;
 
         case LWS_CALLBACK_CLIENT_RECEIVE:
-            fprintf(stderr, "[DEBUG] CLIENT_RECEIVE: len=%zu, conn=%p\n", len, (void*)conn);
+            DEBUG_PRINT("[DEBUG] CLIENT_RECEIVE: len=%zu, conn=%p\n", len, (void*)conn);
             // Queue received message
             if (conn) {
                 ws_message_t *msg = malloc(sizeof(ws_message_t));
@@ -427,27 +435,27 @@ static int ws_callback(struct lws *wsi, enum lws_callback_reasons reason,
                     conn->msg_queue_head = msg;
                 }
                 conn->msg_queue_tail = msg;
-                fprintf(stderr, "[DEBUG] CLIENT_RECEIVE: message queued\n");
+                DEBUG_PRINT("[DEBUG] CLIENT_RECEIVE: message queued\n");
             }
             break;
 
         case LWS_CALLBACK_CLIENT_WRITEABLE:
-            fprintf(stderr, "[DEBUG] CLIENT_WRITEABLE: conn=%p, send_pending=%d\n",
+            DEBUG_PRINT("[DEBUG] CLIENT_WRITEABLE: conn=%p, send_pending=%d\n",
                     (void*)conn, conn ? conn->send_pending : -1);
             if (conn && conn->send_pending && conn->send_buffer) {
-                fprintf(stderr, "[DEBUG] CLIENT_WRITEABLE: writing %zu bytes\n", conn->send_len);
+                DEBUG_PRINT("[DEBUG] CLIENT_WRITEABLE: writing %zu bytes\n", conn->send_len);
                 int flags = LWS_WRITE_TEXT;
                 lws_write(wsi, (unsigned char *)conn->send_buffer + LWS_PRE,
                          conn->send_len, flags);
                 free(conn->send_buffer);
                 conn->send_buffer = NULL;
                 conn->send_pending = 0;
-                fprintf(stderr, "[DEBUG] CLIENT_WRITEABLE: write complete\n");
+                DEBUG_PRINT("[DEBUG] CLIENT_WRITEABLE: write complete\n");
             }
             break;
 
         case LWS_CALLBACK_CLOSED:
-            fprintf(stderr, "[DEBUG] CLOSED: conn=%p\n", (void*)conn);
+            DEBUG_PRINT("[DEBUG] CLOSED: conn=%p\n", (void*)conn);
             if (conn) {
                 conn->closed = 1;
             }
@@ -626,7 +634,7 @@ int lws_ws_send_text(ws_connection_t *conn, const char *text) {
     if (!conn || conn->closed) return -1;
 
     size_t len = strlen(text);
-    fprintf(stderr, "[DEBUG] send_text called, len=%zu, text='%s'\n", len, text);
+    DEBUG_PRINT("[DEBUG] send_text called, len=%zu, text='%s'\n", len, text);
 
     // Allocate buffer with LWS_PRE padding
     unsigned char *buf = malloc(LWS_PRE + len);
@@ -634,14 +642,14 @@ int lws_ws_send_text(ws_connection_t *conn, const char *text) {
 
     memcpy(buf + LWS_PRE, text, len);
 
-    fprintf(stderr, "[DEBUG] Calling lws_write directly, wsi=%p\n", (void*)conn->wsi);
+    DEBUG_PRINT("[DEBUG] Calling lws_write directly, wsi=%p\n", (void*)conn->wsi);
 
     // Write directly - libwebsockets should be thread-safe for writes
     int written = lws_write(conn->wsi, buf + LWS_PRE, len, LWS_WRITE_TEXT);
 
     free(buf);
 
-    fprintf(stderr, "[DEBUG] lws_write returned %d\n", written);
+    DEBUG_PRINT("[DEBUG] lws_write returned %d\n", written);
 
     if (written < 0) {
         return -1;
@@ -674,11 +682,11 @@ int lws_ws_send_binary(ws_connection_t *conn, const unsigned char *data, size_t 
 // WebSocket receive (blocking with timeout)
 ws_message_t* lws_ws_recv(ws_connection_t *conn, int timeout_ms) {
     if (!conn || conn->closed) {
-        fprintf(stderr, "[DEBUG] recv: conn=%p, closed=%d\n", (void*)conn, conn ? conn->closed : -1);
+        DEBUG_PRINT("[DEBUG] recv: conn=%p, closed=%d\n", (void*)conn, conn ? conn->closed : -1);
         return NULL;
     }
 
-    fprintf(stderr, "[DEBUG] recv: waiting for message, timeout=%d\n", timeout_ms);
+    DEBUG_PRINT("[DEBUG] recv: waiting for message, timeout=%d\n", timeout_ms);
     int iterations = timeout_ms > 0 ? (timeout_ms / 10) : -1;
 
     while (iterations != 0) {
@@ -690,7 +698,7 @@ ws_message_t* lws_ws_recv(ws_connection_t *conn, int timeout_ms) {
                 conn->msg_queue_tail = NULL;
             }
             msg->next = NULL;
-            fprintf(stderr, "[DEBUG] recv: found message, data='%s'\n", (char*)msg->data);
+            DEBUG_PRINT("[DEBUG] recv: found message, data='%s'\n", (char*)msg->data);
             return msg;
         }
 
@@ -701,7 +709,7 @@ ws_message_t* lws_ws_recv(ws_connection_t *conn, int timeout_ms) {
         if (iterations > 0) iterations--;
     }
 
-    fprintf(stderr, "[DEBUG] recv: timeout\n");
+    DEBUG_PRINT("[DEBUG] recv: timeout\n");
     return NULL;
 }
 
@@ -807,7 +815,7 @@ static int ws_server_callback(struct lws *wsi, enum lws_callback_reasons reason,
     ws_server_t *server = (ws_server_t *)lws_context_user(lws_get_context(wsi));
     ws_connection_t *conn = (ws_connection_t *)user;
 
-    fprintf(stderr, "[DEBUG] ws_server_callback: reason=%d, conn=%p, wsi=%p\n", reason, (void*)conn, (void*)wsi);
+    DEBUG_PRINT("[DEBUG] ws_server_callback: reason=%d, conn=%p, wsi=%p\n", reason, (void*)conn, (void*)wsi);
 
     switch (reason) {
         case LWS_CALLBACK_ESTABLISHED:
@@ -833,7 +841,7 @@ static int ws_server_callback(struct lws *wsi, enum lws_callback_reasons reason,
 
         case LWS_CALLBACK_RECEIVE:
             // Queue received message
-            fprintf(stderr, "[DEBUG] SERVER RECEIVE callback, len=%zu, conn=%p\n", len, (void*)conn);
+            DEBUG_PRINT("[DEBUG] SERVER RECEIVE callback, len=%zu, conn=%p\n", len, (void*)conn);
             if (conn) {
                 ws_message_t *msg = malloc(sizeof(ws_message_t));
                 if (!msg) break;
@@ -856,23 +864,23 @@ static int ws_server_callback(struct lws *wsi, enum lws_callback_reasons reason,
                     conn->msg_queue_head = msg;
                 }
                 conn->msg_queue_tail = msg;
-                fprintf(stderr, "[DEBUG] Message queued, data='%s'\n", (char*)msg->data);
+                DEBUG_PRINT("[DEBUG] Message queued, data='%s'\n", (char*)msg->data);
             }
             break;
 
         case LWS_CALLBACK_SERVER_WRITEABLE:
-            fprintf(stderr, "[DEBUG] SERVER_WRITEABLE callback triggered\n");
+            DEBUG_PRINT("[DEBUG] SERVER_WRITEABLE callback triggered\n");
             if (conn && conn->send_pending && conn->send_buffer) {
-                fprintf(stderr, "[DEBUG] Writing %zu bytes\n", conn->send_len);
+                DEBUG_PRINT("[DEBUG] Writing %zu bytes\n", conn->send_len);
                 int flags = LWS_WRITE_TEXT;
                 lws_write(wsi, (unsigned char *)conn->send_buffer + LWS_PRE,
                          conn->send_len, flags);
                 free(conn->send_buffer);
                 conn->send_buffer = NULL;
                 conn->send_pending = 0;
-                fprintf(stderr, "[DEBUG] Write complete\n");
+                DEBUG_PRINT("[DEBUG] Write complete\n");
             } else {
-                fprintf(stderr, "[DEBUG] No pending send or buffer\n");
+                DEBUG_PRINT("[DEBUG] No pending send or buffer\n");
             }
             break;
 

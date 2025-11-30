@@ -3661,7 +3661,7 @@ When adding features to Hemlock:
   - **Async/Concurrency:** async/await syntax, spawn/join/detach (supports both fire-and-forget and spawn-then-detach patterns), channels with send/recv/close, pthread-based true parallelism, exception propagation
   - **FFI (Foreign Function Interface):** Call C functions from shared libraries using libffi, support for all primitive types, automatic type conversion
   - **Architecture:** Modular interpreter (environment, values, types, builtins, io, runtime, ffi)
-  - **394 tests** - 369 passing + 25 expected error tests (100% test success rate including async, FFI, i64/u64, signals, defer, map/filter/reduce, edge cases)
+  - **472 tests** - 447 passing + 25 expected error tests (100% test success rate including async, FFI, i64/u64, signals, defer, map/filter/reduce, networking, crypto, compression, edge cases)
 - **v0.2** - Compiler backend, optimization (planned)
 - **v0.3** - Advanced features (planned)
 

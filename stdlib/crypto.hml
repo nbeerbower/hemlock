@@ -177,7 +177,6 @@ fn string_to_bytes(s) {
 
 // Helper: Convert buffer to string
 fn bytes_to_string(buf, len) {
-    print("[DEBUG] bytes_to_string called with len=" + typeof(len));
     let result = "";
     let i = 0;
     while (i < len) {
@@ -186,7 +185,6 @@ fn bytes_to_string(buf, len) {
         result = result + r;
         i = i + 1;
     }
-    print("[DEBUG] bytes_to_string returning type: " + typeof(result));
     return result;
 }
 
