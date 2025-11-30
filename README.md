@@ -425,7 +425,7 @@ make test
 
 ## Project Status
 
-Hemlock is currently in early development (v0.1). All 472 tests passing! The following features are implemented:
+Hemlock v1.0.0 is now released! All 472 tests passing. The following features are implemented:
 
 **Type System:**
 - ✅ Primitives: i8-i64, u8-u64, f32/f64, bool, string, rune, null
