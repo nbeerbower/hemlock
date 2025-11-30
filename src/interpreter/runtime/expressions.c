@@ -65,59 +65,66 @@ Value eval_expr(Expr *expr, Environment *env, ExecutionContext *ctx) {
 
         case EXPR_UNARY: {
             Value operand = eval_expr(expr->as.unary.operand, env, ctx);
+            Value unary_result = val_null();
 
             switch (expr->as.unary.op) {
                 case UNARY_NOT:
-                    return val_bool(!value_is_truthy(operand));
+                    unary_result = val_bool(!value_is_truthy(operand));
+                    break;
 
                 case UNARY_NEGATE:
                     if (is_float(operand)) {
-                        return val_f64(-value_to_float(operand));
+                        unary_result = val_f64(-value_to_float(operand));
                     } else if (is_integer(operand)) {
                         // Preserve the original type when negating
                         switch (operand.type) {
-                            case VAL_I8: return val_i8(-operand.as.as_i8);
-                            case VAL_I16: return val_i16(-operand.as.as_i16);
-                            case VAL_I32: return val_i32(-operand.as.as_i32);
-                            case VAL_I64: return val_i64(-operand.as.as_i64);
-                            case VAL_U8: return val_i16(-(int16_t)operand.as.as_u8);  // promote to i16
-                            case VAL_U16: return val_i32(-(int32_t)operand.as.as_u16); // promote to i32
-                            case VAL_U32: return val_i64(-(int64_t)operand.as.as_u32); // promote to i64
+                            case VAL_I8: unary_result = val_i8(-operand.as.as_i8); break;
+                            case VAL_I16: unary_result = val_i16(-operand.as.as_i16); break;
+                            case VAL_I32: unary_result = val_i32(-operand.as.as_i32); break;
+                            case VAL_I64: unary_result = val_i64(-operand.as.as_i64); break;
+                            case VAL_U8: unary_result = val_i16(-(int16_t)operand.as.as_u8); break;  // promote to i16
+                            case VAL_U16: unary_result = val_i32(-(int32_t)operand.as.as_u16); break; // promote to i32
+                            case VAL_U32: unary_result = val_i64(-(int64_t)operand.as.as_u32); break; // promote to i64
                             case VAL_U64: {
                                 // Special case: u64 negation - check if value fits in i64
                                 if (operand.as.as_u64 <= INT64_MAX) {
-                                    return val_i64(-(int64_t)operand.as.as_u64);
+                                    unary_result = val_i64(-(int64_t)operand.as.as_u64);
                                 } else {
                                     runtime_error(ctx, "Cannot negate u64 value larger than INT64_MAX");
-                                    return val_null();
                                 }
+                                break;
                             }
                             default:
                                 runtime_error(ctx, "Cannot negate non-integer value");
                         }
+                    } else {
+                        runtime_error(ctx, "Cannot negate non-numeric value");
                     }
-                    runtime_error(ctx, "Cannot negate non-numeric value");
-                    return val_null();
+                    break;
 
                 case UNARY_BIT_NOT:
                     if (is_integer(operand)) {
                         // Bitwise NOT - preserve the original type
                         switch (operand.type) {
-                            case VAL_I8: return val_i8(~operand.as.as_i8);
-                            case VAL_I16: return val_i16(~operand.as.as_i16);
-                            case VAL_I32: return val_i32(~operand.as.as_i32);
-                            case VAL_I64: return val_i64(~operand.as.as_i64);
-                            case VAL_U8: return val_u8(~operand.as.as_u8);
-                            case VAL_U16: return val_u16(~operand.as.as_u16);
-                            case VAL_U32: return val_u32(~operand.as.as_u32);
-                            case VAL_U64: return val_u64(~operand.as.as_u64);
+                            case VAL_I8: unary_result = val_i8(~operand.as.as_i8); break;
+                            case VAL_I16: unary_result = val_i16(~operand.as.as_i16); break;
+                            case VAL_I32: unary_result = val_i32(~operand.as.as_i32); break;
+                            case VAL_I64: unary_result = val_i64(~operand.as.as_i64); break;
+                            case VAL_U8: unary_result = val_u8(~operand.as.as_u8); break;
+                            case VAL_U16: unary_result = val_u16(~operand.as.as_u16); break;
+                            case VAL_U32: unary_result = val_u32(~operand.as.as_u32); break;
+                            case VAL_U64: unary_result = val_u64(~operand.as.as_u64); break;
                             default:
                                 runtime_error(ctx, "Cannot apply bitwise NOT to non-integer value");
                         }
+                    } else {
+                        runtime_error(ctx, "Cannot apply bitwise NOT to non-integer value");
                     }
-                    runtime_error(ctx, "Cannot apply bitwise NOT to non-integer value");
+                    break;
             }
-            break;
+            // Release operand after unary operation
+            value_release(operand);
+            return unary_result;
         }
 
         case EXPR_TERNARY: {
@@ -731,6 +738,7 @@ Value eval_expr(Expr *expr, Environment *env, ExecutionContext *ctx) {
                         }
                         free(args);
                     }
+                    value_release(method_self);  // Release method receiver
                     return result;
                 }
 
@@ -755,6 +763,7 @@ Value eval_expr(Expr *expr, Environment *env, ExecutionContext *ctx) {
                         }
                         free(args);
                     }
+                    value_release(method_self);  // Release method receiver
                     return result;
                 }
 
@@ -779,6 +788,7 @@ Value eval_expr(Expr *expr, Environment *env, ExecutionContext *ctx) {
                         }
                         free(args);
                     }
+                    value_release(method_self);  // Release method receiver
                     return result;
                 }
 
@@ -803,6 +813,7 @@ Value eval_expr(Expr *expr, Environment *env, ExecutionContext *ctx) {
                         }
                         free(args);
                     }
+                    value_release(method_self);  // Release method receiver
                     return result;
                 }
 
@@ -827,6 +838,7 @@ Value eval_expr(Expr *expr, Environment *env, ExecutionContext *ctx) {
                         }
                         free(args);
                     }
+                    value_release(method_self);  // Release method receiver
                     return result;
                 }
 
@@ -853,6 +865,7 @@ Value eval_expr(Expr *expr, Environment *env, ExecutionContext *ctx) {
                             }
                             free(args);
                         }
+                        value_release(method_self);  // Release method receiver
                         return result;
                     }
                     // For user-defined methods, fall through to normal function call handling
@@ -949,6 +962,7 @@ Value eval_expr(Expr *expr, Environment *env, ExecutionContext *ctx) {
                 // Inject 'self' if this is a method call
                 if (is_method_call) {
                     env_set(call_env, "self", method_self, ctx);
+                    value_release(method_self);  // Release original reference (env_set retained it)
                 }
 
                 // Bind parameters
@@ -1050,6 +1064,9 @@ Value eval_expr(Expr *expr, Environment *env, ExecutionContext *ctx) {
             if (args) {
                 free(args);
             }
+
+            // Release function value
+            value_release(func);
             return result;
         }
 
@@ -1377,6 +1394,7 @@ Value eval_expr(Expr *expr, Environment *env, ExecutionContext *ctx) {
             for (int i = 0; i < expr->as.array_literal.num_elements; i++) {
                 Value element = eval_expr(expr->as.array_literal.elements[i], env, ctx);
                 array_push(arr, element);
+                value_release(element);  // array_push retained it
             }
 
             return val_array(arr);
@@ -1390,8 +1408,7 @@ Value eval_expr(Expr *expr, Environment *env, ExecutionContext *ctx) {
             for (int i = 0; i < expr->as.object_literal.num_fields; i++) {
                 obj->field_names[i] = strdup(expr->as.object_literal.field_names[i]);
                 obj->field_values[i] = eval_expr(expr->as.object_literal.field_values[i], env, ctx);
-                // Retain field values (objects own their field values)
-                value_retain(obj->field_values[i]);
+                // eval_expr returns with refcount 1, object now owns this reference
                 obj->num_fields++;
             }
 
@@ -1404,6 +1421,8 @@ Value eval_expr(Expr *expr, Environment *env, ExecutionContext *ctx) {
             Value value = eval_expr(expr->as.set_property.value, env, ctx);
 
             if (object.type != VAL_OBJECT) {
+                value_release(object);
+                value_release(value);
                 runtime_error(ctx, "Only objects can have properties set");
                 return val_null();  // Return after error
             }
@@ -1413,10 +1432,13 @@ Value eval_expr(Expr *expr, Environment *env, ExecutionContext *ctx) {
             // Look for existing field
             for (int i = 0; i < obj->num_fields; i++) {
                 if (strcmp(obj->field_names[i], property) == 0) {
-                    // Release old value, retain new value (reference counting)
+                    // Release old value, store new value (object now owns it)
                     value_release(obj->field_values[i]);
-                    value_retain(value);
                     obj->field_values[i] = value;
+                    // eval_expr gave us ownership, object now owns the value
+                    // Return the value (retained for caller)
+                    value_retain(value);
+                    value_release(object);
                     return value;
                 }
             }
@@ -1428,6 +1450,8 @@ Value eval_expr(Expr *expr, Environment *env, ExecutionContext *ctx) {
                 char **new_names = realloc(obj->field_names, sizeof(char*) * obj->capacity);
                 Value *new_values = realloc(obj->field_values, sizeof(Value) * obj->capacity);
                 if (!new_names || !new_values) {
+                    value_release(object);
+                    value_release(value);
                     runtime_error(ctx, "Failed to grow object capacity");
                 }
                 obj->field_names = new_names;
@@ -1435,11 +1459,13 @@ Value eval_expr(Expr *expr, Environment *env, ExecutionContext *ctx) {
             }
 
             obj->field_names[obj->num_fields] = strdup(property);
-            // Retain new value (reference counting)
-            value_retain(value);
+            // Store value (object now owns it)
             obj->field_values[obj->num_fields] = value;
             obj->num_fields++;
 
+            // Return the value (retained for caller)
+            value_retain(value);
+            value_release(object);
             return value;
         }
 
@@ -1460,6 +1486,8 @@ Value eval_expr(Expr *expr, Environment *env, ExecutionContext *ctx) {
                 Value index_val = eval_expr(operand->as.index.index, env, ctx);
 
                 if (!is_integer(index_val)) {
+                    value_release(object);
+                    value_release(index_val);
                     runtime_error(ctx, "Index must be an integer");
                 }
                 int32_t index = value_to_int(index_val);
@@ -1468,8 +1496,12 @@ Value eval_expr(Expr *expr, Environment *env, ExecutionContext *ctx) {
                     Value old_val = array_get(object.as.as_array, index, ctx);
                     Value new_val = value_add_one(old_val, ctx);
                     array_set(object.as.as_array, index, new_val, ctx);
+                    value_release(object);
+                    value_release(index_val);
                     return new_val;
                 } else {
+                    value_release(object);
+                    value_release(index_val);
                     runtime_error(ctx, "Can only use ++ on array elements");
                 }
             } else if (operand->type == EXPR_GET_PROPERTY) {
@@ -1477,6 +1509,7 @@ Value eval_expr(Expr *expr, Environment *env, ExecutionContext *ctx) {
                 Value object = eval_expr(operand->as.get_property.object, env, ctx);
                 const char *property = operand->as.get_property.property;
                 if (object.type != VAL_OBJECT) {
+                    value_release(object);
                     runtime_error(ctx, "Can only increment object properties");
                 }
                 Object *obj = object.as.as_object;
@@ -1485,9 +1518,11 @@ Value eval_expr(Expr *expr, Environment *env, ExecutionContext *ctx) {
                         Value old_val = obj->field_values[i];
                         Value new_val = value_add_one(old_val, ctx);
                         obj->field_values[i] = new_val;
+                        value_release(object);
                         return new_val;
                     }
                 }
+                value_release(object);
                 runtime_error(ctx, "Property '%s' not found", property);
             } else {
                 runtime_error(ctx, "Invalid operand for ++");
@@ -1510,6 +1545,8 @@ Value eval_expr(Expr *expr, Environment *env, ExecutionContext *ctx) {
                 Value index_val = eval_expr(operand->as.index.index, env, ctx);
 
                 if (!is_integer(index_val)) {
+                    value_release(object);
+                    value_release(index_val);
                     runtime_error(ctx, "Index must be an integer");
                 }
                 int32_t index = value_to_int(index_val);
@@ -1518,14 +1555,19 @@ Value eval_expr(Expr *expr, Environment *env, ExecutionContext *ctx) {
                     Value old_val = array_get(object.as.as_array, index, ctx);
                     Value new_val = value_sub_one(old_val, ctx);
                     array_set(object.as.as_array, index, new_val, ctx);
+                    value_release(object);
+                    value_release(index_val);
                     return new_val;
                 } else {
+                    value_release(object);
+                    value_release(index_val);
                     runtime_error(ctx, "Can only use -- on array elements");
                 }
             } else if (operand->type == EXPR_GET_PROPERTY) {
                 Value object = eval_expr(operand->as.get_property.object, env, ctx);
                 const char *property = operand->as.get_property.property;
                 if (object.type != VAL_OBJECT) {
+                    value_release(object);
                     runtime_error(ctx, "Can only decrement object properties");
                 }
                 Object *obj = object.as.as_object;
@@ -1534,9 +1576,11 @@ Value eval_expr(Expr *expr, Environment *env, ExecutionContext *ctx) {
                         Value old_val = obj->field_values[i];
                         Value new_val = value_sub_one(old_val, ctx);
                         obj->field_values[i] = new_val;
+                        value_release(object);
                         return new_val;
                     }
                 }
+                value_release(object);
                 runtime_error(ctx, "Property '%s' not found", property);
             } else {
                 runtime_error(ctx, "Invalid operand for --");
@@ -1559,6 +1603,8 @@ Value eval_expr(Expr *expr, Environment *env, ExecutionContext *ctx) {
                 Value index_val = eval_expr(operand->as.index.index, env, ctx);
 
                 if (!is_integer(index_val)) {
+                    value_release(object);
+                    value_release(index_val);
                     runtime_error(ctx, "Index must be an integer");
                 }
                 int32_t index = value_to_int(index_val);
@@ -1567,14 +1613,19 @@ Value eval_expr(Expr *expr, Environment *env, ExecutionContext *ctx) {
                     Value old_val = array_get(object.as.as_array, index, ctx);
                     Value new_val = value_add_one(old_val, ctx);
                     array_set(object.as.as_array, index, new_val, ctx);
+                    value_release(object);
+                    value_release(index_val);
                     return old_val;
                 } else {
+                    value_release(object);
+                    value_release(index_val);
                     runtime_error(ctx, "Can only use ++ on array elements");
                 }
             } else if (operand->type == EXPR_GET_PROPERTY) {
                 Value object = eval_expr(operand->as.get_property.object, env, ctx);
                 const char *property = operand->as.get_property.property;
                 if (object.type != VAL_OBJECT) {
+                    value_release(object);
                     runtime_error(ctx, "Can only increment object properties");
                 }
                 Object *obj = object.as.as_object;
@@ -1583,9 +1634,12 @@ Value eval_expr(Expr *expr, Environment *env, ExecutionContext *ctx) {
                         Value old_val = obj->field_values[i];
                         Value new_val = value_add_one(old_val, ctx);
                         obj->field_values[i] = new_val;
+                        value_retain(old_val);  // Retain for caller
+                        value_release(object);
                         return old_val;
                     }
                 }
+                value_release(object);
                 runtime_error(ctx, "Property '%s' not found", property);
             } else {
                 runtime_error(ctx, "Invalid operand for ++");
@@ -1608,6 +1662,8 @@ Value eval_expr(Expr *expr, Environment *env, ExecutionContext *ctx) {
                 Value index_val = eval_expr(operand->as.index.index, env, ctx);
 
                 if (!is_integer(index_val)) {
+                    value_release(object);
+                    value_release(index_val);
                     runtime_error(ctx, "Index must be an integer");
                 }
                 int32_t index = value_to_int(index_val);
@@ -1616,14 +1672,19 @@ Value eval_expr(Expr *expr, Environment *env, ExecutionContext *ctx) {
                     Value old_val = array_get(object.as.as_array, index, ctx);
                     Value new_val = value_sub_one(old_val, ctx);
                     array_set(object.as.as_array, index, new_val, ctx);
+                    value_release(object);
+                    value_release(index_val);
                     return old_val;
                 } else {
+                    value_release(object);
+                    value_release(index_val);
                     runtime_error(ctx, "Can only use -- on array elements");
                 }
             } else if (operand->type == EXPR_GET_PROPERTY) {
                 Value object = eval_expr(operand->as.get_property.object, env, ctx);
                 const char *property = operand->as.get_property.property;
                 if (object.type != VAL_OBJECT) {
+                    value_release(object);
                     runtime_error(ctx, "Can only decrement object properties");
                 }
                 Object *obj = object.as.as_object;
@@ -1632,9 +1693,12 @@ Value eval_expr(Expr *expr, Environment *env, ExecutionContext *ctx) {
                         Value old_val = obj->field_values[i];
                         Value new_val = value_sub_one(old_val, ctx);
                         obj->field_values[i] = new_val;
+                        value_retain(old_val);  // Retain for caller
+                        value_release(object);
                         return old_val;
                     }
                 }
+                value_release(object);
                 runtime_error(ctx, "Property '%s' not found", property);
             } else {
                 runtime_error(ctx, "Invalid operand for --");
@@ -1661,6 +1725,7 @@ Value eval_expr(Expr *expr, Environment *env, ExecutionContext *ctx) {
             for (int i = 0; i < num_parts; i++) {
                 Value expr_val = eval_expr(expr_parts[i], env, ctx);
                 expr_strings[i] = value_to_string(expr_val);
+                value_release(expr_val);  // Release after converting to string
                 total_len += strlen(expr_strings[i]);
             }
 
@@ -1689,7 +1754,9 @@ Value eval_expr(Expr *expr, Environment *env, ExecutionContext *ctx) {
             // If it's a task handle, automatically join it
             if (awaited.type == VAL_TASK) {
                 Value args[1] = { awaited };
-                return builtin_join(args, 1, ctx);
+                Value result = builtin_join(args, 1, ctx);
+                value_release(awaited);  // Release task handle after joining
+                return result;
             }
 
             // For other values (including direct async function calls),
@@ -1835,7 +1902,9 @@ Value eval_expr(Expr *expr, Environment *env, ExecutionContext *ctx) {
                 return left_val;
             }
 
-            // Otherwise, evaluate and return the right operand
+            // Left is null - release it (no-op for null, but consistent)
+            value_release(left_val);
+            // Evaluate and return the right operand
             return eval_expr(expr->as.null_coalesce.right, env, ctx);
         }
     }
