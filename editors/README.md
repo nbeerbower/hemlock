@@ -88,14 +88,16 @@ Sublime Text can use the TextMate grammar:
 5. Rename to `Hemlock.tmLanguage`
 6. Restart Sublime Text
 
-## Language Server Protocol (LSP)
+## Language Server Protocol (LSP) - Experimental
 
-Hemlock includes a built-in LSP server! Run it with:
+Hemlock includes a built-in LSP server (experimental). Run it with:
 
 ```bash
 hemlock lsp              # stdio transport (for editors)
 hemlock lsp --tcp 6969   # TCP transport (for debugging)
 ```
+
+> **Note:** The LSP implementation is experimental and may have limitations. Please report issues.
 
 ### Current LSP Features
 
@@ -104,7 +106,7 @@ hemlock lsp --tcp 6969   # TCP transport (for debugging)
 - **Code Completion** - Suggestions for keywords, types, and built-ins
 - **Document Symbols** - Outline view of functions, variables, enums
 
-### Planned LSP Features
+### Planned LSP Features (Future)
 
 - Go to definition
 - Find references

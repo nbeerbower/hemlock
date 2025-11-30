@@ -571,18 +571,17 @@ Buffer *create_buffer(size_t size) {
 **Closures:**
 - Captures environment by reference
 - Environment is heap-allocated
-- **Known leak:** Closure environments never freed (to be fixed in v0.2)
+- Closure environments are properly freed when no longer referenced
 
 ### Memory Leak Patterns
 
 **Current known leaks:**
-1. Closure environments (captured variables)
-2. Detached task structures (Task metadata)
-3. Objects with circular references
-4. Unclosed files (file descriptor leak)
+1. Detached task structures (Task metadata, ~64-96 bytes per detached task)
+2. Objects with circular references
+3. Unclosed files (file descriptor leak)
 
 **Future improvements (v0.2):**
-- Reference counting for objects and closures
+- Reference counting for objects
 - Weak references for circular structures
 - Automatic file descriptor cleanup (defer/RAII)
 - Memory leak detection in debug builds

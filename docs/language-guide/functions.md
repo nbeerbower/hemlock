@@ -596,20 +596,6 @@ fn outer() {
 
 ## Common Pitfalls
 
-### Pitfall: Closure Environment Leaks
-
-```hemlock
-// Memory leak: closure environments are never freed in v0.1
-fn create_closures() {
-    let data = alloc(1000000);  // Large allocation
-    return fn() { return data; };  // Closure captures data
-}
-
-let f = create_closures();  // data is never freed (memory leak)
-```
-
-**Current limitation:** Closure environments are never freed in v0.1. Will be fixed with reference counting in v0.2.
-
 ### Pitfall: Recursion Depth
 
 ```hemlock
@@ -716,7 +702,6 @@ print(numbers);  // [1, 2, 5, 8, 9]
 
 Current limitations to be aware of:
 
-- **Closure environments leak** - Never freed (to be fixed with refcounting in v0.2)
 - **No pass-by-reference** - `ref` keyword parsed but not implemented
 - **No variadic functions** - Can't have variable number of arguments
 - **No default arguments** - All parameters must be provided
