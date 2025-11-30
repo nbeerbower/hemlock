@@ -359,11 +359,10 @@ free(pool);
 
 Current limitations to be aware of:
 
-- **No reference counting** - Objects, closures, and arrays are never freed automatically
+- **No reference counting** - Objects and arrays are never freed automatically
 - **No cycle detection** - Circular references will leak memory
 - **No typed allocation** - `talloc()` and `sizeof()` planned for v0.2
 - **No custom allocators** - Only system malloc/free
-- **Closure environments leak** - Captured variables are never freed (to be fixed in v0.2)
 
 ## Related Topics
 

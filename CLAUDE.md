@@ -1445,7 +1445,6 @@ print(test(10, 20, 30));  // 60
 - Error messages show the valid range: "Function expects 2-4 arguments, got 1"
 
 **Known limitations (v0.1):**
-- Closure environments are never freed (memory leak, to be fixed with refcounting in v0.2)
 - No pass-by-reference yet (`ref` keyword parsed but not implemented)
 - No variadic functions
 - No function overloading

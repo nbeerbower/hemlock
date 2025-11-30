@@ -4,9 +4,9 @@ Full language support for the Hemlock programming language, including syntax hig
 
 ## Features
 
-### Language Server Protocol (LSP) Support
+### Language Server Protocol (LSP) Support - Experimental
 
-This extension includes a full LSP client that connects to the Hemlock language server for:
+This extension includes an LSP client that connects to the Hemlock language server (experimental) for:
 
 - **Real-time Diagnostics** - See syntax errors as you type
 - **Hover Information** - Hover over keywords to see documentation
@@ -167,11 +167,13 @@ See the [Hemlock documentation](https://github.com/nbeerbower/hemlock) for more 
 
 ## Upcoming Features
 
-- **Go to Definition** - Jump to function and variable definitions
-- **Find References** - Find all usages of a symbol
-- **Rename Refactoring** - Rename symbols across files
+- **Go to Definition** - Jump to function and variable definitions (planned)
+- **Find References** - Find all usages of a symbol (planned)
+- **Rename Refactoring** - Rename symbols across files (planned)
 - **Code Snippets** for common patterns
 - **Debug Adapter Protocol** support
+
+> **Note:** The LSP implementation is experimental. Please report any issues.
 
 ## Contributing
 
