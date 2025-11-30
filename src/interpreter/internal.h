@@ -184,6 +184,7 @@ int is_integer(Value val);
 int is_float(Value val);
 int is_numeric(Value val);
 int32_t value_to_int(Value val);
+int64_t value_to_int64(Value val);
 double value_to_float(Value val);
 int value_is_truthy(Value val);
 

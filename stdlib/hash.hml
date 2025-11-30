@@ -16,17 +16,18 @@ import "libcrypto.so.3";
 // DJB2 Hash Algorithm
 // Fast, simple hash function with good distribution
 // Commonly used in hash tables (as seen in HashMap implementation)
-export fn djb2(input: string): i32 {
+export fn djb2(input: string): u32 {
     if (typeof(input) != "string") {
         throw "djb2() requires string argument";
     }
 
-    let h = 5381;
+    let h: u32 = 5381;
     let i = 0;
     while (i < input.byte_length) {
         let byte_val = input.byte_at(i);
         // h = h * 33 + byte_val (using bit shift: h * 33 = h * 32 + h)
-        h = ((h << 5) + h) + byte_val;
+        // Mask to 32 bits to ensure proper wraparound
+        h = (((h << 5) + h) + byte_val) & 4294967295;
         i = i + 1;
     }
 
@@ -36,21 +37,21 @@ export fn djb2(input: string): i32 {
 // FNV-1a Hash Algorithm (32-bit version)
 // Fowler-Noll-Vo hash with good avalanche properties
 // Better distribution than DJB2 for certain data patterns
-export fn fnv1a(input: string): i32 {
+export fn fnv1a(input: string): u32 {
     if (typeof(input) != "string") {
         throw "fnv1a() requires string argument";
     }
 
     // FNV-1a constants (32-bit)
-    let FNV_OFFSET_BASIS = 2166136261;  // 0x811c9dc5
-    let FNV_PRIME = 16777619;            // 0x01000193
+    let FNV_OFFSET_BASIS: u32 = 2166136261;  // 0x811c9dc5
+    let FNV_PRIME: u32 = 16777619;            // 0x01000193
 
-    let h = FNV_OFFSET_BASIS;
+    let h: u32 = FNV_OFFSET_BASIS;
     let i = 0;
     while (i < input.byte_length) {
         let byte_val = input.byte_at(i);
-        h = h ^ byte_val;  // XOR with byte
-        h = h * FNV_PRIME;  // Multiply by FNV prime
+        h = (h ^ byte_val) & 4294967295;  // XOR with byte
+        h = (h * FNV_PRIME) & 4294967295;  // Multiply by FNV prime, mask to 32 bits
         i = i + 1;
     }
 
@@ -60,75 +61,72 @@ export fn fnv1a(input: string): i32 {
 // MurmurHash3 (32-bit version, simplified)
 // Fast, non-cryptographic hash with excellent distribution
 // Widely used in production hash tables (Redis, Hadoop, etc.)
-export fn murmur3(input: string, seed?: 0): i32 {
+export fn murmur3(input: string, seed?: 0): u32 {
     if (typeof(input) != "string") {
         throw "murmur3() requires string argument";
     }
 
     let bytes = input.bytes();
     let len = bytes.length;
-    let h = seed;
+    let h: u32 = seed & 4294967295;
 
-    // Constants
-    let c1 = 3432918353;  // 0xcc9e2d51
-    let c2 = 461845907;   // 0x1b873593
+    // Constants (as u32)
+    let c1: u32 = 3432918353;  // 0xcc9e2d51
+    let c2: u32 = 461845907;   // 0x1b873593
     let r1 = 15;
     let r2 = 13;
-    let m = 5;
-    let n = 3864292196;   // 0xe6546b64
+    let m: u32 = 5;
+    let n: u32 = 3864292196;   // 0xe6546b64
 
     // Process 4-byte chunks
     let i = 0;
     let chunks = len / 4;
-    let full_chunks = 0;
-    // Convert to integer (truncate decimal)
-    let temp_chunks: i32 = chunks;
-    full_chunks = temp_chunks;
+    let full_chunks: i32 = chunks;
 
     i = 0;
     while (i < full_chunks) {
-        // Read 4 bytes as little-endian i32
-        let k = bytes[i * 4]
+        // Read 4 bytes as little-endian u32
+        let k: u32 = (bytes[i * 4]
             | (bytes[i * 4 + 1] << 8)
             | (bytes[i * 4 + 2] << 16)
-            | (bytes[i * 4 + 3] << 24);
+            | (bytes[i * 4 + 3] << 24)) & 4294967295;
 
-        k = k * c1;
-        k = (k << r1) | (k >> (32 - r1));  // rotl32
-        k = k * c2;
+        k = (k * c1) & 4294967295;
+        k = ((k << r1) | ((k >> (32 - r1)) & 4294967295)) & 4294967295;  // rotl32
+        k = (k * c2) & 4294967295;
 
-        h = h ^ k;
-        h = (h << r2) | (h >> (32 - r2));  // rotl32
-        h = h * m + n;
+        h = (h ^ k) & 4294967295;
+        h = ((h << r2) | ((h >> (32 - r2)) & 4294967295)) & 4294967295;  // rotl32
+        h = ((h * m) + n) & 4294967295;
 
         i = i + 1;
     }
 
     // Process remaining bytes
-    let k1 = 0;
+    let k1: u32 = 0;
     let tail_start = full_chunks * 4;
 
     if (len % 4 == 3) {
-        k1 = k1 ^ (bytes[tail_start + 2] << 16);
+        k1 = (k1 ^ (bytes[tail_start + 2] << 16)) & 4294967295;
     }
     if (len % 4 >= 2) {
-        k1 = k1 ^ (bytes[tail_start + 1] << 8);
+        k1 = (k1 ^ (bytes[tail_start + 1] << 8)) & 4294967295;
     }
     if (len % 4 >= 1) {
-        k1 = k1 ^ bytes[tail_start];
-        k1 = k1 * c1;
-        k1 = (k1 << r1) | (k1 >> (32 - r1));
-        k1 = k1 * c2;
-        h = h ^ k1;
+        k1 = (k1 ^ bytes[tail_start]) & 4294967295;
+        k1 = (k1 * c1) & 4294967295;
+        k1 = ((k1 << r1) | ((k1 >> (32 - r1)) & 4294967295)) & 4294967295;
+        k1 = (k1 * c2) & 4294967295;
+        h = (h ^ k1) & 4294967295;
     }
 
     // Finalization mix
-    h = h ^ len;
-    h = h ^ (h >> 16);
-    h = h * 2246822507;  // 0x85ebca6b
-    h = h ^ (h >> 13);
-    h = h * 3266489909;  // 0xc2b2ae35
-    h = h ^ (h >> 16);
+    h = (h ^ len) & 4294967295;
+    h = (h ^ ((h >> 16) & 4294967295)) & 4294967295;
+    h = (h * 2246822507) & 4294967295;  // 0x85ebca6b
+    h = (h ^ ((h >> 13) & 4294967295)) & 4294967295;
+    h = (h * 3266489909) & 4294967295;  // 0xc2b2ae35
+    h = (h ^ ((h >> 16) & 4294967295)) & 4294967295;
 
     return h;
 }

@@ -271,6 +271,24 @@ int32_t value_to_int(Value val) {
     }
 }
 
+// Helper: Convert any integer to i64 (preserves full range)
+int64_t value_to_int64(Value val) {
+    switch (val.type) {
+        case VAL_I8: return (int64_t)val.as.as_i8;
+        case VAL_I16: return (int64_t)val.as.as_i16;
+        case VAL_I32: return (int64_t)val.as.as_i32;
+        case VAL_I64: return val.as.as_i64;
+        case VAL_U8: return (int64_t)val.as.as_u8;
+        case VAL_U16: return (int64_t)val.as.as_u16;
+        case VAL_U32: return (int64_t)val.as.as_u32;
+        case VAL_U64: return (int64_t)val.as.as_u64;  // May lose high bit
+        case VAL_BOOL: return val.as.as_bool;
+        default:
+            fprintf(stderr, "Runtime error: Cannot convert to int64\n");
+            exit(1);
+    }
+}
+
 // Helper: Convert any numeric to f64 (for operations)
 double value_to_float(Value val) {
     switch (val.type) {
@@ -491,9 +509,9 @@ Value convert_to_type(Value value, Type *target_type, Environment *env, Executio
     double float_val = 0.0;
     int is_source_float = 0;
 
-    // Extract source value
+    // Extract source value (use int64 to preserve full range)
     if (is_integer(value)) {
-        int_val = value_to_int(value);
+        int_val = value_to_int64(value);
     } else if (is_float(value)) {
         float_val = value_to_float(value);
         is_source_float = 1;

@@ -49,8 +49,8 @@ fn __deep_equal(a, b): bool {
         return true;
     }
 
-    // Objects (simplified - checks if same reference for now)
-    // TODO: Implement proper object field comparison
+    // Objects - use reference equality
+    // Note: Deep object comparison deferred to 1.1 (needs cycle detection)
     return a == b;
 }
 

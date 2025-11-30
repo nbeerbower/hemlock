@@ -4,22 +4,7 @@
 static Value get_object_field(Object *obj, const char *name);
 static void set_object_field(Object *obj, const char *name, Value value);
 
-// Helper to convert Value to int64_t
-static int64_t value_to_int64(Value val) {
-    switch (val.type) {
-        case VAL_I8: return (int64_t)val.as.as_i8;
-        case VAL_I16: return (int64_t)val.as.as_i16;
-        case VAL_I32: return (int64_t)val.as.as_i32;
-        case VAL_I64: return val.as.as_i64;
-        case VAL_U8: return (int64_t)val.as.as_u8;
-        case VAL_U16: return (int64_t)val.as.as_u16;
-        case VAL_U32: return (int64_t)val.as.as_u32;
-        case VAL_U64: return (int64_t)val.as.as_u64;
-        case VAL_F32: return (int64_t)val.as.as_f32;
-        case VAL_F64: return (int64_t)val.as.as_f64;
-        default: return 0;
-    }
-}
+// Note: value_to_int64() is now defined globally in types.c
 
 Value builtin_now(Value *args, int num_args, ExecutionContext *ctx) {
     (void)args;

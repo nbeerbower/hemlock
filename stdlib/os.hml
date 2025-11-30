@@ -101,8 +101,7 @@ export fn memory_info(): object {
 }
 
 // Format bytes as human-readable string (KB, MB, GB, etc.)
-// Note: Type annotation removed to work around i64 parameter truncation bug
-export fn format_bytes(bytes): string {
+export fn format_bytes(bytes: i64): string {
     if (bytes < 0) {
         return "-" + format_bytes(-bytes);
     }
