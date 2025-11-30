@@ -8,7 +8,7 @@ endif
 SRC_DIR = src
 BUILD_DIR = build
 
-# Detect libffi and OpenSSL (Homebrew on macOS puts them in non-standard locations)
+# Detect libffi, OpenSSL, and libwebsockets (Homebrew on macOS puts them in non-standard locations)
 ifeq ($(shell uname),Darwin)
     # On macOS, prefer Homebrew's libffi (system pkg-config points to SDK without headers)
     BREW_LIBFFI := $(shell brew --prefix libffi 2>/dev/null)
@@ -23,6 +23,18 @@ ifeq ($(shell uname),Darwin)
         CFLAGS += -I$(BREW_OPENSSL)/include
         LDFLAGS_OPENSSL = -L$(BREW_OPENSSL)/lib
     endif
+
+    # On macOS, check for Homebrew's libwebsockets
+    BREW_LIBWEBSOCKETS := $(shell brew --prefix libwebsockets 2>/dev/null)
+    ifneq ($(BREW_LIBWEBSOCKETS),)
+        HAS_LIBWEBSOCKETS := $(shell test -f $(BREW_LIBWEBSOCKETS)/lib/libwebsockets.dylib && echo 1 || echo 0)
+        ifeq ($(HAS_LIBWEBSOCKETS),1)
+            CFLAGS += -I$(BREW_LIBWEBSOCKETS)/include
+            LDFLAGS_LIBWEBSOCKETS = -L$(BREW_LIBWEBSOCKETS)/lib
+        endif
+    else
+        HAS_LIBWEBSOCKETS := 0
+    endif
 else
     # On Linux, use pkg-config if available
     LIBFFI_CFLAGS := $(shell pkg-config --cflags libffi 2>/dev/null)
@@ -32,17 +44,18 @@ else
         LDFLAGS_LIBFFI = $(LIBFFI_LIBS)
     endif
     LDFLAGS_OPENSSL =
-endif
+    LDFLAGS_LIBWEBSOCKETS =
 
-# Check if libwebsockets is available
-HAS_LIBWEBSOCKETS := $(shell pkg-config --exists libwebsockets 2>/dev/null && echo 1 || (test -f /usr/include/libwebsockets.h && echo 1 || echo 0))
+    # Check if libwebsockets is available on Linux
+    HAS_LIBWEBSOCKETS := $(shell pkg-config --exists libwebsockets 2>/dev/null && echo 1 || (test -f /usr/include/libwebsockets.h && echo 1 || echo 0))
+endif
 
 # Base libraries (always required)
 LDFLAGS = $(LDFLAGS_LIBFFI) $(LDFLAGS_OPENSSL) -lm -lpthread -lffi -ldl -lz -lcrypto
 
 # Conditionally add libwebsockets
 ifeq ($(HAS_LIBWEBSOCKETS),1)
-LDFLAGS += -lwebsockets
+LDFLAGS += $(LDFLAGS_LIBWEBSOCKETS) -lwebsockets
 CFLAGS += -DHAVE_LIBWEBSOCKETS=1
 endif
 
@@ -94,7 +107,11 @@ test: $(TARGET) stdlib
 stdlib:
 ifeq ($(HAS_LIBWEBSOCKETS),1)
 	@echo "Building stdlib/c/lws_wrapper.so..."
+ifeq ($(shell uname),Darwin)
+	$(CC) -shared -fPIC -I$(BREW_LIBWEBSOCKETS)/include -I$(BREW_OPENSSL)/include -o stdlib/c/lws_wrapper.so stdlib/c/lws_wrapper.c $(LDFLAGS_LIBWEBSOCKETS) $(LDFLAGS_OPENSSL) -lwebsockets
+else
 	$(CC) -shared -fPIC -o stdlib/c/lws_wrapper.so stdlib/c/lws_wrapper.c -lwebsockets
+endif
 	@echo "✓ lws_wrapper.so built successfully"
 else
 	@echo "⊘ Skipping lws_wrapper.so (libwebsockets not installed)"
