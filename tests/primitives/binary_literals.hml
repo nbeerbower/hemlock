@@ -1,0 +1,64 @@
+// Test binary literals
+
+// Basic binary values
+let a = 0b0;
+let b = 0b1;
+let c = 0b10;
+let d = 0b1010;
+let e = 0b11111111;
+
+print(a);  // 0
+print(b);  // 1
+print(c);  // 2
+print(d);  // 10
+print(e);  // 255
+
+// Uppercase B
+let f = 0B1100;
+print(f);  // 12
+
+// Binary with type annotations
+let g: u8 = 0b11111111;
+let h: i32 = 0b10101010;
+let i: u16 = 0b1111111111111111;
+
+print(g);  // 255
+print(h);  // 170
+print(i);  // 65535
+
+// Binary in expressions
+let j = 0b1010 + 0b0101;
+let k = 0b1000 * 0b10;
+let l = 0b10000 / 0b10;
+
+print(j);  // 15
+print(k);  // 16
+print(l);  // 8
+
+// Binary with bitwise operations
+let m = 0b1111 & 0b1010;
+let n = 0b1100 | 0b0011;
+let o = 0b1111 ^ 0b0101;
+let p = 0b0001 << 4;
+let q = 0b10000 >> 2;
+
+print(m);  // 10
+print(n);  // 15
+print(o);  // 10
+print(p);  // 16
+print(q);  // 4
+
+// Large binary values (32-bit)
+let r: u32 = 0b01111111111111111111111111111111;
+print(r);  // 2147483647
+
+// Common patterns
+let byte_mask = 0b11111111;
+let nibble = 0b1111;
+let msb = 0b10000000;
+let lsb = 0b00000001;
+
+print(byte_mask);  // 255
+print(nibble);     // 15
+print(msb);        // 128
+print(lsb);        // 1

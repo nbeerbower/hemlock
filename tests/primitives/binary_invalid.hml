@@ -1,0 +1,3 @@
+// Test invalid binary literal - should fail to parse
+let x = 0b;
+print(x);

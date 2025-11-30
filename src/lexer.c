@@ -74,6 +74,61 @@ static Token error_token(Lexer *lex, const char *message) {
 }
 
 static Token number(Lexer *lex) {
+    // Check for hex (0x) or binary (0b) prefix
+    // At this point, we've already consumed the first digit via advance() in lexer_next
+    // lex->start points to first digit, lex->current is one past it
+
+    if (lex->current - lex->start == 1 && lex->start[0] == '0') {
+        char next = peek(lex);
+
+        // Hexadecimal literal: 0x or 0X
+        if (next == 'x' || next == 'X') {
+            advance(lex);  // consume 'x' or 'X'
+
+            // Need at least one hex digit
+            if (!isxdigit(peek(lex))) {
+                return error_token(lex, "Expected hex digit after '0x'");
+            }
+
+            while (isxdigit(peek(lex))) {
+                advance(lex);
+            }
+
+            Token token = make_token(lex, TOK_NUMBER);
+            token.is_float = 0;
+
+            char *text = token_text(&token);
+            char *endptr;
+            token.int_value = strtoll(text + 2, &endptr, 16);  // Skip "0x" prefix
+            free(text);
+            return token;
+        }
+
+        // Binary literal: 0b or 0B
+        if (next == 'b' || next == 'B') {
+            advance(lex);  // consume 'b' or 'B'
+
+            // Need at least one binary digit
+            if (peek(lex) != '0' && peek(lex) != '1') {
+                return error_token(lex, "Expected binary digit after '0b'");
+            }
+
+            while (peek(lex) == '0' || peek(lex) == '1') {
+                advance(lex);
+            }
+
+            Token token = make_token(lex, TOK_NUMBER);
+            token.is_float = 0;
+
+            char *text = token_text(&token);
+            char *endptr;
+            token.int_value = strtoll(text + 2, &endptr, 2);  // Skip "0b" prefix
+            free(text);
+            return token;
+        }
+    }
+
+    // Regular decimal number
     while (isdigit(peek(lex))) {
         advance(lex);
     }

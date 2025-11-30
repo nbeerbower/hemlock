@@ -1,0 +1,51 @@
+// Test hex literals
+
+// Basic hex values
+let a = 0xFF;
+let b = 0x10;
+let c = 0x0;
+let d = 0xDEADBEEF;
+
+print(a);  // 255
+print(b);  // 16
+print(c);  // 0
+print(d);  // 3735928559
+
+// Uppercase X
+let e = 0X1A;
+print(e);  // 26
+
+// Mixed case digits
+let f = 0xAbCdEf;
+print(f);  // 11259375
+
+// Hex with type annotations
+let g: u8 = 0xFF;
+let h: i32 = 0xCAFE;
+let i: u32 = 0x7FFFFFFF;
+
+print(g);  // 255
+print(h);  // 51966
+print(i);  // 2147483647
+
+// Hex in expressions
+let j = 0xFF + 1;
+let k = 0x10 * 2;
+let l = 0x100 / 0x10;
+
+print(j);  // 256
+print(k);  // 32
+print(l);  // 16
+
+// Hex with bitwise operations
+let m = 0xFF & 0x0F;
+let n = 0xF0 | 0x0F;
+let o = 0xFF ^ 0x0F;
+
+print(m);  // 15
+print(n);  // 255
+print(o);  // 240
+
+// Large hex values auto-infer to i64
+let p = 0x100000000;
+print(p);  // 4294967296 (larger than i32 max, infers i64)

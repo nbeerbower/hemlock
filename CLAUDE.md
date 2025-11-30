@@ -163,6 +163,54 @@ let max_i64 = 9223372036854775807; // i64 (INT64_MAX)
 let explicit: u32 = 100;           // u32 (type annotation overrides)
 ```
 
+### Hex and Binary Literals
+Hemlock supports hexadecimal and binary integer literals for low-level programming:
+
+**Hexadecimal literals** use the `0x` or `0X` prefix:
+```hemlock
+let a = 0xFF;        // 255
+let b = 0x1A2B;      // 6699
+let c = 0xDEADBEEF;  // 3735928559
+let d = 0X10;        // 16 (uppercase X also works)
+let e = 0xAbCdEf;    // 11259375 (mixed case digits)
+```
+
+**Binary literals** use the `0b` or `0B` prefix:
+```hemlock
+let a = 0b1010;      // 10
+let b = 0b11111111;  // 255
+let c = 0B1100;      // 12 (uppercase B also works)
+let d = 0b0;         // 0
+let e = 0b1;         // 1
+```
+
+**Type inference** works the same as decimal literals:
+```hemlock
+let small = 0xFF;           // i32 (fits in i32)
+let large = 0x100000000;    // i64 (> i32 max)
+let byte: u8 = 0xFF;        // u8 (type annotation)
+let mask: u32 = 0x7FFFFFFF; // u32 (type annotation)
+```
+
+**Useful with bitwise operations:**
+```hemlock
+let flags = 0b1010;
+let mask = 0xFF;
+
+let result = flags & mask;      // Bitwise AND
+let combined = 0xF0 | 0x0F;     // Bitwise OR → 0xFF
+let toggled = 0xFF ^ 0x0F;      // Bitwise XOR → 0xF0
+let shifted = 0b0001 << 4;      // Left shift → 0b10000
+```
+
+**Error handling:**
+```hemlock
+let x = 0x;   // ERROR: Expected hex digit after '0x'
+let y = 0b;   // ERROR: Expected binary digit after '0b'
+let z = 0xG;  // ERROR: Expected hex digit after '0x' (G is invalid)
+let w = 0b2;  // ERROR: Expected binary digit after '0b' (2 is invalid)
+```
+
 ---
 
 ## Memory Management
