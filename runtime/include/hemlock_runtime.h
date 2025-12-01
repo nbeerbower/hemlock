@@ -73,6 +73,9 @@ const char* hml_typeof(HmlValue val);
 void hml_check_type(HmlValue val, HmlValueType expected, const char *var_name);
 int hml_values_equal(HmlValue left, HmlValue right);
 
+// Type conversion with range checking (used for typed variable declarations)
+HmlValue hml_convert_to_type(HmlValue val, HmlValueType target_type);
+
 // Assertions
 void hml_assert(HmlValue condition, HmlValue message);
 void hml_panic(HmlValue message);

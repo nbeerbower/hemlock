@@ -512,14 +512,7 @@ Value call_array_method(Array *arr, const char *method, Value *args, int num_arg
             }
 
             // Check if predicate returned truthy value
-            int is_truthy = 0;
-            if (predicate_result.type == VAL_BOOL) {
-                is_truthy = predicate_result.as.as_bool;
-            } else if (predicate_result.type != VAL_NULL) {
-                is_truthy = 1;  // Non-null, non-false values are truthy
-            }
-
-            if (is_truthy) {
+            if (value_is_truthy(predicate_result)) {
                 array_push(result, arr->elements[i]);
             }
 

@@ -268,6 +268,175 @@ void hml_check_type(HmlValue val, HmlValueType expected, const char *var_name) {
     }
 }
 
+// Helper to check if a value is an integer type
+static int hml_is_integer_type(HmlValue val) {
+    switch (val.type) {
+        case HML_VAL_I8: case HML_VAL_I16: case HML_VAL_I32: case HML_VAL_I64:
+        case HML_VAL_U8: case HML_VAL_U16: case HML_VAL_U32: case HML_VAL_U64:
+            return 1;
+        default:
+            return 0;
+    }
+}
+
+// Helper to check if a value is a float type
+static int hml_is_float_type(HmlValue val) {
+    return val.type == HML_VAL_F32 || val.type == HML_VAL_F64;
+}
+
+// Helper to extract int64 from any numeric value
+static int64_t hml_val_to_int64(HmlValue val) {
+    switch (val.type) {
+        case HML_VAL_I8:  return val.as.as_i8;
+        case HML_VAL_I16: return val.as.as_i16;
+        case HML_VAL_I32: return val.as.as_i32;
+        case HML_VAL_I64: return val.as.as_i64;
+        case HML_VAL_U8:  return val.as.as_u8;
+        case HML_VAL_U16: return val.as.as_u16;
+        case HML_VAL_U32: return val.as.as_u32;
+        case HML_VAL_U64: return (int64_t)val.as.as_u64;
+        case HML_VAL_F32: return (int64_t)val.as.as_f32;
+        case HML_VAL_F64: return (int64_t)val.as.as_f64;
+        case HML_VAL_BOOL: return val.as.as_bool ? 1 : 0;
+        case HML_VAL_RUNE: return val.as.as_rune;
+        default: return 0;
+    }
+}
+
+// Helper to extract double from any numeric value
+static double hml_val_to_double(HmlValue val) {
+    switch (val.type) {
+        case HML_VAL_I8:  return (double)val.as.as_i8;
+        case HML_VAL_I16: return (double)val.as.as_i16;
+        case HML_VAL_I32: return (double)val.as.as_i32;
+        case HML_VAL_I64: return (double)val.as.as_i64;
+        case HML_VAL_U8:  return (double)val.as.as_u8;
+        case HML_VAL_U16: return (double)val.as.as_u16;
+        case HML_VAL_U32: return (double)val.as.as_u32;
+        case HML_VAL_U64: return (double)val.as.as_u64;
+        case HML_VAL_F32: return (double)val.as.as_f32;
+        case HML_VAL_F64: return val.as.as_f64;
+        default: return 0.0;
+    }
+}
+
+HmlValue hml_convert_to_type(HmlValue val, HmlValueType target_type) {
+    // If already the target type, return as-is
+    if (val.type == target_type) {
+        return val;
+    }
+
+    // Extract source value
+    int64_t int_val = 0;
+    double float_val = 0.0;
+    int is_source_float = hml_is_float_type(val);
+
+    if (hml_is_integer_type(val) || val.type == HML_VAL_BOOL || val.type == HML_VAL_RUNE) {
+        int_val = hml_val_to_int64(val);
+    } else if (is_source_float) {
+        float_val = hml_val_to_double(val);
+    } else if (val.type == HML_VAL_STRING && target_type == HML_VAL_STRING) {
+        return val;
+    } else if (val.type == HML_VAL_NULL && target_type == HML_VAL_NULL) {
+        return val;
+    } else {
+        fprintf(stderr, "Runtime error: Cannot convert %s to %s\n",
+                hml_type_name(val.type), hml_type_name(target_type));
+        exit(1);
+    }
+
+    switch (target_type) {
+        case HML_VAL_I8:
+            if (is_source_float) int_val = (int64_t)float_val;
+            if (int_val < -128 || int_val > 127) {
+                fprintf(stderr, "Runtime error: Value %ld out of range for i8 [-128, 127]\n", int_val);
+                exit(1);
+            }
+            return hml_val_i8((int8_t)int_val);
+
+        case HML_VAL_I16:
+            if (is_source_float) int_val = (int64_t)float_val;
+            if (int_val < -32768 || int_val > 32767) {
+                fprintf(stderr, "Runtime error: Value %ld out of range for i16 [-32768, 32767]\n", int_val);
+                exit(1);
+            }
+            return hml_val_i16((int16_t)int_val);
+
+        case HML_VAL_I32:
+            if (is_source_float) int_val = (int64_t)float_val;
+            if (int_val < -2147483648LL || int_val > 2147483647LL) {
+                fprintf(stderr, "Runtime error: Value %ld out of range for i32 [-2147483648, 2147483647]\n", int_val);
+                exit(1);
+            }
+            return hml_val_i32((int32_t)int_val);
+
+        case HML_VAL_I64:
+            if (is_source_float) int_val = (int64_t)float_val;
+            return hml_val_i64(int_val);
+
+        case HML_VAL_U8:
+            if (is_source_float) int_val = (int64_t)float_val;
+            if (int_val < 0 || int_val > 255) {
+                fprintf(stderr, "Runtime error: Value %ld out of range for u8 [0, 255]\n", int_val);
+                exit(1);
+            }
+            return hml_val_u8((uint8_t)int_val);
+
+        case HML_VAL_U16:
+            if (is_source_float) int_val = (int64_t)float_val;
+            if (int_val < 0 || int_val > 65535) {
+                fprintf(stderr, "Runtime error: Value %ld out of range for u16 [0, 65535]\n", int_val);
+                exit(1);
+            }
+            return hml_val_u16((uint16_t)int_val);
+
+        case HML_VAL_U32:
+            if (is_source_float) int_val = (int64_t)float_val;
+            if (int_val < 0 || int_val > 4294967295LL) {
+                fprintf(stderr, "Runtime error: Value %ld out of range for u32 [0, 4294967295]\n", int_val);
+                exit(1);
+            }
+            return hml_val_u32((uint32_t)int_val);
+
+        case HML_VAL_U64:
+            if (is_source_float) int_val = (int64_t)float_val;
+            if (int_val < 0) {
+                fprintf(stderr, "Runtime error: Value %ld out of range for u64 [0, 18446744073709551615]\n", int_val);
+                exit(1);
+            }
+            return hml_val_u64((uint64_t)int_val);
+
+        case HML_VAL_F32:
+            if (is_source_float) {
+                return hml_val_f32((float)float_val);
+            } else {
+                return hml_val_f32((float)int_val);
+            }
+
+        case HML_VAL_F64:
+            if (is_source_float) {
+                return hml_val_f64(float_val);
+            } else {
+                return hml_val_f64((double)int_val);
+            }
+
+        case HML_VAL_RUNE:
+            if (is_source_float) int_val = (int64_t)float_val;
+            if (int_val < 0 || int_val > 0x10FFFF) {
+                fprintf(stderr, "Runtime error: Value %ld out of range for rune [0, 0x10FFFF]\n", int_val);
+                exit(1);
+            }
+            return hml_val_rune((uint32_t)int_val);
+
+        case HML_VAL_BOOL:
+            return hml_val_bool(int_val != 0 || float_val != 0.0);
+
+        default:
+            // For other types, return as-is
+            return val;
+    }
+}
+
 // ========== ASSERTIONS ==========
 
 void hml_assert(HmlValue condition, HmlValue message) {
@@ -1692,13 +1861,25 @@ HmlValue hml_string_index(HmlValue str, HmlValue index) {
     return hml_string_char_at(str, index);
 }
 
-void hml_string_index_assign(HmlValue str, HmlValue index, HmlValue rune) {
+void hml_string_index_assign(HmlValue str, HmlValue index, HmlValue val) {
     if (str.type != HML_VAL_STRING || !str.as.as_string) {
         fprintf(stderr, "Runtime error: String index assignment requires string\n");
         exit(1);
     }
-    if (rune.type != HML_VAL_RUNE) {
-        fprintf(stderr, "Runtime error: String index assignment requires rune value\n");
+
+    // Accept both rune and integer types (convert integer to rune)
+    uint32_t rune_val;
+    if (val.type == HML_VAL_RUNE) {
+        rune_val = val.as.as_rune;
+    } else if (hml_is_integer_type(val)) {
+        int64_t int_val = hml_val_to_int64(val);
+        if (int_val < 0 || int_val > 0x10FFFF) {
+            fprintf(stderr, "Runtime error: Integer value %ld out of range for rune [0, 0x10FFFF]\n", int_val);
+            exit(1);
+        }
+        rune_val = (uint32_t)int_val;
+    } else {
+        fprintf(stderr, "Runtime error: String index assignment requires rune or integer value\n");
         exit(1);
     }
 
@@ -1712,8 +1893,8 @@ void hml_string_index_assign(HmlValue str, HmlValue index, HmlValue rune) {
 
     // For simplicity, only support single-byte characters in assignment
     // Full UTF-8 would require resizing the string
-    if (rune.as.as_rune < 128) {
-        s->data[idx] = (char)rune.as.as_rune;
+    if (rune_val < 128) {
+        s->data[idx] = (char)rune_val;
     } else {
         fprintf(stderr, "Runtime error: String assignment of multi-byte runes not yet supported\n");
         exit(1);
