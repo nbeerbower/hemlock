@@ -1989,27 +1989,36 @@ char* codegen_expr(CodegenContext *ctx, Expr *expr) {
                 }
 
                 // ========== TIME BUILTINS ==========
+                // Note: For unprefixed builtins, only use builtin if NOT a local/import
 
-                // now()
-                if ((strcmp(fn_name, "now") == 0 || strcmp(fn_name, "__now") == 0) && expr->as.call.num_args == 0) {
+                // now() - but NOT if 'now' is a local/import (e.g., from @stdlib/datetime)
+                if ((strcmp(fn_name, "__now") == 0 ||
+                     (strcmp(fn_name, "now") == 0 && !codegen_is_local(ctx, fn_name))) &&
+                    expr->as.call.num_args == 0) {
                     codegen_writeln(ctx, "HmlValue %s = hml_now();", result);
                     break;
                 }
 
-                // time_ms()
-                if ((strcmp(fn_name, "time_ms") == 0 || strcmp(fn_name, "__time_ms") == 0) && expr->as.call.num_args == 0) {
+                // time_ms() - but NOT if 'time_ms' is a local/import
+                if ((strcmp(fn_name, "__time_ms") == 0 ||
+                     (strcmp(fn_name, "time_ms") == 0 && !codegen_is_local(ctx, fn_name))) &&
+                    expr->as.call.num_args == 0) {
                     codegen_writeln(ctx, "HmlValue %s = hml_time_ms();", result);
                     break;
                 }
 
-                // clock()
-                if ((strcmp(fn_name, "clock") == 0 || strcmp(fn_name, "__clock") == 0) && expr->as.call.num_args == 0) {
+                // clock() - but NOT if 'clock' is a local/import
+                if ((strcmp(fn_name, "__clock") == 0 ||
+                     (strcmp(fn_name, "clock") == 0 && !codegen_is_local(ctx, fn_name))) &&
+                    expr->as.call.num_args == 0) {
                     codegen_writeln(ctx, "HmlValue %s = hml_clock();", result);
                     break;
                 }
 
-                // sleep(seconds)
-                if ((strcmp(fn_name, "sleep") == 0 || strcmp(fn_name, "__sleep") == 0) && expr->as.call.num_args == 1) {
+                // sleep(seconds) - but NOT if 'sleep' is a local/import
+                if ((strcmp(fn_name, "__sleep") == 0 ||
+                     (strcmp(fn_name, "sleep") == 0 && !codegen_is_local(ctx, fn_name))) &&
+                    expr->as.call.num_args == 1) {
                     char *arg = codegen_expr(ctx, expr->as.call.args[0]);
                     codegen_writeln(ctx, "hml_sleep(%s);", arg);
                     codegen_writeln(ctx, "hml_release(&%s);", arg);
@@ -3461,11 +3470,21 @@ char* codegen_expr(CodegenContext *ctx, Expr *expr) {
                 for (int i = 0; i < captured->num_vars; i++) {
                     int shared_idx = shared_env_get_index(ctx, captured->vars[i]);
                     if (shared_idx >= 0) {
-                        // Check if captured variable is a main file variable (needs _main_ prefix)
-                        if (codegen_is_main_var(ctx, captured->vars[i])) {
+                        // Determine which variable name to use:
+                        // - Main file vars are stored as _main_<name> in C
+                        // - Module-local vars are stored as <name> in C
+                        // - Module-local vars should shadow outer (main) vars with same name
+                        if (ctx->current_module && codegen_is_local(ctx, captured->vars[i])) {
+                            // Inside a module with a local variable - use bare name
+                            // This handles cases like Set() having local 'map' that shadows main's 'map'
+                            codegen_writeln(ctx, "hml_closure_env_set(%s, %d, %s);",
+                                          ctx->shared_env_name, shared_idx, captured->vars[i]);
+                        } else if (codegen_is_main_var(ctx, captured->vars[i])) {
+                            // Main file variable (not in a module, or not a local) - use prefix
                             codegen_writeln(ctx, "hml_closure_env_set(%s, %d, _main_%s);",
                                           ctx->shared_env_name, shared_idx, captured->vars[i]);
                         } else {
+                            // Neither - use as-is
                             codegen_writeln(ctx, "hml_closure_env_set(%s, %d, %s);",
                                           ctx->shared_env_name, shared_idx, captured->vars[i]);
                         }
@@ -3500,11 +3519,20 @@ char* codegen_expr(CodegenContext *ctx, Expr *expr) {
                 codegen_writeln(ctx, "HmlClosureEnv *_env_%d = hml_closure_env_new(%d);",
                               env_id, captured->num_vars);
                 for (int i = 0; i < captured->num_vars; i++) {
-                    // Check if captured variable is a main file variable (needs _main_ prefix)
-                    if (codegen_is_main_var(ctx, captured->vars[i])) {
+                    // Determine which variable name to use:
+                    // - Main file vars are stored as _main_<name> in C
+                    // - Module-local vars are stored as <name> in C
+                    // - Module-local vars should shadow outer (main) vars with same name
+                    if (ctx->current_module && codegen_is_local(ctx, captured->vars[i])) {
+                        // Inside a module with a local variable - use bare name
+                        codegen_writeln(ctx, "hml_closure_env_set(_env_%d, %d, %s);",
+                                      env_id, i, captured->vars[i]);
+                    } else if (codegen_is_main_var(ctx, captured->vars[i])) {
+                        // Main file variable (not in a module, or not a local) - use prefix
                         codegen_writeln(ctx, "hml_closure_env_set(_env_%d, %d, _main_%s);",
                                       env_id, i, captured->vars[i]);
                     } else {
+                        // Neither - use as-is
                         codegen_writeln(ctx, "hml_closure_env_set(_env_%d, %d, %s);",
                                       env_id, i, captured->vars[i]);
                     }
