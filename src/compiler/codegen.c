@@ -1443,6 +1443,15 @@ char* codegen_expr(CodegenContext *ctx, Expr *expr) {
                     // Not a local variable, use module prefix
                     codegen_writeln(ctx, "HmlValue %s = %s%s;", result,
                                   ctx->current_module->module_prefix, expr->as.ident);
+                } else if (ctx->current_module && codegen_is_local(ctx, expr->as.ident)) {
+                    // Local variable, but check if it's a module export (self-reference in closure)
+                    ExportedSymbol *exp = module_find_export(ctx->current_module, expr->as.ident);
+                    if (exp) {
+                        // Use the mangled export name to access module-level function
+                        codegen_writeln(ctx, "HmlValue %s = %s;", result, exp->mangled_name);
+                    } else {
+                        codegen_writeln(ctx, "HmlValue %s = %s;", result, expr->as.ident);
+                    }
                 } else if (codegen_is_main_var(ctx, expr->as.ident)) {
                     // Main file top-level variable - use _main_ prefix
                     // Check this BEFORE local check since function names are added as locals for tracking
@@ -4451,11 +4460,37 @@ static void codegen_closure_impl(CodegenContext *ctx, ClosureInfo *closure) {
 
     // Extract captured variables from environment
     for (int i = 0; i < closure->num_captured; i++) {
-        // Use shared_env_indices if available (shared environment), otherwise use local ordering
-        int env_index = closure->shared_env_indices ? closure->shared_env_indices[i] : i;
-        codegen_writeln(ctx, "HmlValue %s = hml_closure_env_get(_closure_env, %d);",
-                      closure->captured_vars[i], env_index);
-        codegen_add_local(ctx, closure->captured_vars[i]);
+        const char *var_name = closure->captured_vars[i];
+
+        // Check if this is a module-level export (self-reference like Set calling Set)
+        int is_module_export = 0;
+        if (closure->source_module) {
+            ExportedSymbol *exp = module_find_export(closure->source_module, var_name);
+            if (exp) {
+                is_module_export = 1;
+                codegen_writeln(ctx, "HmlValue %s = %s;", var_name, exp->mangled_name);
+            }
+        }
+
+        if (!is_module_export) {
+            // Use shared_env_indices if available (shared environment), otherwise use local ordering
+            int env_index = closure->shared_env_indices ? closure->shared_env_indices[i] : i;
+
+            if (env_index == -1) {
+                // Variable not in shared environment - check if it's a main file variable
+                if (codegen_is_main_var(ctx, var_name)) {
+                    // Main file function/variable - use _main_ prefix
+                    codegen_writeln(ctx, "HmlValue %s = _main_%s;", var_name, var_name);
+                } else {
+                    // Fallback - just use the variable name directly (might be a global or builtin)
+                    codegen_writeln(ctx, "HmlValue %s = %s;", var_name, var_name);
+                }
+            } else {
+                codegen_writeln(ctx, "HmlValue %s = hml_closure_env_get(_closure_env, %d);",
+                              var_name, env_index);
+            }
+        }
+        codegen_add_local(ctx, var_name);
     }
 
     // Apply default values for optional parameters
