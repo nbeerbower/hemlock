@@ -108,6 +108,11 @@ typedef struct {
     // Defer support
     DeferEntry *defer_stack;  // Stack of deferred expressions (LIFO)
 
+    // Last created closure (for self-reference fixup in let statements)
+    int last_closure_env_id;       // -1 if no closure, otherwise the env counter
+    char **last_closure_captured;  // Captured variable names
+    int last_closure_num_captured; // Number of captured variables
+
     // Module support
     ModuleCache *module_cache;          // Cache of compiled modules
     CompiledModule *current_module;     // Module currently being compiled (NULL for main)
