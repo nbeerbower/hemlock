@@ -1054,6 +1054,7 @@ static int type_priority(HmlValueType type) {
         case HML_VAL_I16:  return 3;
         case HML_VAL_U16:  return 4;
         case HML_VAL_I32:  return 5;
+        case HML_VAL_RUNE: return 5;  // Runes promote like i32
         case HML_VAL_U32:  return 6;
         case HML_VAL_I64:  return 7;
         case HML_VAL_U64:  return 8;
@@ -1067,6 +1068,11 @@ static HmlValueType promote_types(HmlValueType a, HmlValueType b) {
     // Float always wins
     if (a == HML_VAL_F64 || b == HML_VAL_F64) return HML_VAL_F64;
     if (a == HML_VAL_F32 || b == HML_VAL_F32) return HML_VAL_F32;
+
+    // Runes promote to i32 when combined with other types
+    if (a == HML_VAL_RUNE && b == HML_VAL_RUNE) return HML_VAL_I32;
+    if (a == HML_VAL_RUNE) return (type_priority(HML_VAL_I32) >= type_priority(b)) ? HML_VAL_I32 : b;
+    if (b == HML_VAL_RUNE) return (type_priority(HML_VAL_I32) >= type_priority(a)) ? HML_VAL_I32 : a;
 
     // Otherwise, higher priority wins
     return (type_priority(a) >= type_priority(b)) ? a : b;
@@ -1712,6 +1718,76 @@ void hml_string_index_assign(HmlValue str, HmlValue index, HmlValue rune) {
         fprintf(stderr, "Runtime error: String assignment of multi-byte runes not yet supported\n");
         exit(1);
     }
+}
+
+// UTF-8 helper: get byte length of character starting at given byte
+static int utf8_char_len(unsigned char c) {
+    if ((c & 0x80) == 0) return 1;        // ASCII
+    if ((c & 0xE0) == 0xC0) return 2;     // 2-byte
+    if ((c & 0xF0) == 0xE0) return 3;     // 3-byte
+    if ((c & 0xF8) == 0xF0) return 4;     // 4-byte
+    return 1;  // Invalid, treat as single byte
+}
+
+// UTF-8 helper: decode codepoint at position
+static uint32_t utf8_decode_char(const char *s, int *bytes_read) {
+    unsigned char c = (unsigned char)s[0];
+    uint32_t codepoint;
+    int len = utf8_char_len(c);
+
+    if (len == 1) {
+        codepoint = c;
+    } else if (len == 2) {
+        codepoint = ((c & 0x1F) << 6) | (s[1] & 0x3F);
+    } else if (len == 3) {
+        codepoint = ((c & 0x0F) << 12) | ((s[1] & 0x3F) << 6) | (s[2] & 0x3F);
+    } else {
+        codepoint = ((c & 0x07) << 18) | ((s[1] & 0x3F) << 12) |
+                    ((s[2] & 0x3F) << 6) | (s[3] & 0x3F);
+    }
+
+    *bytes_read = len;
+    return codepoint;
+}
+
+// Convert string to array of runes (codepoints)
+HmlValue hml_string_chars(HmlValue str) {
+    if (str.type != HML_VAL_STRING || !str.as.as_string) {
+        fprintf(stderr, "Runtime error: chars() requires string\n");
+        exit(1);
+    }
+
+    HmlString *s = str.as.as_string;
+    HmlValue arr = hml_val_array();
+
+    int byte_pos = 0;
+    while (byte_pos < s->length) {
+        int bytes_read;
+        uint32_t codepoint = utf8_decode_char(s->data + byte_pos, &bytes_read);
+        HmlValue rune = hml_val_rune(codepoint);
+        hml_array_push(arr, rune);
+        byte_pos += bytes_read;
+    }
+
+    return arr;
+}
+
+// Convert string to array of bytes (u8 values)
+HmlValue hml_string_bytes(HmlValue str) {
+    if (str.type != HML_VAL_STRING || !str.as.as_string) {
+        fprintf(stderr, "Runtime error: bytes() requires string\n");
+        exit(1);
+    }
+
+    HmlString *s = str.as.as_string;
+    HmlValue arr = hml_val_array();
+
+    for (int i = 0; i < s->length; i++) {
+        HmlValue byte = hml_val_u8((unsigned char)s->data[i]);
+        hml_array_push(arr, byte);
+    }
+
+    return arr;
 }
 
 // Buffer indexing
@@ -2442,7 +2518,8 @@ HmlValue hml_array_reduce(HmlValue arr, HmlValue reducer, HmlValue initial) {
 
 HmlValue hml_object_get_field(HmlValue obj, const char *field) {
     if (obj.type != HML_VAL_OBJECT || !obj.as.as_object) {
-        fprintf(stderr, "Runtime error: Property access requires object\n");
+        fprintf(stderr, "Runtime error: Property access requires object (trying to get '%s' from type %s)\n",
+                field, hml_typeof_str(obj));
         exit(1);
     }
 
@@ -3082,8 +3159,133 @@ HmlValue hml_call_function(HmlValue fn, HmlValue *args, int num_args) {
 __thread HmlValue hml_self = {0};
 
 HmlValue hml_call_method(HmlValue obj, const char *method, HmlValue *args, int num_args) {
+    // Handle string methods
+    if (obj.type == HML_VAL_STRING) {
+        if (strcmp(method, "chars") == 0 && num_args == 0) {
+            return hml_string_chars(obj);
+        }
+        if (strcmp(method, "bytes") == 0 && num_args == 0) {
+            return hml_string_bytes(obj);
+        }
+        if (strcmp(method, "substr") == 0 && num_args == 2) {
+            return hml_string_substr(obj, args[0], args[1]);
+        }
+        if (strcmp(method, "slice") == 0 && num_args == 2) {
+            return hml_string_slice(obj, args[0], args[1]);
+        }
+        if (strcmp(method, "find") == 0 && num_args == 1) {
+            return hml_string_find(obj, args[0]);
+        }
+        if (strcmp(method, "contains") == 0 && num_args == 1) {
+            return hml_string_contains(obj, args[0]);
+        }
+        if (strcmp(method, "split") == 0 && num_args == 1) {
+            return hml_string_split(obj, args[0]);
+        }
+        if (strcmp(method, "trim") == 0 && num_args == 0) {
+            return hml_string_trim(obj);
+        }
+        if (strcmp(method, "to_upper") == 0 && num_args == 0) {
+            return hml_string_to_upper(obj);
+        }
+        if (strcmp(method, "to_lower") == 0 && num_args == 0) {
+            return hml_string_to_lower(obj);
+        }
+        if (strcmp(method, "starts_with") == 0 && num_args == 1) {
+            return hml_string_starts_with(obj, args[0]);
+        }
+        if (strcmp(method, "ends_with") == 0 && num_args == 1) {
+            return hml_string_ends_with(obj, args[0]);
+        }
+        if (strcmp(method, "replace") == 0 && num_args == 2) {
+            return hml_string_replace(obj, args[0], args[1]);
+        }
+        if (strcmp(method, "replace_all") == 0 && num_args == 2) {
+            return hml_string_replace_all(obj, args[0], args[1]);
+        }
+        if (strcmp(method, "repeat") == 0 && num_args == 1) {
+            return hml_string_repeat(obj, args[0]);
+        }
+        if (strcmp(method, "char_at") == 0 && num_args == 1) {
+            return hml_string_char_at(obj, args[0]);
+        }
+        if (strcmp(method, "byte_at") == 0 && num_args == 1) {
+            return hml_string_byte_at(obj, args[0]);
+        }
+        fprintf(stderr, "Runtime error: String has no method '%s'\n", method);
+        exit(1);
+    }
+
+    // Handle array methods
+    if (obj.type == HML_VAL_ARRAY) {
+        if (strcmp(method, "push") == 0 && num_args == 1) {
+            hml_array_push(obj, args[0]);
+            return hml_val_null();
+        }
+        if (strcmp(method, "pop") == 0 && num_args == 0) {
+            return hml_array_pop(obj);
+        }
+        if (strcmp(method, "shift") == 0 && num_args == 0) {
+            return hml_array_shift(obj);
+        }
+        if (strcmp(method, "unshift") == 0 && num_args == 1) {
+            hml_array_unshift(obj, args[0]);
+            return hml_val_null();
+        }
+        if (strcmp(method, "insert") == 0 && num_args == 2) {
+            hml_array_insert(obj, args[0], args[1]);
+            return hml_val_null();
+        }
+        if (strcmp(method, "remove") == 0 && num_args == 1) {
+            return hml_array_remove(obj, args[0]);
+        }
+        if (strcmp(method, "find") == 0 && num_args == 1) {
+            return hml_array_find(obj, args[0]);
+        }
+        if (strcmp(method, "contains") == 0 && num_args == 1) {
+            return hml_array_contains(obj, args[0]);
+        }
+        if (strcmp(method, "slice") == 0 && num_args == 2) {
+            return hml_array_slice(obj, args[0], args[1]);
+        }
+        if (strcmp(method, "join") == 0 && num_args == 1) {
+            return hml_array_join(obj, args[0]);
+        }
+        if (strcmp(method, "concat") == 0 && num_args == 1) {
+            return hml_array_concat(obj, args[0]);
+        }
+        if (strcmp(method, "reverse") == 0 && num_args == 0) {
+            hml_array_reverse(obj);
+            return hml_val_null();
+        }
+        if (strcmp(method, "first") == 0 && num_args == 0) {
+            return hml_array_first(obj);
+        }
+        if (strcmp(method, "last") == 0 && num_args == 0) {
+            return hml_array_last(obj);
+        }
+        if (strcmp(method, "clear") == 0 && num_args == 0) {
+            hml_array_clear(obj);
+            return hml_val_null();
+        }
+        if (strcmp(method, "map") == 0 && num_args == 1) {
+            return hml_array_map(obj, args[0]);
+        }
+        if (strcmp(method, "filter") == 0 && num_args == 1) {
+            return hml_array_filter(obj, args[0]);
+        }
+        if ((strcmp(method, "reduce") == 0) && (num_args == 1 || num_args == 2)) {
+            HmlValue initial = (num_args == 2) ? args[1] : hml_val_null();
+            return hml_array_reduce(obj, args[0], initial);
+        }
+        fprintf(stderr, "Runtime error: Array has no method '%s'\n", method);
+        exit(1);
+    }
+
+    // Handle object methods
     if (obj.type != HML_VAL_OBJECT || !obj.as.as_object) {
-        fprintf(stderr, "Runtime error: Cannot call method on non-object\n");
+        fprintf(stderr, "Runtime error: Cannot call method '%s' on non-object (type: %s)\n",
+                method, hml_typeof_str(obj));
         exit(1);
     }
 

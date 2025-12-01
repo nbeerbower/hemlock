@@ -18,8 +18,8 @@
 // Import OpenSSL's libcrypto for cryptographic functions
 import "libcrypto.so.3";
 
-// Import hash functions for use in signatures
-import { sha256 } from "@stdlib/hash";
+// Note: For hash operations, use @stdlib/hash which has sha256, md5, etc.
+// The crypto module uses OpenSSL's EVP_* functions directly for signing.
 
 // ============================================================================
 // SECURE RANDOM BYTES

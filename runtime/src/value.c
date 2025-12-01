@@ -418,6 +418,7 @@ int hml_is_numeric(HmlValue val) {
         case HML_VAL_U64:
         case HML_VAL_F32:
         case HML_VAL_F64:
+        case HML_VAL_RUNE:  // Runes can be used in numeric operations
             return 1;
         default:
             return 0;
@@ -434,6 +435,7 @@ int hml_is_integer(HmlValue val) {
         case HML_VAL_U16:
         case HML_VAL_U32:
         case HML_VAL_U64:
+        case HML_VAL_RUNE:  // Runes are 32-bit integers (codepoints)
             return 1;
         default:
             return 0;
