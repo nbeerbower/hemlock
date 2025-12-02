@@ -77,9 +77,9 @@ void hml_runtime_cleanup(void) {
 HmlValue hml_get_args(void) {
     HmlValue arr = hml_val_array();
 
-    // Skip the first argument (program name), start from index 1
-    // args[0] in Hemlock is the script filename
-    for (int i = 1; i < g_argc; i++) {
+    // For compiled binaries, argv[0] is the program name which becomes args[0]
+    // This matches interpreter behavior where args[0] is the script filename
+    for (int i = 0; i < g_argc; i++) {
         HmlValue str = hml_val_string(g_argv[i]);
         hml_array_push(arr, str);
     }
@@ -130,14 +130,28 @@ static void print_value_to(FILE *out, HmlValue val) {
                 fprintf(out, "%s", val.as.as_string->data);
             }
             break;
-        case HML_VAL_RUNE:
-            // Print as character if printable ASCII, else as U+XXXX
-            if (val.as.as_rune >= 0x20 && val.as.as_rune < 0x7F) {
-                fprintf(out, "'%c'", (char)val.as.as_rune);
+        case HML_VAL_RUNE: {
+            // Convert rune to UTF-8 string (match interpreter behavior)
+            uint32_t r = val.as.as_rune;
+            char utf8[5] = {0};
+            if (r < 0x80) {
+                utf8[0] = (char)r;
+            } else if (r < 0x800) {
+                utf8[0] = 0xC0 | (r >> 6);
+                utf8[1] = 0x80 | (r & 0x3F);
+            } else if (r < 0x10000) {
+                utf8[0] = 0xE0 | (r >> 12);
+                utf8[1] = 0x80 | ((r >> 6) & 0x3F);
+                utf8[2] = 0x80 | (r & 0x3F);
             } else {
-                fprintf(out, "U+%04X", val.as.as_rune);
+                utf8[0] = 0xF0 | (r >> 18);
+                utf8[1] = 0x80 | ((r >> 12) & 0x3F);
+                utf8[2] = 0x80 | ((r >> 6) & 0x3F);
+                utf8[3] = 0x80 | (r & 0x3F);
             }
+            fprintf(out, "%s", utf8);
             break;
+        }
         case HML_VAL_NULL:
             fprintf(out, "null");
             break;
@@ -156,14 +170,8 @@ static void print_value_to(FILE *out, HmlValue val) {
                 fprintf(out, "[");
                 for (int i = 0; i < val.as.as_array->length; i++) {
                     if (i > 0) fprintf(out, ", ");
-                    // Print string elements with quotes
-                    if (val.as.as_array->elements[i].type == HML_VAL_STRING) {
-                        fprintf(out, "\"");
-                        print_value_to(out, val.as.as_array->elements[i]);
-                        fprintf(out, "\"");
-                    } else {
-                        print_value_to(out, val.as.as_array->elements[i]);
-                    }
+                    // Print all elements consistently (no special quotes for strings)
+                    print_value_to(out, val.as.as_array->elements[i]);
                 }
                 fprintf(out, "]");
             } else {
@@ -262,9 +270,169 @@ const char* hml_typeof(HmlValue val) {
 
 void hml_check_type(HmlValue val, HmlValueType expected, const char *var_name) {
     if (val.type != expected) {
-        fprintf(stderr, "Runtime error: Type mismatch for '%s': expected %s, got %s\n",
+        hml_runtime_error("Type mismatch for '%s': expected %s, got %s",
                 var_name, hml_type_name(expected), hml_typeof_str(val));
-        exit(1);
+    }
+}
+
+// Helper to check if a value is an integer type
+static int hml_is_integer_type(HmlValue val) {
+    switch (val.type) {
+        case HML_VAL_I8: case HML_VAL_I16: case HML_VAL_I32: case HML_VAL_I64:
+        case HML_VAL_U8: case HML_VAL_U16: case HML_VAL_U32: case HML_VAL_U64:
+            return 1;
+        default:
+            return 0;
+    }
+}
+
+// Helper to check if a value is a float type
+static int hml_is_float_type(HmlValue val) {
+    return val.type == HML_VAL_F32 || val.type == HML_VAL_F64;
+}
+
+// Helper to extract int64 from any numeric value
+static int64_t hml_val_to_int64(HmlValue val) {
+    switch (val.type) {
+        case HML_VAL_I8:  return val.as.as_i8;
+        case HML_VAL_I16: return val.as.as_i16;
+        case HML_VAL_I32: return val.as.as_i32;
+        case HML_VAL_I64: return val.as.as_i64;
+        case HML_VAL_U8:  return val.as.as_u8;
+        case HML_VAL_U16: return val.as.as_u16;
+        case HML_VAL_U32: return val.as.as_u32;
+        case HML_VAL_U64: return (int64_t)val.as.as_u64;
+        case HML_VAL_F32: return (int64_t)val.as.as_f32;
+        case HML_VAL_F64: return (int64_t)val.as.as_f64;
+        case HML_VAL_BOOL: return val.as.as_bool ? 1 : 0;
+        case HML_VAL_RUNE: return val.as.as_rune;
+        default: return 0;
+    }
+}
+
+// Helper to extract double from any numeric value
+static double hml_val_to_double(HmlValue val) {
+    switch (val.type) {
+        case HML_VAL_I8:  return (double)val.as.as_i8;
+        case HML_VAL_I16: return (double)val.as.as_i16;
+        case HML_VAL_I32: return (double)val.as.as_i32;
+        case HML_VAL_I64: return (double)val.as.as_i64;
+        case HML_VAL_U8:  return (double)val.as.as_u8;
+        case HML_VAL_U16: return (double)val.as.as_u16;
+        case HML_VAL_U32: return (double)val.as.as_u32;
+        case HML_VAL_U64: return (double)val.as.as_u64;
+        case HML_VAL_F32: return (double)val.as.as_f32;
+        case HML_VAL_F64: return val.as.as_f64;
+        default: return 0.0;
+    }
+}
+
+HmlValue hml_convert_to_type(HmlValue val, HmlValueType target_type) {
+    // If already the target type, return as-is
+    if (val.type == target_type) {
+        return val;
+    }
+
+    // Extract source value
+    int64_t int_val = 0;
+    double float_val = 0.0;
+    int is_source_float = hml_is_float_type(val);
+
+    if (hml_is_integer_type(val) || val.type == HML_VAL_BOOL || val.type == HML_VAL_RUNE) {
+        int_val = hml_val_to_int64(val);
+    } else if (is_source_float) {
+        float_val = hml_val_to_double(val);
+    } else if (val.type == HML_VAL_STRING && target_type == HML_VAL_STRING) {
+        return val;
+    } else if (val.type == HML_VAL_NULL && target_type == HML_VAL_NULL) {
+        return val;
+    } else {
+        hml_runtime_error("Cannot convert %s to %s",
+                hml_type_name(val.type), hml_type_name(target_type));
+        return hml_val_null();  // Never reached, but silences compiler warning
+    }
+
+    switch (target_type) {
+        case HML_VAL_I8:
+            if (is_source_float) int_val = (int64_t)float_val;
+            if (int_val < -128 || int_val > 127) {
+                hml_runtime_error("Value %ld out of range for i8 [-128, 127]", int_val);
+            }
+            return hml_val_i8((int8_t)int_val);
+
+        case HML_VAL_I16:
+            if (is_source_float) int_val = (int64_t)float_val;
+            if (int_val < -32768 || int_val > 32767) {
+                hml_runtime_error("Value %ld out of range for i16 [-32768, 32767]", int_val);
+            }
+            return hml_val_i16((int16_t)int_val);
+
+        case HML_VAL_I32:
+            if (is_source_float) int_val = (int64_t)float_val;
+            if (int_val < -2147483648LL || int_val > 2147483647LL) {
+                hml_runtime_error("Value %ld out of range for i32 [-2147483648, 2147483647]", int_val);
+            }
+            return hml_val_i32((int32_t)int_val);
+
+        case HML_VAL_I64:
+            if (is_source_float) int_val = (int64_t)float_val;
+            return hml_val_i64(int_val);
+
+        case HML_VAL_U8:
+            if (is_source_float) int_val = (int64_t)float_val;
+            if (int_val < 0 || int_val > 255) {
+                hml_runtime_error("Value %ld out of range for u8 [0, 255]", int_val);
+            }
+            return hml_val_u8((uint8_t)int_val);
+
+        case HML_VAL_U16:
+            if (is_source_float) int_val = (int64_t)float_val;
+            if (int_val < 0 || int_val > 65535) {
+                hml_runtime_error("Value %ld out of range for u16 [0, 65535]", int_val);
+            }
+            return hml_val_u16((uint16_t)int_val);
+
+        case HML_VAL_U32:
+            if (is_source_float) int_val = (int64_t)float_val;
+            if (int_val < 0 || int_val > 4294967295LL) {
+                hml_runtime_error("Value %ld out of range for u32 [0, 4294967295]", int_val);
+            }
+            return hml_val_u32((uint32_t)int_val);
+
+        case HML_VAL_U64:
+            if (is_source_float) int_val = (int64_t)float_val;
+            if (int_val < 0) {
+                hml_runtime_error("Value %ld out of range for u64 [0, 18446744073709551615]", int_val);
+            }
+            return hml_val_u64((uint64_t)int_val);
+
+        case HML_VAL_F32:
+            if (is_source_float) {
+                return hml_val_f32((float)float_val);
+            } else {
+                return hml_val_f32((float)int_val);
+            }
+
+        case HML_VAL_F64:
+            if (is_source_float) {
+                return hml_val_f64(float_val);
+            } else {
+                return hml_val_f64((double)int_val);
+            }
+
+        case HML_VAL_RUNE:
+            if (is_source_float) int_val = (int64_t)float_val;
+            if (int_val < 0 || int_val > 0x10FFFF) {
+                hml_runtime_error("Value %ld out of range for rune [0, 0x10FFFF]", int_val);
+            }
+            return hml_val_rune((uint32_t)int_val);
+
+        case HML_VAL_BOOL:
+            return hml_val_bool(int_val != 0 || float_val != 0.0);
+
+        default:
+            // For other types, return as-is
+            return val;
     }
 }
 
@@ -292,15 +460,13 @@ void hml_panic(HmlValue message) {
 
 HmlValue hml_exec(HmlValue command) {
     if (command.type != HML_VAL_STRING || !command.as.as_string) {
-        fprintf(stderr, "Runtime error: exec() argument must be a string\n");
-        exit(1);
+        hml_runtime_error("exec() argument must be a string");
     }
 
     HmlString *cmd_str = command.as.as_string;
     char *ccmd = malloc(cmd_str->length + 1);
     if (!ccmd) {
-        fprintf(stderr, "Runtime error: exec() memory allocation failed\n");
-        exit(1);
+        hml_runtime_error("exec() memory allocation failed");
     }
     memcpy(ccmd, cmd_str->data, cmd_str->length);
     ccmd[cmd_str->length] = '\0';
@@ -1113,8 +1279,7 @@ HmlValue hml_binary_op(HmlBinaryOp op, HmlValue left, HmlValue right) {
 
     // Numeric operations
     if (!hml_is_numeric(left) || !hml_is_numeric(right)) {
-        fprintf(stderr, "Runtime error: Cannot perform numeric operation on non-numeric types\n");
-        exit(1);
+        hml_runtime_error("Cannot perform numeric operation on non-numeric types");
     }
 
     HmlValueType result_type = promote_types(left.type, right.type);
@@ -1131,8 +1296,7 @@ HmlValue hml_binary_op(HmlBinaryOp op, HmlValue left, HmlValue right) {
             case HML_OP_MUL:      result = l * r; break;
             case HML_OP_DIV:
                 if (r == 0.0) {
-                    fprintf(stderr, "Runtime error: Division by zero\n");
-                    exit(1);
+                    hml_runtime_error("Division by zero");
                 }
                 result = l / r;
                 break;
@@ -1141,8 +1305,7 @@ HmlValue hml_binary_op(HmlBinaryOp op, HmlValue left, HmlValue right) {
             case HML_OP_GREATER:      return hml_val_bool(l > r);
             case HML_OP_GREATER_EQUAL: return hml_val_bool(l >= r);
             default:
-                fprintf(stderr, "Runtime error: Invalid operation for floats\n");
-                exit(1);
+                hml_runtime_error("Invalid operation for floats");
         }
         return hml_val_f64(result);
     }
@@ -1163,15 +1326,13 @@ HmlValue hml_binary_op(HmlBinaryOp op, HmlValue left, HmlValue right) {
             return hml_val_i64(l * r);
         case HML_OP_DIV:
             if (r == 0) {
-                fprintf(stderr, "Runtime error: Division by zero\n");
-                exit(1);
+                hml_runtime_error("Division by zero");
             }
             if (result_type == HML_VAL_I32) return hml_val_i32((int32_t)(l / r));
             return hml_val_i64(l / r);
         case HML_OP_MOD:
             if (r == 0) {
-                fprintf(stderr, "Runtime error: Division by zero\n");
-                exit(1);
+                hml_runtime_error("Division by zero");
             }
             if (result_type == HML_VAL_I32) return hml_val_i32((int32_t)(l % r));
             return hml_val_i64(l % r);
@@ -1198,8 +1359,7 @@ HmlValue hml_binary_op(HmlBinaryOp op, HmlValue left, HmlValue right) {
             break;
     }
 
-    fprintf(stderr, "Runtime error: Unknown binary operation\n");
-    exit(1);
+    hml_runtime_error("Unknown binary operation");
 }
 
 // ========== UNARY OPERATIONS ==========
@@ -1211,8 +1371,7 @@ HmlValue hml_unary_op(HmlUnaryOp op, HmlValue operand) {
 
         case HML_UNARY_NEGATE:
             if (!hml_is_numeric(operand)) {
-                fprintf(stderr, "Runtime error: Cannot negate non-numeric type\n");
-                exit(1);
+                hml_runtime_error("Cannot negate non-numeric type");
             }
             if (operand.type == HML_VAL_F64) {
                 return hml_val_f64(-operand.as.as_f64);
@@ -1226,8 +1385,7 @@ HmlValue hml_unary_op(HmlUnaryOp op, HmlValue operand) {
 
         case HML_UNARY_BIT_NOT:
             if (!hml_is_integer(operand)) {
-                fprintf(stderr, "Runtime error: Bitwise NOT requires integer type\n");
-                exit(1);
+                hml_runtime_error("Bitwise NOT requires integer type");
             }
             if (operand.type == HML_VAL_I64) {
                 return hml_val_i64(~operand.as.as_i64);
@@ -1692,31 +1850,38 @@ HmlValue hml_string_index(HmlValue str, HmlValue index) {
     return hml_string_char_at(str, index);
 }
 
-void hml_string_index_assign(HmlValue str, HmlValue index, HmlValue rune) {
+void hml_string_index_assign(HmlValue str, HmlValue index, HmlValue val) {
     if (str.type != HML_VAL_STRING || !str.as.as_string) {
-        fprintf(stderr, "Runtime error: String index assignment requires string\n");
-        exit(1);
+        hml_runtime_error("String index assignment requires string");
     }
-    if (rune.type != HML_VAL_RUNE) {
-        fprintf(stderr, "Runtime error: String index assignment requires rune value\n");
-        exit(1);
+
+    // Accept both rune and integer types (convert integer to rune)
+    uint32_t rune_val;
+    if (val.type == HML_VAL_RUNE) {
+        rune_val = val.as.as_rune;
+    } else if (hml_is_integer_type(val)) {
+        int64_t int_val = hml_val_to_int64(val);
+        if (int_val < 0 || int_val > 0x10FFFF) {
+            hml_runtime_error("Integer value %ld out of range for rune [0, 0x10FFFF]", int_val);
+        }
+        rune_val = (uint32_t)int_val;
+    } else {
+        hml_runtime_error("String index assignment requires rune or integer value");
     }
 
     int idx = hml_to_i32(index);
     HmlString *s = str.as.as_string;
 
     if (idx < 0 || idx >= s->length) {
-        fprintf(stderr, "Runtime error: String index %d out of bounds\n", idx);
-        exit(1);
+        hml_runtime_error("String index %d out of bounds", idx);
     }
 
     // For simplicity, only support single-byte characters in assignment
     // Full UTF-8 would require resizing the string
-    if (rune.as.as_rune < 128) {
-        s->data[idx] = (char)rune.as.as_rune;
+    if (rune_val < 128) {
+        s->data[idx] = (char)rune_val;
     } else {
-        fprintf(stderr, "Runtime error: String assignment of multi-byte runes not yet supported\n");
-        exit(1);
+        hml_runtime_error("String assignment of multi-byte runes not yet supported");
     }
 }
 
@@ -1753,8 +1918,7 @@ static uint32_t utf8_decode_char(const char *s, int *bytes_read) {
 // Convert string to array of runes (codepoints)
 HmlValue hml_string_chars(HmlValue str) {
     if (str.type != HML_VAL_STRING || !str.as.as_string) {
-        fprintf(stderr, "Runtime error: chars() requires string\n");
-        exit(1);
+        hml_runtime_error("chars() requires string");
     }
 
     HmlString *s = str.as.as_string;
@@ -1775,8 +1939,7 @@ HmlValue hml_string_chars(HmlValue str) {
 // Convert string to array of bytes (u8 values)
 HmlValue hml_string_bytes(HmlValue str) {
     if (str.type != HML_VAL_STRING || !str.as.as_string) {
-        fprintf(stderr, "Runtime error: bytes() requires string\n");
-        exit(1);
+        hml_runtime_error("bytes() requires string");
     }
 
     HmlString *s = str.as.as_string;
@@ -1793,16 +1956,14 @@ HmlValue hml_string_bytes(HmlValue str) {
 // Buffer indexing
 HmlValue hml_buffer_get(HmlValue buf, HmlValue index) {
     if (buf.type != HML_VAL_BUFFER || !buf.as.as_buffer) {
-        fprintf(stderr, "Runtime error: Buffer index requires buffer\n");
-        exit(1);
+        hml_runtime_error("Buffer index requires buffer");
     }
 
     int idx = hml_to_i32(index);
     HmlBuffer *b = buf.as.as_buffer;
 
     if (idx < 0 || idx >= b->length) {
-        fprintf(stderr, "Runtime error: Buffer index %d out of bounds (length %d)\n", idx, b->length);
-        exit(1);
+        hml_runtime_error("Buffer index %d out of bounds (length %d)", idx, b->length);
     }
 
     uint8_t *data = (uint8_t *)b->data;
@@ -1811,16 +1972,14 @@ HmlValue hml_buffer_get(HmlValue buf, HmlValue index) {
 
 void hml_buffer_set(HmlValue buf, HmlValue index, HmlValue val) {
     if (buf.type != HML_VAL_BUFFER || !buf.as.as_buffer) {
-        fprintf(stderr, "Runtime error: Buffer index assignment requires buffer\n");
-        exit(1);
+        hml_runtime_error("Buffer index assignment requires buffer");
     }
 
     int idx = hml_to_i32(index);
     HmlBuffer *b = buf.as.as_buffer;
 
     if (idx < 0 || idx >= b->length) {
-        fprintf(stderr, "Runtime error: Buffer index %d out of bounds (length %d)\n", idx, b->length);
-        exit(1);
+        hml_runtime_error("Buffer index %d out of bounds (length %d)", idx, b->length);
     }
 
     uint8_t *data = (uint8_t *)b->data;
@@ -1829,8 +1988,7 @@ void hml_buffer_set(HmlValue buf, HmlValue index, HmlValue val) {
 
 HmlValue hml_buffer_length(HmlValue buf) {
     if (buf.type != HML_VAL_BUFFER || !buf.as.as_buffer) {
-        fprintf(stderr, "Runtime error: length requires buffer\n");
-        exit(1);
+        hml_runtime_error("length requires buffer");
     }
     return hml_val_i32(buf.as.as_buffer->length);
 }
@@ -1839,13 +1997,11 @@ HmlValue hml_buffer_length(HmlValue buf) {
 
 HmlValue hml_alloc(int32_t size) {
     if (size <= 0) {
-        fprintf(stderr, "Runtime error: alloc() requires positive size\n");
-        exit(1);
+        hml_runtime_error("alloc() requires positive size");
     }
     void *ptr = malloc(size);
     if (!ptr) {
-        fprintf(stderr, "Runtime error: alloc() failed to allocate %d bytes\n", size);
-        exit(1);
+        hml_runtime_error("alloc() failed to allocate %d bytes", size);
     }
     return hml_val_ptr(ptr);
 }
@@ -1863,24 +2019,20 @@ void hml_free(HmlValue ptr_or_buffer) {
             free(ptr_or_buffer.as.as_buffer);
         }
     } else {
-        fprintf(stderr, "Runtime error: free() requires pointer or buffer\n");
-        exit(1);
+        hml_runtime_error("free() requires pointer or buffer");
     }
 }
 
 HmlValue hml_realloc(HmlValue ptr, int32_t new_size) {
     if (ptr.type != HML_VAL_PTR) {
-        fprintf(stderr, "Runtime error: realloc() requires pointer\n");
-        exit(1);
+        hml_runtime_error("realloc() requires pointer");
     }
     if (new_size <= 0) {
-        fprintf(stderr, "Runtime error: realloc() requires positive size\n");
-        exit(1);
+        hml_runtime_error("realloc() requires positive size");
     }
     void *new_ptr = realloc(ptr.as.as_ptr, new_size);
     if (!new_ptr) {
-        fprintf(stderr, "Runtime error: realloc() failed to allocate %d bytes\n", new_size);
-        exit(1);
+        hml_runtime_error("realloc() failed to allocate %d bytes", new_size);
     }
     return hml_val_ptr(new_ptr);
 }
@@ -1891,8 +2043,7 @@ void hml_memset(HmlValue ptr, uint8_t byte_val, int32_t size) {
     } else if (ptr.type == HML_VAL_BUFFER) {
         memset(ptr.as.as_buffer->data, byte_val, size);
     } else {
-        fprintf(stderr, "Runtime error: memset() requires pointer or buffer\n");
-        exit(1);
+        hml_runtime_error("memset() requires pointer or buffer");
     }
 }
 
@@ -1905,8 +2056,7 @@ void hml_memcpy(HmlValue dest, HmlValue src, int32_t size) {
     } else if (dest.type == HML_VAL_BUFFER) {
         dest_ptr = dest.as.as_buffer->data;
     } else {
-        fprintf(stderr, "Runtime error: memcpy() dest requires pointer or buffer\n");
-        exit(1);
+        hml_runtime_error("memcpy() dest requires pointer or buffer");
     }
 
     if (src.type == HML_VAL_PTR) {
@@ -1914,8 +2064,7 @@ void hml_memcpy(HmlValue dest, HmlValue src, int32_t size) {
     } else if (src.type == HML_VAL_BUFFER) {
         src_ptr = src.as.as_buffer->data;
     } else {
-        fprintf(stderr, "Runtime error: memcpy() src requires pointer or buffer\n");
-        exit(1);
+        hml_runtime_error("memcpy() src requires pointer or buffer");
     }
 
     memcpy(dest_ptr, src_ptr, size);
@@ -1961,39 +2110,33 @@ static HmlValueType hml_type_from_string(const char *name) {
 HmlValue hml_talloc(HmlValue type_name, HmlValue count) {
     // Type name must be a string
     if (type_name.type != HML_VAL_STRING || !type_name.as.as_string) {
-        fprintf(stderr, "Runtime error: talloc() first argument must be a type name string\n");
-        exit(1);
+        hml_runtime_error("talloc() first argument must be a type name string");
     }
 
     // Count must be an integer
     if (!hml_is_integer(count)) {
-        fprintf(stderr, "Runtime error: talloc() second argument must be an integer count\n");
-        exit(1);
+        hml_runtime_error("talloc() second argument must be an integer count");
     }
 
     int32_t n = hml_to_i32(count);
     if (n <= 0) {
-        fprintf(stderr, "Runtime error: talloc() count must be positive\n");
-        exit(1);
+        hml_runtime_error("talloc() count must be positive");
     }
 
     HmlValueType elem_type = hml_type_from_string(type_name.as.as_string->data);
     if (elem_type == HML_VAL_NULL) {
-        fprintf(stderr, "Runtime error: talloc() unknown type '%s'\n", type_name.as.as_string->data);
-        exit(1);
+        hml_runtime_error("talloc() unknown type '%s'", type_name.as.as_string->data);
     }
 
     int32_t elem_size = hml_sizeof_type(elem_type);
     if (elem_size == 0) {
-        fprintf(stderr, "Runtime error: talloc() type '%s' has no known size\n", type_name.as.as_string->data);
-        exit(1);
+        hml_runtime_error("talloc() type '%s' has no known size", type_name.as.as_string->data);
     }
 
     size_t total_size = (size_t)elem_size * (size_t)n;
     void *ptr = malloc(total_size);
     if (!ptr) {
-        fprintf(stderr, "Runtime error: talloc() failed to allocate %zu bytes\n", total_size);
-        exit(1);
+        hml_runtime_error("talloc() failed to allocate %zu bytes", total_size);
     }
 
     return hml_val_ptr(ptr);
@@ -2008,8 +2151,7 @@ HmlValue hml_builtin_talloc(HmlClosureEnv *env, HmlValue type_name, HmlValue cou
 
 void hml_array_push(HmlValue arr, HmlValue val) {
     if (arr.type != HML_VAL_ARRAY || !arr.as.as_array) {
-        fprintf(stderr, "Runtime error: push() requires array\n");
-        exit(1);
+        hml_runtime_error("push() requires array");
     }
 
     HmlArray *a = arr.as.as_array;
@@ -2028,16 +2170,14 @@ void hml_array_push(HmlValue arr, HmlValue val) {
 
 HmlValue hml_array_get(HmlValue arr, HmlValue index) {
     if (arr.type != HML_VAL_ARRAY || !arr.as.as_array) {
-        fprintf(stderr, "Runtime error: Index access requires array\n");
-        exit(1);
+        hml_runtime_error("Index access requires array");
     }
 
     int idx = hml_to_i32(index);
     HmlArray *a = arr.as.as_array;
 
     if (idx < 0 || idx >= a->length) {
-        fprintf(stderr, "Runtime error: Array index %d out of bounds (length %d)\n", idx, a->length);
-        exit(1);
+        hml_runtime_error("Array index %d out of bounds (length %d)", idx, a->length);
     }
 
     HmlValue result = a->elements[idx];
@@ -2047,16 +2187,14 @@ HmlValue hml_array_get(HmlValue arr, HmlValue index) {
 
 void hml_array_set(HmlValue arr, HmlValue index, HmlValue val) {
     if (arr.type != HML_VAL_ARRAY || !arr.as.as_array) {
-        fprintf(stderr, "Runtime error: Index assignment requires array\n");
-        exit(1);
+        hml_runtime_error("Index assignment requires array");
     }
 
     int idx = hml_to_i32(index);
     HmlArray *a = arr.as.as_array;
 
     if (idx < 0 || idx >= a->length) {
-        fprintf(stderr, "Runtime error: Array index %d out of bounds (length %d)\n", idx, a->length);
-        exit(1);
+        hml_runtime_error("Array index %d out of bounds (length %d)", idx, a->length);
     }
 
     hml_release(&a->elements[idx]);
@@ -2073,8 +2211,7 @@ HmlValue hml_array_length(HmlValue arr) {
 
 HmlValue hml_array_pop(HmlValue arr) {
     if (arr.type != HML_VAL_ARRAY || !arr.as.as_array) {
-        fprintf(stderr, "Runtime error: pop() requires array\n");
-        exit(1);
+        hml_runtime_error("pop() requires array");
     }
 
     HmlArray *a = arr.as.as_array;
@@ -2090,8 +2227,7 @@ HmlValue hml_array_pop(HmlValue arr) {
 
 HmlValue hml_array_shift(HmlValue arr) {
     if (arr.type != HML_VAL_ARRAY || !arr.as.as_array) {
-        fprintf(stderr, "Runtime error: shift() requires array\n");
-        exit(1);
+        hml_runtime_error("shift() requires array");
     }
 
     HmlArray *a = arr.as.as_array;
@@ -2110,8 +2246,7 @@ HmlValue hml_array_shift(HmlValue arr) {
 
 void hml_array_unshift(HmlValue arr, HmlValue val) {
     if (arr.type != HML_VAL_ARRAY || !arr.as.as_array) {
-        fprintf(stderr, "Runtime error: unshift() requires array\n");
-        exit(1);
+        hml_runtime_error("unshift() requires array");
     }
 
     HmlArray *a = arr.as.as_array;
@@ -2135,16 +2270,14 @@ void hml_array_unshift(HmlValue arr, HmlValue val) {
 
 void hml_array_insert(HmlValue arr, HmlValue index, HmlValue val) {
     if (arr.type != HML_VAL_ARRAY || !arr.as.as_array) {
-        fprintf(stderr, "Runtime error: insert() requires array\n");
-        exit(1);
+        hml_runtime_error("insert() requires array");
     }
 
     int idx = hml_to_i32(index);
     HmlArray *a = arr.as.as_array;
 
     if (idx < 0 || idx > a->length) {
-        fprintf(stderr, "Runtime error: insert index %d out of bounds (length %d)\n", idx, a->length);
-        exit(1);
+        hml_runtime_error("insert index %d out of bounds (length %d)", idx, a->length);
     }
 
     // Grow if needed
@@ -2166,16 +2299,14 @@ void hml_array_insert(HmlValue arr, HmlValue index, HmlValue val) {
 
 HmlValue hml_array_remove(HmlValue arr, HmlValue index) {
     if (arr.type != HML_VAL_ARRAY || !arr.as.as_array) {
-        fprintf(stderr, "Runtime error: remove() requires array\n");
-        exit(1);
+        hml_runtime_error("remove() requires array");
     }
 
     int idx = hml_to_i32(index);
     HmlArray *a = arr.as.as_array;
 
     if (idx < 0 || idx >= a->length) {
-        fprintf(stderr, "Runtime error: remove index %d out of bounds (length %d)\n", idx, a->length);
-        exit(1);
+        hml_runtime_error("remove index %d out of bounds (length %d)", idx, a->length);
     }
 
     HmlValue result = a->elements[idx];
@@ -2189,8 +2320,7 @@ HmlValue hml_array_remove(HmlValue arr, HmlValue index) {
 
 HmlValue hml_array_find(HmlValue arr, HmlValue val) {
     if (arr.type != HML_VAL_ARRAY || !arr.as.as_array) {
-        fprintf(stderr, "Runtime error: find() requires array\n");
-        exit(1);
+        hml_runtime_error("find() requires array");
     }
 
     HmlArray *a = arr.as.as_array;
@@ -2209,8 +2339,7 @@ HmlValue hml_array_contains(HmlValue arr, HmlValue val) {
 
 HmlValue hml_array_slice(HmlValue arr, HmlValue start, HmlValue end) {
     if (arr.type != HML_VAL_ARRAY || !arr.as.as_array) {
-        fprintf(stderr, "Runtime error: slice() requires array\n");
-        exit(1);
+        hml_runtime_error("slice() requires array");
     }
 
     HmlArray *a = arr.as.as_array;
@@ -2243,12 +2372,10 @@ HmlValue hml_array_slice(HmlValue arr, HmlValue start, HmlValue end) {
 
 HmlValue hml_array_join(HmlValue arr, HmlValue delimiter) {
     if (arr.type != HML_VAL_ARRAY || !arr.as.as_array) {
-        fprintf(stderr, "Runtime error: join() requires array\n");
-        exit(1);
+        hml_runtime_error("join() requires array");
     }
     if (delimiter.type != HML_VAL_STRING) {
-        fprintf(stderr, "Runtime error: join() requires string delimiter\n");
-        exit(1);
+        hml_runtime_error("join() requires string delimiter");
     }
 
     HmlArray *a = arr.as.as_array;
@@ -2289,12 +2416,10 @@ HmlValue hml_array_join(HmlValue arr, HmlValue delimiter) {
 
 HmlValue hml_array_concat(HmlValue arr1, HmlValue arr2) {
     if (arr1.type != HML_VAL_ARRAY || !arr1.as.as_array) {
-        fprintf(stderr, "Runtime error: concat() requires array\n");
-        exit(1);
+        hml_runtime_error("concat() requires array");
     }
     if (arr2.type != HML_VAL_ARRAY || !arr2.as.as_array) {
-        fprintf(stderr, "Runtime error: concat() requires array argument\n");
-        exit(1);
+        hml_runtime_error("concat() requires array argument");
     }
 
     HmlArray *a1 = arr1.as.as_array;
@@ -2325,8 +2450,7 @@ HmlValue hml_array_concat(HmlValue arr1, HmlValue arr2) {
 
 void hml_array_reverse(HmlValue arr) {
     if (arr.type != HML_VAL_ARRAY || !arr.as.as_array) {
-        fprintf(stderr, "Runtime error: reverse() requires array\n");
-        exit(1);
+        hml_runtime_error("reverse() requires array");
     }
 
     HmlArray *a = arr.as.as_array;
@@ -2339,8 +2463,7 @@ void hml_array_reverse(HmlValue arr) {
 
 HmlValue hml_array_first(HmlValue arr) {
     if (arr.type != HML_VAL_ARRAY || !arr.as.as_array) {
-        fprintf(stderr, "Runtime error: first() requires array\n");
-        exit(1);
+        hml_runtime_error("first() requires array");
     }
 
     HmlArray *a = arr.as.as_array;
@@ -2355,8 +2478,7 @@ HmlValue hml_array_first(HmlValue arr) {
 
 HmlValue hml_array_last(HmlValue arr) {
     if (arr.type != HML_VAL_ARRAY || !arr.as.as_array) {
-        fprintf(stderr, "Runtime error: last() requires array\n");
-        exit(1);
+        hml_runtime_error("last() requires array");
     }
 
     HmlArray *a = arr.as.as_array;
@@ -2371,8 +2493,7 @@ HmlValue hml_array_last(HmlValue arr) {
 
 void hml_array_clear(HmlValue arr) {
     if (arr.type != HML_VAL_ARRAY || !arr.as.as_array) {
-        fprintf(stderr, "Runtime error: clear() requires array\n");
-        exit(1);
+        hml_runtime_error("clear() requires array");
     }
 
     HmlArray *a = arr.as.as_array;
@@ -2386,8 +2507,7 @@ void hml_array_clear(HmlValue arr) {
 
 void hml_array_set_element_type(HmlValue arr, HmlValueType element_type) {
     if (arr.type != HML_VAL_ARRAY || !arr.as.as_array) {
-        fprintf(stderr, "Runtime error: cannot set element type on non-array\n");
-        exit(1);
+        hml_runtime_error("cannot set element type on non-array");
     }
     arr.as.as_array->element_type = element_type;
 }
@@ -2401,8 +2521,7 @@ static int hml_type_matches(HmlValue val, HmlValueType expected) {
 // Validate and set element type constraint on array
 HmlValue hml_validate_typed_array(HmlValue arr, HmlValueType element_type) {
     if (arr.type != HML_VAL_ARRAY || !arr.as.as_array) {
-        fprintf(stderr, "Runtime error: Expected array\n");
-        exit(1);
+        hml_runtime_error("Expected array");
     }
 
     HmlArray *a = arr.as.as_array;
@@ -2415,9 +2534,8 @@ HmlValue hml_validate_typed_array(HmlValue arr, HmlValueType element_type) {
     // Validate all existing elements match the type constraint
     for (int i = 0; i < a->length; i++) {
         if (!hml_type_matches(a->elements[i], element_type)) {
-            fprintf(stderr, "Runtime error: Array element type mismatch at index %d: expected %s, got %s\n",
+            hml_runtime_error("Array element type mismatch at index %d: expected %s, got %s",
                     i, hml_type_name(element_type), hml_type_name(a->elements[i].type));
-            exit(1);
         }
     }
 
@@ -2430,8 +2548,7 @@ HmlValue hml_validate_typed_array(HmlValue arr, HmlValueType element_type) {
 
 HmlValue hml_array_map(HmlValue arr, HmlValue callback) {
     if (arr.type != HML_VAL_ARRAY || !arr.as.as_array) {
-        fprintf(stderr, "Runtime error: map() requires array\n");
-        exit(1);
+        hml_runtime_error("map() requires array");
     }
 
     HmlArray *a = arr.as.as_array;
@@ -2449,8 +2566,7 @@ HmlValue hml_array_map(HmlValue arr, HmlValue callback) {
 
 HmlValue hml_array_filter(HmlValue arr, HmlValue predicate) {
     if (arr.type != HML_VAL_ARRAY || !arr.as.as_array) {
-        fprintf(stderr, "Runtime error: filter() requires array\n");
-        exit(1);
+        hml_runtime_error("filter() requires array");
     }
 
     HmlArray *a = arr.as.as_array;
@@ -2473,8 +2589,7 @@ HmlValue hml_array_filter(HmlValue arr, HmlValue predicate) {
 
 HmlValue hml_array_reduce(HmlValue arr, HmlValue reducer, HmlValue initial) {
     if (arr.type != HML_VAL_ARRAY || !arr.as.as_array) {
-        fprintf(stderr, "Runtime error: reduce() requires array\n");
-        exit(1);
+        hml_runtime_error("reduce() requires array");
     }
 
     HmlArray *a = arr.as.as_array;
@@ -2482,8 +2597,7 @@ HmlValue hml_array_reduce(HmlValue arr, HmlValue reducer, HmlValue initial) {
     // Handle empty array
     if (a->length == 0) {
         if (initial.type == HML_VAL_NULL) {
-            fprintf(stderr, "Runtime error: reduce() of empty array with no initial value\n");
-            exit(1);
+            hml_runtime_error("reduce() of empty array with no initial value");
         }
         hml_retain(&initial);
         return initial;
@@ -2518,9 +2632,8 @@ HmlValue hml_array_reduce(HmlValue arr, HmlValue reducer, HmlValue initial) {
 
 HmlValue hml_object_get_field(HmlValue obj, const char *field) {
     if (obj.type != HML_VAL_OBJECT || !obj.as.as_object) {
-        fprintf(stderr, "Runtime error: Property access requires object (trying to get '%s' from type %s)\n",
+        hml_runtime_error("Property access requires object (trying to get '%s' from type %s)",
                 field, hml_typeof_str(obj));
-        exit(1);
     }
 
     HmlObject *o = obj.as.as_object;
@@ -2537,8 +2650,7 @@ HmlValue hml_object_get_field(HmlValue obj, const char *field) {
 
 void hml_object_set_field(HmlValue obj, const char *field, HmlValue val) {
     if (obj.type != HML_VAL_OBJECT || !obj.as.as_object) {
-        fprintf(stderr, "Runtime error: Property assignment requires object\n");
-        exit(1);
+        hml_runtime_error("Property assignment requires object");
     }
 
     HmlObject *o = obj.as.as_object;
@@ -2694,8 +2806,7 @@ static char* serialize_value_impl(HmlValue val, HmlVisitedSet *visited) {
 
             // Check for cycles
             if (visited_contains(visited, obj)) {
-                fprintf(stderr, "Runtime error: serialize() detected circular reference\n");
-                exit(1);
+                hml_runtime_error("serialize() detected circular reference");
             }
             visited_add(visited, obj);
 
@@ -2732,8 +2843,7 @@ static char* serialize_value_impl(HmlValue val, HmlVisitedSet *visited) {
 
             // Check for cycles
             if (visited_contains(visited, arr)) {
-                fprintf(stderr, "Runtime error: serialize() detected circular reference\n");
-                exit(1);
+                hml_runtime_error("serialize() detected circular reference");
             }
             visited_add(visited, arr);
 
@@ -2762,8 +2872,7 @@ static char* serialize_value_impl(HmlValue val, HmlVisitedSet *visited) {
             return json;
         }
         default:
-            fprintf(stderr, "Runtime error: Cannot serialize value of this type\n");
-            exit(1);
+            hml_runtime_error("Cannot serialize value of this type");
     }
 }
 
@@ -2800,8 +2909,7 @@ static HmlValue json_parse_array(HmlJSONParser *p);
 
 static HmlValue json_parse_string(HmlJSONParser *p) {
     if (p->input[p->pos] != '"') {
-        fprintf(stderr, "Runtime error: Expected '\"' in JSON\n");
-        exit(1);
+        hml_runtime_error("Expected '\"' in JSON");
     }
     p->pos++;  // skip opening quote
 
@@ -2825,8 +2933,7 @@ static HmlValue json_parse_string(HmlJSONParser *p) {
                 case '\\': buf[len++] = '\\'; break;
                 default:
                     free(buf);
-                    fprintf(stderr, "Runtime error: Invalid escape sequence in JSON\n");
-                    exit(1);
+                    hml_runtime_error("Invalid escape sequence in JSON");
             }
             p->pos++;
         } else {
@@ -2836,8 +2943,7 @@ static HmlValue json_parse_string(HmlJSONParser *p) {
 
     if (p->input[p->pos] != '"') {
         free(buf);
-        fprintf(stderr, "Runtime error: Unterminated string in JSON\n");
-        exit(1);
+        hml_runtime_error("Unterminated string in JSON");
     }
     p->pos++;  // skip closing quote
 
@@ -2873,8 +2979,7 @@ static HmlValue json_parse_number(HmlJSONParser *p) {
 
 static HmlValue json_parse_object(HmlJSONParser *p) {
     if (p->input[p->pos] != '{') {
-        fprintf(stderr, "Runtime error: Expected '{' in JSON\n");
-        exit(1);
+        hml_runtime_error("Expected '{' in JSON");
     }
     p->pos++;
 
@@ -2898,8 +3003,7 @@ static HmlValue json_parse_object(HmlJSONParser *p) {
 
         if (p->input[p->pos] != ':') {
             free(field_name);
-            fprintf(stderr, "Runtime error: Expected ':' in JSON object\n");
-            exit(1);
+            hml_runtime_error("Expected ':' in JSON object");
         }
         p->pos++;
 
@@ -2915,14 +3019,12 @@ static HmlValue json_parse_object(HmlJSONParser *p) {
         if (p->input[p->pos] == ',') {
             p->pos++;
         } else if (p->input[p->pos] != '}') {
-            fprintf(stderr, "Runtime error: Expected ',' or '}' in JSON object\n");
-            exit(1);
+            hml_runtime_error("Expected ',' or '}' in JSON object");
         }
     }
 
     if (p->input[p->pos] != '}') {
-        fprintf(stderr, "Runtime error: Unterminated object in JSON\n");
-        exit(1);
+        hml_runtime_error("Unterminated object in JSON");
     }
     p->pos++;
 
@@ -2931,8 +3033,7 @@ static HmlValue json_parse_object(HmlJSONParser *p) {
 
 static HmlValue json_parse_array(HmlJSONParser *p) {
     if (p->input[p->pos] != '[') {
-        fprintf(stderr, "Runtime error: Expected '[' in JSON\n");
-        exit(1);
+        hml_runtime_error("Expected '[' in JSON");
     }
     p->pos++;
 
@@ -2957,14 +3058,12 @@ static HmlValue json_parse_array(HmlJSONParser *p) {
         if (p->input[p->pos] == ',') {
             p->pos++;
         } else if (p->input[p->pos] != ']') {
-            fprintf(stderr, "Runtime error: Expected ',' or ']' in JSON array\n");
-            exit(1);
+            hml_runtime_error("Expected ',' or ']' in JSON array");
         }
     }
 
     if (p->input[p->pos] != ']') {
-        fprintf(stderr, "Runtime error: Unterminated array in JSON\n");
-        exit(1);
+        hml_runtime_error("Unterminated array in JSON");
     }
     p->pos++;
 
@@ -2995,14 +3094,12 @@ static HmlValue json_parse_value(HmlJSONParser *p) {
         return json_parse_number(p);
     }
 
-    fprintf(stderr, "Runtime error: Unexpected character '%c' in JSON\n", c);
-    exit(1);
+    hml_runtime_error("Unexpected character '%c' in JSON", c);
 }
 
 HmlValue hml_deserialize(HmlValue json_str) {
     if (json_str.type != HML_VAL_STRING || !json_str.as.as_string) {
-        fprintf(stderr, "Runtime error: deserialize() requires string argument\n");
-        exit(1);
+        hml_runtime_error("deserialize() requires string argument");
     }
 
     HmlJSONParser parser = {
@@ -3056,6 +3153,18 @@ HmlValue hml_exception_get_value(void) {
     return hml_val_null();
 }
 
+// Runtime error helper - throws catchable exception with formatted message
+void hml_runtime_error(const char *format, ...) {
+    char buffer[1024];
+    va_list args;
+    va_start(args, format);
+    vsnprintf(buffer, sizeof(buffer), format, args);
+    va_end(args);
+
+    HmlValue error_msg = hml_val_string(buffer);
+    hml_throw(error_msg);
+}
+
 // ========== DEFER SUPPORT ==========
 
 void hml_defer_push(HmlDeferFn fn, void *arg) {
@@ -3092,8 +3201,7 @@ HmlValue hml_call_function(HmlValue fn, HmlValue *args, int num_args) {
         // Call the C function pointer stored in the function struct
         void *fn_ptr = fn.as.as_function->fn_ptr;
         if (fn_ptr == NULL) {
-            fprintf(stderr, "Runtime error: Function pointer is NULL\n");
-            exit(1);
+            hml_runtime_error("Function pointer is NULL");
         }
 
         // Check if this is a closure (has environment)
@@ -3146,13 +3254,11 @@ HmlValue hml_call_function(HmlValue fn, HmlValue *args, int num_args) {
                 return f(env, padded_args[0], padded_args[1], padded_args[2], padded_args[3], padded_args[4]);
             }
             default:
-                fprintf(stderr, "Runtime error: Functions with more than 5 arguments not supported\n");
-                exit(1);
+                hml_runtime_error("Functions with more than 5 arguments not supported");
         }
     }
 
-    fprintf(stderr, "Runtime error: Cannot call non-function value (type: %s)\n", hml_typeof_str(fn));
-    exit(1);
+    hml_runtime_error("Cannot call non-function value (type: %s)", hml_typeof_str(fn));
 }
 
 // Thread-local self for method calls
@@ -3212,8 +3318,7 @@ HmlValue hml_call_method(HmlValue obj, const char *method, HmlValue *args, int n
         if (strcmp(method, "byte_at") == 0 && num_args == 1) {
             return hml_string_byte_at(obj, args[0]);
         }
-        fprintf(stderr, "Runtime error: String has no method '%s'\n", method);
-        exit(1);
+        hml_runtime_error("String has no method '%s'", method);
     }
 
     // Handle array methods
@@ -3278,22 +3383,19 @@ HmlValue hml_call_method(HmlValue obj, const char *method, HmlValue *args, int n
             HmlValue initial = (num_args == 2) ? args[1] : hml_val_null();
             return hml_array_reduce(obj, args[0], initial);
         }
-        fprintf(stderr, "Runtime error: Array has no method '%s'\n", method);
-        exit(1);
+        hml_runtime_error("Array has no method '%s'", method);
     }
 
     // Handle object methods
     if (obj.type != HML_VAL_OBJECT || !obj.as.as_object) {
-        fprintf(stderr, "Runtime error: Cannot call method '%s' on non-object (type: %s)\n",
+        hml_runtime_error("Cannot call method '%s' on non-object (type: %s)",
                 method, hml_typeof_str(obj));
-        exit(1);
     }
 
     // Get the method function from the object
     HmlValue fn = hml_object_get_field(obj, method);
     if (fn.type == HML_VAL_NULL) {
-        fprintf(stderr, "Runtime error: Object has no method '%s'\n", method);
-        exit(1);
+        hml_runtime_error("Object has no method '%s'", method);
     }
 
     // Save previous self and set new one
@@ -4459,20 +4561,17 @@ HmlValue hml_signal(HmlValue signum, HmlValue handler) {
 
     // Validate signum
     if (signum.type != HML_VAL_I32) {
-        fprintf(stderr, "Runtime error: signal() signum must be an integer\n");
-        exit(1);
+        hml_runtime_error("signal() signum must be an integer");
     }
 
     int sig = signum.as.as_i32;
     if (sig < 0 || sig >= HML_MAX_SIGNAL) {
-        fprintf(stderr, "Runtime error: signal() signum %d out of range [0, %d)\n", sig, HML_MAX_SIGNAL);
-        exit(1);
+        hml_runtime_error("signal() signum %d out of range [0, %d)", sig, HML_MAX_SIGNAL);
     }
 
     // Validate handler is function or null
     if (handler.type != HML_VAL_NULL && handler.type != HML_VAL_FUNCTION) {
-        fprintf(stderr, "Runtime error: signal() handler must be a function or null\n");
-        exit(1);
+        hml_runtime_error("signal() handler must be a function or null");
     }
 
     // Get previous handler for return
@@ -4491,16 +4590,14 @@ HmlValue hml_signal(HmlValue signum, HmlValue handler) {
         sigemptyset(&sa.sa_mask);
         sa.sa_flags = SA_RESTART;
         if (sigaction(sig, &sa, NULL) != 0) {
-            fprintf(stderr, "Runtime error: signal() failed for signal %d: %s\n", sig, strerror(errno));
-            exit(1);
+            hml_runtime_error("signal() failed for signal %d: %s", sig, strerror(errno));
         }
     } else {
         sa.sa_handler = SIG_DFL;
         sigemptyset(&sa.sa_mask);
         sa.sa_flags = 0;
         if (sigaction(sig, &sa, NULL) != 0) {
-            fprintf(stderr, "Runtime error: signal() failed to reset signal %d: %s\n", sig, strerror(errno));
-            exit(1);
+            hml_runtime_error("signal() failed to reset signal %d: %s", sig, strerror(errno));
         }
     }
 
@@ -4509,19 +4606,16 @@ HmlValue hml_signal(HmlValue signum, HmlValue handler) {
 
 HmlValue hml_raise(HmlValue signum) {
     if (signum.type != HML_VAL_I32) {
-        fprintf(stderr, "Runtime error: raise() signum must be an integer\n");
-        exit(1);
+        hml_runtime_error("raise() signum must be an integer");
     }
 
     int sig = signum.as.as_i32;
     if (sig < 0 || sig >= HML_MAX_SIGNAL) {
-        fprintf(stderr, "Runtime error: raise() signum %d out of range [0, %d)\n", sig, HML_MAX_SIGNAL);
-        exit(1);
+        hml_runtime_error("raise() signum %d out of range [0, %d)", sig, HML_MAX_SIGNAL);
     }
 
     if (raise(sig) != 0) {
-        fprintf(stderr, "Runtime error: raise() failed for signal %d: %s\n", sig, strerror(errno));
-        exit(1);
+        hml_runtime_error("raise() failed for signal %d: %s", sig, strerror(errno));
     }
 
     return hml_val_null();
@@ -4658,8 +4752,7 @@ HmlValue hml_socket_create(HmlValue domain, HmlValue sock_type, HmlValue protoco
 
     int fd = socket(d, t, p);
     if (fd < 0) {
-        fprintf(stderr, "Runtime error: Failed to create socket: %s\n", strerror(errno));
-        exit(1);
+        hml_runtime_error("Failed to create socket: %s", strerror(errno));
     }
 
     HmlSocket *sock = malloc(sizeof(HmlSocket));
@@ -4677,22 +4770,19 @@ HmlValue hml_socket_create(HmlValue domain, HmlValue sock_type, HmlValue protoco
 // socket.bind(address, port)
 void hml_socket_bind(HmlValue socket_val, HmlValue address, HmlValue port) {
     if (socket_val.type != HML_VAL_SOCKET || !socket_val.as.as_socket) {
-        fprintf(stderr, "Runtime error: bind() expects a socket\n");
-        exit(1);
+        hml_runtime_error("bind() expects a socket");
     }
     HmlSocket *sock = socket_val.as.as_socket;
 
     if (sock->closed) {
-        fprintf(stderr, "Runtime error: Cannot bind closed socket\n");
-        exit(1);
+        hml_runtime_error("Cannot bind closed socket");
     }
 
     const char *addr_str = hml_to_string_ptr(address);
     int p = hml_to_i32(port);
 
     if (sock->domain != AF_INET) {
-        fprintf(stderr, "Runtime error: Only AF_INET sockets supported currently\n");
-        exit(1);
+        hml_runtime_error("Only AF_INET sockets supported currently");
     }
 
     struct sockaddr_in addr;
@@ -4703,8 +4793,7 @@ void hml_socket_bind(HmlValue socket_val, HmlValue address, HmlValue port) {
     if (strcmp(addr_str, "0.0.0.0") == 0) {
         addr.sin_addr.s_addr = INADDR_ANY;
     } else if (inet_pton(AF_INET, addr_str, &addr.sin_addr) != 1) {
-        fprintf(stderr, "Runtime error: Invalid IP address: %s\n", addr_str);
-        exit(1);
+        hml_runtime_error("Invalid IP address: %s", addr_str);
     }
 
     if (bind(sock->fd, (struct sockaddr *)&addr, sizeof(addr)) < 0) {
@@ -4721,20 +4810,17 @@ void hml_socket_bind(HmlValue socket_val, HmlValue address, HmlValue port) {
 // socket.listen(backlog)
 void hml_socket_listen(HmlValue socket_val, HmlValue backlog) {
     if (socket_val.type != HML_VAL_SOCKET || !socket_val.as.as_socket) {
-        fprintf(stderr, "Runtime error: listen() expects a socket\n");
-        exit(1);
+        hml_runtime_error("listen() expects a socket");
     }
     HmlSocket *sock = socket_val.as.as_socket;
 
     if (sock->closed) {
-        fprintf(stderr, "Runtime error: Cannot listen on closed socket\n");
-        exit(1);
+        hml_runtime_error("Cannot listen on closed socket");
     }
 
     int bl = hml_to_i32(backlog);
     if (listen(sock->fd, bl) < 0) {
-        fprintf(stderr, "Runtime error: Failed to listen on socket: %s\n", strerror(errno));
-        exit(1);
+        hml_runtime_error("Failed to listen on socket: %s", strerror(errno));
     }
 
     sock->listening = 1;
@@ -4743,19 +4829,16 @@ void hml_socket_listen(HmlValue socket_val, HmlValue backlog) {
 // socket.accept() -> socket
 HmlValue hml_socket_accept(HmlValue socket_val) {
     if (socket_val.type != HML_VAL_SOCKET || !socket_val.as.as_socket) {
-        fprintf(stderr, "Runtime error: accept() expects a socket\n");
-        exit(1);
+        hml_runtime_error("accept() expects a socket");
     }
     HmlSocket *sock = socket_val.as.as_socket;
 
     if (sock->closed) {
-        fprintf(stderr, "Runtime error: Cannot accept on closed socket\n");
-        exit(1);
+        hml_runtime_error("Cannot accept on closed socket");
     }
 
     if (!sock->listening) {
-        fprintf(stderr, "Runtime error: Socket must be listening before accept()\n");
-        exit(1);
+        hml_runtime_error("Socket must be listening before accept()");
     }
 
     struct sockaddr_in client_addr;
@@ -4763,8 +4846,7 @@ HmlValue hml_socket_accept(HmlValue socket_val) {
 
     int client_fd = accept(sock->fd, (struct sockaddr *)&client_addr, &client_len);
     if (client_fd < 0) {
-        fprintf(stderr, "Runtime error: Failed to accept connection: %s\n", strerror(errno));
-        exit(1);
+        hml_runtime_error("Failed to accept connection: %s", strerror(errno));
     }
 
     HmlSocket *client_sock = malloc(sizeof(HmlSocket));
@@ -4785,14 +4867,12 @@ HmlValue hml_socket_accept(HmlValue socket_val) {
 // socket.connect(address, port)
 void hml_socket_connect(HmlValue socket_val, HmlValue address, HmlValue port) {
     if (socket_val.type != HML_VAL_SOCKET || !socket_val.as.as_socket) {
-        fprintf(stderr, "Runtime error: connect() expects a socket\n");
-        exit(1);
+        hml_runtime_error("connect() expects a socket");
     }
     HmlSocket *sock = socket_val.as.as_socket;
 
     if (sock->closed) {
-        fprintf(stderr, "Runtime error: Cannot connect closed socket\n");
-        exit(1);
+        hml_runtime_error("Cannot connect closed socket");
     }
 
     const char *addr_str = hml_to_string_ptr(address);
@@ -4800,13 +4880,11 @@ void hml_socket_connect(HmlValue socket_val, HmlValue address, HmlValue port) {
 
     struct hostent *host = gethostbyname(addr_str);
     if (!host) {
-        fprintf(stderr, "Runtime error: Failed to resolve hostname '%s'\n", addr_str);
-        exit(1);
+        hml_runtime_error("Failed to resolve hostname '%s'", addr_str);
     }
 
     if (sock->domain != AF_INET) {
-        fprintf(stderr, "Runtime error: Only AF_INET sockets supported currently\n");
-        exit(1);
+        hml_runtime_error("Only AF_INET sockets supported currently");
     }
 
     struct sockaddr_in server_addr;
@@ -4829,14 +4907,12 @@ void hml_socket_connect(HmlValue socket_val, HmlValue address, HmlValue port) {
 // socket.send(data) -> i32 (bytes sent)
 HmlValue hml_socket_send(HmlValue socket_val, HmlValue data) {
     if (socket_val.type != HML_VAL_SOCKET || !socket_val.as.as_socket) {
-        fprintf(stderr, "Runtime error: send() expects a socket\n");
-        exit(1);
+        hml_runtime_error("send() expects a socket");
     }
     HmlSocket *sock = socket_val.as.as_socket;
 
     if (sock->closed) {
-        fprintf(stderr, "Runtime error: Cannot send on closed socket\n");
-        exit(1);
+        hml_runtime_error("Cannot send on closed socket");
     }
 
     const void *buf;
@@ -4849,14 +4925,12 @@ HmlValue hml_socket_send(HmlValue socket_val, HmlValue data) {
         buf = data.as.as_buffer->data;
         len = data.as.as_buffer->length;
     } else {
-        fprintf(stderr, "Runtime error: send() expects string or buffer\n");
-        exit(1);
+        hml_runtime_error("send() expects string or buffer");
     }
 
     ssize_t sent = send(sock->fd, buf, len, 0);
     if (sent < 0) {
-        fprintf(stderr, "Runtime error: Failed to send data: %s\n", strerror(errno));
-        exit(1);
+        hml_runtime_error("Failed to send data: %s", strerror(errno));
     }
 
     return hml_val_i32((int32_t)sent);
@@ -4865,14 +4939,12 @@ HmlValue hml_socket_send(HmlValue socket_val, HmlValue data) {
 // socket.recv(size) -> buffer
 HmlValue hml_socket_recv(HmlValue socket_val, HmlValue size) {
     if (socket_val.type != HML_VAL_SOCKET || !socket_val.as.as_socket) {
-        fprintf(stderr, "Runtime error: recv() expects a socket\n");
-        exit(1);
+        hml_runtime_error("recv() expects a socket");
     }
     HmlSocket *sock = socket_val.as.as_socket;
 
     if (sock->closed) {
-        fprintf(stderr, "Runtime error: Cannot recv on closed socket\n");
-        exit(1);
+        hml_runtime_error("Cannot recv on closed socket");
     }
 
     int sz = hml_to_i32(size);
@@ -4884,8 +4956,7 @@ HmlValue hml_socket_recv(HmlValue socket_val, HmlValue size) {
     ssize_t received = recv(sock->fd, buf, sz, 0);
     if (received < 0) {
         free(buf);
-        fprintf(stderr, "Runtime error: Failed to receive data: %s\n", strerror(errno));
-        exit(1);
+        hml_runtime_error("Failed to receive data: %s", strerror(errno));
     }
 
     HmlBuffer *hbuf = malloc(sizeof(HmlBuffer));
@@ -4903,14 +4974,12 @@ HmlValue hml_socket_recv(HmlValue socket_val, HmlValue size) {
 // socket.sendto(address, port, data) -> i32
 HmlValue hml_socket_sendto(HmlValue socket_val, HmlValue address, HmlValue port, HmlValue data) {
     if (socket_val.type != HML_VAL_SOCKET || !socket_val.as.as_socket) {
-        fprintf(stderr, "Runtime error: sendto() expects a socket\n");
-        exit(1);
+        hml_runtime_error("sendto() expects a socket");
     }
     HmlSocket *sock = socket_val.as.as_socket;
 
     if (sock->closed) {
-        fprintf(stderr, "Runtime error: Cannot sendto on closed socket\n");
-        exit(1);
+        hml_runtime_error("Cannot sendto on closed socket");
     }
 
     const char *addr_str = hml_to_string_ptr(address);
@@ -4926,13 +4995,11 @@ HmlValue hml_socket_sendto(HmlValue socket_val, HmlValue address, HmlValue port,
         buf = data.as.as_buffer->data;
         len = data.as.as_buffer->length;
     } else {
-        fprintf(stderr, "Runtime error: sendto() data must be string or buffer\n");
-        exit(1);
+        hml_runtime_error("sendto() data must be string or buffer");
     }
 
     if (sock->domain != AF_INET) {
-        fprintf(stderr, "Runtime error: Only AF_INET sockets supported currently\n");
-        exit(1);
+        hml_runtime_error("Only AF_INET sockets supported currently");
     }
 
     struct sockaddr_in dest_addr;
@@ -4941,8 +5008,7 @@ HmlValue hml_socket_sendto(HmlValue socket_val, HmlValue address, HmlValue port,
     dest_addr.sin_port = htons(p);
 
     if (inet_pton(AF_INET, addr_str, &dest_addr.sin_addr) != 1) {
-        fprintf(stderr, "Runtime error: Invalid IP address: %s\n", addr_str);
-        exit(1);
+        hml_runtime_error("Invalid IP address: %s", addr_str);
     }
 
     ssize_t sent = sendto(sock->fd, buf, len, 0,
@@ -4960,20 +5026,17 @@ HmlValue hml_socket_sendto(HmlValue socket_val, HmlValue address, HmlValue port,
 // socket.recvfrom(size) -> { data: buffer, address: string, port: i32 }
 HmlValue hml_socket_recvfrom(HmlValue socket_val, HmlValue size) {
     if (socket_val.type != HML_VAL_SOCKET || !socket_val.as.as_socket) {
-        fprintf(stderr, "Runtime error: recvfrom() expects a socket\n");
-        exit(1);
+        hml_runtime_error("recvfrom() expects a socket");
     }
     HmlSocket *sock = socket_val.as.as_socket;
 
     if (sock->closed) {
-        fprintf(stderr, "Runtime error: Cannot recvfrom on closed socket\n");
-        exit(1);
+        hml_runtime_error("Cannot recvfrom on closed socket");
     }
 
     int sz = hml_to_i32(size);
     if (sz <= 0) {
-        fprintf(stderr, "Runtime error: recvfrom() size must be positive\n");
-        exit(1);
+        hml_runtime_error("recvfrom() size must be positive");
     }
 
     void *buf = malloc(sz);
@@ -4985,8 +5048,7 @@ HmlValue hml_socket_recvfrom(HmlValue socket_val, HmlValue size) {
 
     if (received < 0) {
         free(buf);
-        fprintf(stderr, "Runtime error: Failed to recvfrom: %s\n", strerror(errno));
-        exit(1);
+        hml_runtime_error("Failed to recvfrom: %s", strerror(errno));
     }
 
     // Create buffer for data
@@ -5017,14 +5079,12 @@ HmlValue hml_socket_recvfrom(HmlValue socket_val, HmlValue size) {
 // socket.setsockopt(level, option, value)
 void hml_socket_setsockopt(HmlValue socket_val, HmlValue level, HmlValue option, HmlValue value) {
     if (socket_val.type != HML_VAL_SOCKET || !socket_val.as.as_socket) {
-        fprintf(stderr, "Runtime error: setsockopt() expects a socket\n");
-        exit(1);
+        hml_runtime_error("setsockopt() expects a socket");
     }
     HmlSocket *sock = socket_val.as.as_socket;
 
     if (sock->closed) {
-        fprintf(stderr, "Runtime error: Cannot setsockopt on closed socket\n");
-        exit(1);
+        hml_runtime_error("Cannot setsockopt on closed socket");
     }
 
     int lvl = hml_to_i32(level);
@@ -5032,22 +5092,19 @@ void hml_socket_setsockopt(HmlValue socket_val, HmlValue level, HmlValue option,
     int val = hml_to_i32(value);
 
     if (setsockopt(sock->fd, lvl, opt, &val, sizeof(val)) < 0) {
-        fprintf(stderr, "Runtime error: Failed to set socket option: %s\n", strerror(errno));
-        exit(1);
+        hml_runtime_error("Failed to set socket option: %s", strerror(errno));
     }
 }
 
 // socket.set_timeout(seconds)
 void hml_socket_set_timeout(HmlValue socket_val, HmlValue seconds_val) {
     if (socket_val.type != HML_VAL_SOCKET || !socket_val.as.as_socket) {
-        fprintf(stderr, "Runtime error: set_timeout() expects a socket\n");
-        exit(1);
+        hml_runtime_error("set_timeout() expects a socket");
     }
     HmlSocket *sock = socket_val.as.as_socket;
 
     if (sock->closed) {
-        fprintf(stderr, "Runtime error: Cannot set_timeout on closed socket\n");
-        exit(1);
+        hml_runtime_error("Cannot set_timeout on closed socket");
     }
 
     double seconds = hml_to_f64(seconds_val);
@@ -5058,21 +5115,18 @@ void hml_socket_set_timeout(HmlValue socket_val, HmlValue seconds_val) {
 
     // Set both recv and send timeouts
     if (setsockopt(sock->fd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout)) < 0) {
-        fprintf(stderr, "Runtime error: Failed to set receive timeout: %s\n", strerror(errno));
-        exit(1);
+        hml_runtime_error("Failed to set receive timeout: %s", strerror(errno));
     }
 
     if (setsockopt(sock->fd, SOL_SOCKET, SO_SNDTIMEO, &timeout, sizeof(timeout)) < 0) {
-        fprintf(stderr, "Runtime error: Failed to set send timeout: %s\n", strerror(errno));
-        exit(1);
+        hml_runtime_error("Failed to set send timeout: %s", strerror(errno));
     }
 }
 
 // socket.close()
 void hml_socket_close(HmlValue socket_val) {
     if (socket_val.type != HML_VAL_SOCKET || !socket_val.as.as_socket) {
-        fprintf(stderr, "Runtime error: close() expects a socket\n");
-        exit(1);
+        hml_runtime_error("close() expects a socket");
     }
     HmlSocket *sock = socket_val.as.as_socket;
 
@@ -5122,8 +5176,7 @@ HmlValue hml_socket_get_closed(HmlValue socket_val) {
 HmlValue hml_ffi_load(const char *path) {
     void *handle = dlopen(path, RTLD_LAZY);
     if (!handle) {
-        fprintf(stderr, "Runtime error: Failed to load library '%s': %s\n", path, dlerror());
-        exit(1);
+        hml_runtime_error("Failed to load library '%s': %s", path, dlerror());
     }
     return hml_val_ptr(handle);
 }
@@ -5136,15 +5189,13 @@ void hml_ffi_close(HmlValue lib) {
 
 void* hml_ffi_sym(HmlValue lib, const char *name) {
     if (lib.type != HML_VAL_PTR || !lib.as.as_ptr) {
-        fprintf(stderr, "Runtime error: ffi_sym requires library handle\n");
-        exit(1);
+        hml_runtime_error("ffi_sym requires library handle");
     }
     dlerror(); // Clear errors
     void *sym = dlsym(lib.as.as_ptr, name);
     char *error = dlerror();
     if (error) {
-        fprintf(stderr, "Runtime error: Failed to find symbol '%s': %s\n", name, error);
-        exit(1);
+        hml_runtime_error("Failed to find symbol '%s': %s", name, error);
     }
     return sym;
 }
@@ -5166,8 +5217,7 @@ static ffi_type* hml_ffi_type_to_ffi(HmlFFIType type) {
         case HML_FFI_PTR:    return &ffi_type_pointer;
         case HML_FFI_STRING: return &ffi_type_pointer;
         default:
-            fprintf(stderr, "Runtime error: Unknown FFI type: %d\n", type);
-            exit(1);
+            hml_runtime_error("Unknown FFI type: %d", type);
     }
 }
 
@@ -5196,8 +5246,7 @@ static void hml_value_to_ffi(HmlValue val, HmlFFIType type, void *out) {
                 *(char**)out = NULL;
             break;
         default:
-            fprintf(stderr, "Runtime error: Cannot convert to FFI type: %d\n", type);
-            exit(1);
+            hml_runtime_error("Cannot convert to FFI type: %d", type);
     }
 }
 
@@ -5222,15 +5271,13 @@ static HmlValue hml_ffi_to_value(void *result, HmlFFIType type) {
             return hml_val_null();
         }
         default:
-            fprintf(stderr, "Runtime error: Cannot convert from FFI type: %d\n", type);
-            exit(1);
+            hml_runtime_error("Cannot convert from FFI type: %d", type);
     }
 }
 
 HmlValue hml_ffi_call(void *func_ptr, HmlValue *args, int num_args, HmlFFIType *types) {
     if (!func_ptr) {
-        fprintf(stderr, "Runtime error: FFI call with null function pointer\n");
-        exit(1);
+        hml_runtime_error("FFI call with null function pointer");
     }
 
     // types[0] is return type, types[1..] are arg types
@@ -5259,8 +5306,7 @@ HmlValue hml_ffi_call(void *func_ptr, HmlValue *args, int num_args, HmlFFIType *
     ffi_status status = ffi_prep_cif(&cif, FFI_DEFAULT_ABI, num_args, ret_type, arg_types);
 
     if (status != FFI_OK) {
-        fprintf(stderr, "Runtime error: Failed to prepare FFI call\n");
-        exit(1);
+        hml_runtime_error("Failed to prepare FFI call");
     }
 
     // Call the function
@@ -5296,14 +5342,12 @@ HmlValue hml_ffi_call(void *func_ptr, HmlValue *args, int num_args, HmlFFIType *
 // zlib_compress(data: string, level: i32) -> buffer
 HmlValue hml_zlib_compress(HmlValue data, HmlValue level_val) {
     if (data.type != HML_VAL_STRING || !data.as.as_string) {
-        fprintf(stderr, "Runtime error: zlib_compress() first argument must be string\n");
-        exit(1);
+        hml_runtime_error("zlib_compress() first argument must be string");
     }
 
     int level = (int)level_val.as.as_i32;
     if (level < -1 || level > 9) {
-        fprintf(stderr, "Runtime error: zlib_compress() level must be -1 to 9\n");
-        exit(1);
+        hml_runtime_error("zlib_compress() level must be -1 to 9");
     }
 
     HmlString *str = data.as.as_string;
@@ -5322,8 +5366,7 @@ HmlValue hml_zlib_compress(HmlValue data, HmlValue level_val) {
     // Allocate destination buffer
     Bytef *dest = malloc(dest_len);
     if (!dest) {
-        fprintf(stderr, "Runtime error: zlib_compress() memory allocation failed\n");
-        exit(1);
+        hml_runtime_error("zlib_compress() memory allocation failed");
     }
 
     // Compress
@@ -5331,8 +5374,7 @@ HmlValue hml_zlib_compress(HmlValue data, HmlValue level_val) {
 
     if (result != Z_OK) {
         free(dest);
-        fprintf(stderr, "Runtime error: zlib_compress() compression failed\n");
-        exit(1);
+        hml_runtime_error("zlib_compress() compression failed");
     }
 
     // Create buffer with compressed data
@@ -5346,8 +5388,7 @@ HmlValue hml_zlib_compress(HmlValue data, HmlValue level_val) {
 // zlib_decompress(data: buffer, max_size: i64) -> string
 HmlValue hml_zlib_decompress(HmlValue data, HmlValue max_size_val) {
     if (data.type != HML_VAL_BUFFER || !data.as.as_buffer) {
-        fprintf(stderr, "Runtime error: zlib_decompress() first argument must be buffer\n");
-        exit(1);
+        hml_runtime_error("zlib_decompress() first argument must be buffer");
     }
 
     size_t max_size = (size_t)max_size_val.as.as_i64;
@@ -5362,8 +5403,7 @@ HmlValue hml_zlib_decompress(HmlValue data, HmlValue max_size_val) {
     uLong dest_len = max_size;
     Bytef *dest = malloc(dest_len);
     if (!dest) {
-        fprintf(stderr, "Runtime error: zlib_decompress() memory allocation failed\n");
-        exit(1);
+        hml_runtime_error("zlib_decompress() memory allocation failed");
     }
 
     // Decompress
@@ -5371,16 +5411,14 @@ HmlValue hml_zlib_decompress(HmlValue data, HmlValue max_size_val) {
 
     if (result != Z_OK) {
         free(dest);
-        fprintf(stderr, "Runtime error: zlib_decompress() decompression failed\n");
-        exit(1);
+        hml_runtime_error("zlib_decompress() decompression failed");
     }
 
     // Create string from decompressed data
     char *result_str = malloc(dest_len + 1);
     if (!result_str) {
         free(dest);
-        fprintf(stderr, "Runtime error: zlib_decompress() memory allocation failed\n");
-        exit(1);
+        hml_runtime_error("zlib_decompress() memory allocation failed");
     }
     memcpy(result_str, dest, dest_len);
     result_str[dest_len] = '\0';
@@ -5394,14 +5432,12 @@ HmlValue hml_zlib_decompress(HmlValue data, HmlValue max_size_val) {
 // gzip_compress(data: string, level: i32) -> buffer
 HmlValue hml_gzip_compress(HmlValue data, HmlValue level_val) {
     if (data.type != HML_VAL_STRING || !data.as.as_string) {
-        fprintf(stderr, "Runtime error: gzip_compress() first argument must be string\n");
-        exit(1);
+        hml_runtime_error("gzip_compress() first argument must be string");
     }
 
     int level = (int)level_val.as.as_i32;
     if (level < -1 || level > 9) {
-        fprintf(stderr, "Runtime error: gzip_compress() level must be -1 to 9\n");
-        exit(1);
+        hml_runtime_error("gzip_compress() level must be -1 to 9");
     }
 
     HmlString *str = data.as.as_string;
@@ -5424,8 +5460,7 @@ HmlValue hml_gzip_compress(HmlValue data, HmlValue level_val) {
     // windowBits = 15 + 16 = 31 for gzip format
     int ret = deflateInit2(&strm, level, Z_DEFLATED, 15 + 16, 8, Z_DEFAULT_STRATEGY);
     if (ret != Z_OK) {
-        fprintf(stderr, "Runtime error: gzip_compress() initialization failed\n");
-        exit(1);
+        hml_runtime_error("gzip_compress() initialization failed");
     }
 
     // Calculate output buffer size
@@ -5433,8 +5468,7 @@ HmlValue hml_gzip_compress(HmlValue data, HmlValue level_val) {
     Bytef *dest = malloc(dest_len);
     if (!dest) {
         deflateEnd(&strm);
-        fprintf(stderr, "Runtime error: gzip_compress() memory allocation failed\n");
-        exit(1);
+        hml_runtime_error("gzip_compress() memory allocation failed");
     }
 
     // Set input/output
@@ -5448,8 +5482,7 @@ HmlValue hml_gzip_compress(HmlValue data, HmlValue level_val) {
     if (ret != Z_STREAM_END) {
         free(dest);
         deflateEnd(&strm);
-        fprintf(stderr, "Runtime error: gzip_compress() compression failed\n");
-        exit(1);
+        hml_runtime_error("gzip_compress() compression failed");
     }
 
     size_t output_len = strm.total_out;
@@ -5465,8 +5498,7 @@ HmlValue hml_gzip_compress(HmlValue data, HmlValue level_val) {
 // gzip_decompress(data: buffer, max_size: i64) -> string
 HmlValue hml_gzip_decompress(HmlValue data, HmlValue max_size_val) {
     if (data.type != HML_VAL_BUFFER || !data.as.as_buffer) {
-        fprintf(stderr, "Runtime error: gzip_decompress() first argument must be buffer\n");
-        exit(1);
+        hml_runtime_error("gzip_decompress() first argument must be buffer");
     }
 
     size_t max_size = (size_t)max_size_val.as.as_i64;
@@ -5474,15 +5506,13 @@ HmlValue hml_gzip_decompress(HmlValue data, HmlValue max_size_val) {
 
     // Handle empty input
     if (buf->length == 0) {
-        fprintf(stderr, "Runtime error: gzip_decompress() requires non-empty input\n");
-        exit(1);
+        hml_runtime_error("gzip_decompress() requires non-empty input");
     }
 
     // Verify gzip magic bytes
     unsigned char *buf_data = (unsigned char *)buf->data;
     if (buf->length < 10 || buf_data[0] != 0x1f || buf_data[1] != 0x8b) {
-        fprintf(stderr, "Runtime error: gzip_decompress() invalid gzip data\n");
-        exit(1);
+        hml_runtime_error("gzip_decompress() invalid gzip data");
     }
 
     // Initialize z_stream for gzip decompression
@@ -5492,16 +5522,14 @@ HmlValue hml_gzip_decompress(HmlValue data, HmlValue max_size_val) {
     // windowBits = 15 + 16 = 31 for gzip format
     int ret = inflateInit2(&strm, 15 + 16);
     if (ret != Z_OK) {
-        fprintf(stderr, "Runtime error: gzip_decompress() initialization failed\n");
-        exit(1);
+        hml_runtime_error("gzip_decompress() initialization failed");
     }
 
     // Allocate destination buffer
     Bytef *dest = malloc(max_size);
     if (!dest) {
         inflateEnd(&strm);
-        fprintf(stderr, "Runtime error: gzip_decompress() memory allocation failed\n");
-        exit(1);
+        hml_runtime_error("gzip_decompress() memory allocation failed");
     }
 
     // Set input/output
@@ -5515,8 +5543,7 @@ HmlValue hml_gzip_decompress(HmlValue data, HmlValue max_size_val) {
     if (ret != Z_STREAM_END) {
         free(dest);
         inflateEnd(&strm);
-        fprintf(stderr, "Runtime error: gzip_decompress() decompression failed\n");
-        exit(1);
+        hml_runtime_error("gzip_decompress() decompression failed");
     }
 
     size_t output_len = strm.total_out;
@@ -5526,8 +5553,7 @@ HmlValue hml_gzip_decompress(HmlValue data, HmlValue max_size_val) {
     char *result_str = malloc(output_len + 1);
     if (!result_str) {
         free(dest);
-        fprintf(stderr, "Runtime error: gzip_decompress() memory allocation failed\n");
-        exit(1);
+        hml_runtime_error("gzip_decompress() memory allocation failed");
     }
     memcpy(result_str, dest, output_len);
     result_str[output_len] = '\0';
@@ -5548,8 +5574,7 @@ HmlValue hml_zlib_compress_bound(HmlValue source_len_val) {
 // crc32(data: buffer) -> u32
 HmlValue hml_crc32_val(HmlValue data) {
     if (data.type != HML_VAL_BUFFER || !data.as.as_buffer) {
-        fprintf(stderr, "Runtime error: crc32() argument must be buffer\n");
-        exit(1);
+        hml_runtime_error("crc32() argument must be buffer");
     }
 
     HmlBuffer *buf = data.as.as_buffer;
@@ -5562,8 +5587,7 @@ HmlValue hml_crc32_val(HmlValue data) {
 // adler32(data: buffer) -> u32
 HmlValue hml_adler32_val(HmlValue data) {
     if (data.type != HML_VAL_BUFFER || !data.as.as_buffer) {
-        fprintf(stderr, "Runtime error: adler32() argument must be buffer\n");
-        exit(1);
+        hml_runtime_error("adler32() argument must be buffer");
     }
 
     HmlBuffer *buf = data.as.as_buffer;
@@ -5614,44 +5638,37 @@ HmlValue hml_builtin_adler32(HmlClosureEnv *env, HmlValue data) {
 // Stub implementations when zlib is not available
 HmlValue hml_zlib_compress(HmlValue data, HmlValue level_val) {
     (void)data; (void)level_val;
-    fprintf(stderr, "Runtime error: zlib_compress() not available - zlib not installed\n");
-    exit(1);
+    hml_runtime_error("zlib_compress() not available - zlib not installed");
 }
 
 HmlValue hml_zlib_decompress(HmlValue data, HmlValue max_size_val) {
     (void)data; (void)max_size_val;
-    fprintf(stderr, "Runtime error: zlib_decompress() not available - zlib not installed\n");
-    exit(1);
+    hml_runtime_error("zlib_decompress() not available - zlib not installed");
 }
 
 HmlValue hml_gzip_compress(HmlValue data, HmlValue level_val) {
     (void)data; (void)level_val;
-    fprintf(stderr, "Runtime error: gzip_compress() not available - zlib not installed\n");
-    exit(1);
+    hml_runtime_error("gzip_compress() not available - zlib not installed");
 }
 
 HmlValue hml_gzip_decompress(HmlValue data, HmlValue max_size_val) {
     (void)data; (void)max_size_val;
-    fprintf(stderr, "Runtime error: gzip_decompress() not available - zlib not installed\n");
-    exit(1);
+    hml_runtime_error("gzip_decompress() not available - zlib not installed");
 }
 
 HmlValue hml_zlib_compress_bound(HmlValue source_len_val) {
     (void)source_len_val;
-    fprintf(stderr, "Runtime error: zlib_compress_bound() not available - zlib not installed\n");
-    exit(1);
+    hml_runtime_error("zlib_compress_bound() not available - zlib not installed");
 }
 
 HmlValue hml_crc32_val(HmlValue data) {
     (void)data;
-    fprintf(stderr, "Runtime error: crc32() not available - zlib not installed\n");
-    exit(1);
+    hml_runtime_error("crc32() not available - zlib not installed");
 }
 
 HmlValue hml_adler32_val(HmlValue data) {
     (void)data;
-    fprintf(stderr, "Runtime error: adler32() not available - zlib not installed\n");
-    exit(1);
+    hml_runtime_error("adler32() not available - zlib not installed");
 }
 
 HmlValue hml_builtin_zlib_compress(HmlClosureEnv *env, HmlValue data, HmlValue level) {
@@ -5696,8 +5713,7 @@ HmlValue hml_builtin_adler32(HmlClosureEnv *env, HmlValue data) {
 // Read a u32 value from a pointer
 HmlValue hml_read_u32(HmlValue ptr_val) {
     if (ptr_val.type != HML_VAL_PTR) {
-        fprintf(stderr, "Runtime error: __read_u32() requires a pointer\n");
-        exit(1);
+        hml_runtime_error("__read_u32() requires a pointer");
     }
     uint32_t *ptr = (uint32_t*)ptr_val.as.as_ptr;
     return hml_val_u32(*ptr);
@@ -5706,8 +5722,7 @@ HmlValue hml_read_u32(HmlValue ptr_val) {
 // Read a u64 value from a pointer
 HmlValue hml_read_u64(HmlValue ptr_val) {
     if (ptr_val.type != HML_VAL_PTR) {
-        fprintf(stderr, "Runtime error: __read_u64() requires a pointer\n");
-        exit(1);
+        hml_runtime_error("__read_u64() requires a pointer");
     }
     uint64_t *ptr = (uint64_t*)ptr_val.as.as_ptr;
     return hml_val_u64(*ptr);
@@ -5721,8 +5736,7 @@ HmlValue hml_strerror(void) {
 // Get the name field from a dirent structure
 HmlValue hml_dirent_name(HmlValue ptr_val) {
     if (ptr_val.type != HML_VAL_PTR) {
-        fprintf(stderr, "Runtime error: __dirent_name() requires a pointer\n");
-        exit(1);
+        hml_runtime_error("__dirent_name() requires a pointer");
     }
     struct dirent *entry = (struct dirent*)ptr_val.as.as_ptr;
     return hml_val_string(entry->d_name);
@@ -5731,14 +5745,12 @@ HmlValue hml_dirent_name(HmlValue ptr_val) {
 // Convert a Hemlock string to a C string (returns allocated ptr)
 HmlValue hml_string_to_cstr(HmlValue str_val) {
     if (str_val.type != HML_VAL_STRING) {
-        fprintf(stderr, "Runtime error: __string_to_cstr() requires a string\n");
-        exit(1);
+        hml_runtime_error("__string_to_cstr() requires a string");
     }
     HmlString *str = str_val.as.as_string;
     char *cstr = malloc(str->length + 1);
     if (!cstr) {
-        fprintf(stderr, "Runtime error: __string_to_cstr() memory allocation failed\n");
-        exit(1);
+        hml_runtime_error("__string_to_cstr() memory allocation failed");
     }
     memcpy(cstr, str->data, str->length);
     cstr[str->length] = '\0';
@@ -5748,8 +5760,7 @@ HmlValue hml_string_to_cstr(HmlValue str_val) {
 // Convert a C string (ptr) to a Hemlock string
 HmlValue hml_cstr_to_string(HmlValue ptr_val) {
     if (ptr_val.type != HML_VAL_PTR) {
-        fprintf(stderr, "Runtime error: __cstr_to_string() requires a pointer\n");
-        exit(1);
+        hml_runtime_error("__cstr_to_string() requires a pointer");
     }
     char *cstr = (char*)ptr_val.as.as_ptr;
     if (!cstr) {
@@ -5797,16 +5808,14 @@ HmlValue hml_builtin_cstr_to_string(HmlClosureEnv *env, HmlValue ptr) {
 // Resolve a hostname to IP address string
 HmlValue hml_dns_resolve(HmlValue hostname_val) {
     if (hostname_val.type != HML_VAL_STRING) {
-        fprintf(stderr, "Runtime error: dns_resolve() requires a string hostname\n");
-        exit(1);
+        hml_runtime_error("dns_resolve() requires a string hostname");
     }
 
     HmlString *str = hostname_val.as.as_string;
     // Create null-terminated string
     char *hostname = malloc(str->length + 1);
     if (!hostname) {
-        fprintf(stderr, "Runtime error: dns_resolve() memory allocation failed\n");
-        exit(1);
+        hml_runtime_error("dns_resolve() memory allocation failed");
     }
     memcpy(hostname, str->data, str->length);
     hostname[str->length] = '\0';
@@ -5815,8 +5824,7 @@ HmlValue hml_dns_resolve(HmlValue hostname_val) {
     free(hostname);
 
     if (!host) {
-        fprintf(stderr, "Runtime error: Failed to resolve hostname\n");
-        exit(1);
+        hml_runtime_error("Failed to resolve hostname");
     }
 
     // Return first IPv4 address
@@ -6042,8 +6050,7 @@ static int hml_parse_url(const char *url, char *host, int *port, char *path, int
 // HTTP GET
 HmlValue hml_lws_http_get(HmlValue url_val) {
     if (url_val.type != HML_VAL_STRING || !url_val.as.as_string) {
-        fprintf(stderr, "Runtime error: __lws_http_get() expects string URL\n");
-        exit(1);
+        hml_runtime_error("__lws_http_get() expects string URL");
     }
 
     const char *url = url_val.as.as_string;
@@ -6051,22 +6058,19 @@ HmlValue hml_lws_http_get(HmlValue url_val) {
     int port, ssl;
 
     if (hml_parse_url(url, host, &port, path, &ssl) < 0) {
-        fprintf(stderr, "Runtime error: Invalid URL format\n");
-        exit(1);
+        hml_runtime_error("Invalid URL format");
     }
 
     hml_http_response_t *resp = calloc(1, sizeof(hml_http_response_t));
     if (!resp) {
-        fprintf(stderr, "Runtime error: Failed to allocate response\n");
-        exit(1);
+        hml_runtime_error("Failed to allocate response");
     }
 
     resp->body_capacity = 4096;
     resp->body = malloc(resp->body_capacity);
     if (!resp->body) {
         free(resp);
-        fprintf(stderr, "Runtime error: Failed to allocate body buffer\n");
-        exit(1);
+        hml_runtime_error("Failed to allocate body buffer");
     }
     resp->body[0] = '\0';
 
@@ -6085,8 +6089,7 @@ HmlValue hml_lws_http_get(HmlValue url_val) {
     if (!context) {
         free(resp->body);
         free(resp);
-        fprintf(stderr, "Runtime error: Failed to create libwebsockets context\n");
-        exit(1);
+        hml_runtime_error("Failed to create libwebsockets context");
     }
 
     struct lws_client_connect_info connect_info;
@@ -6114,8 +6117,7 @@ HmlValue hml_lws_http_get(HmlValue url_val) {
         lws_context_destroy(context);
         free(resp->body);
         free(resp);
-        fprintf(stderr, "Runtime error: Failed to connect\n");
-        exit(1);
+        hml_runtime_error("Failed to connect");
     }
 
     int timeout = 3000;
@@ -6128,8 +6130,7 @@ HmlValue hml_lws_http_get(HmlValue url_val) {
     if (resp->failed || timeout <= 0) {
         free(resp->body);
         free(resp);
-        fprintf(stderr, "Runtime error: HTTP request failed or timed out\n");
-        exit(1);
+        hml_runtime_error("HTTP request failed or timed out");
     }
 
     return hml_val_ptr(resp);
@@ -6138,8 +6139,7 @@ HmlValue hml_lws_http_get(HmlValue url_val) {
 // HTTP POST
 HmlValue hml_lws_http_post(HmlValue url_val, HmlValue body_val, HmlValue content_type_val) {
     if (url_val.type != HML_VAL_STRING || body_val.type != HML_VAL_STRING || content_type_val.type != HML_VAL_STRING) {
-        fprintf(stderr, "Runtime error: __lws_http_post() expects string arguments\n");
-        exit(1);
+        hml_runtime_error("__lws_http_post() expects string arguments");
     }
 
     const char *url = url_val.as.as_string;
@@ -6150,22 +6150,19 @@ HmlValue hml_lws_http_post(HmlValue url_val, HmlValue body_val, HmlValue content
     int port, ssl;
 
     if (hml_parse_url(url, host, &port, path, &ssl) < 0) {
-        fprintf(stderr, "Runtime error: Invalid URL format\n");
-        exit(1);
+        hml_runtime_error("Invalid URL format");
     }
 
     hml_http_response_t *resp = calloc(1, sizeof(hml_http_response_t));
     if (!resp) {
-        fprintf(stderr, "Runtime error: Failed to allocate response\n");
-        exit(1);
+        hml_runtime_error("Failed to allocate response");
     }
 
     resp->body_capacity = 4096;
     resp->body = malloc(resp->body_capacity);
     if (!resp->body) {
         free(resp);
-        fprintf(stderr, "Runtime error: Failed to allocate body buffer\n");
-        exit(1);
+        hml_runtime_error("Failed to allocate body buffer");
     }
     resp->body[0] = '\0';
 
@@ -6184,8 +6181,7 @@ HmlValue hml_lws_http_post(HmlValue url_val, HmlValue body_val, HmlValue content
     if (!context) {
         free(resp->body);
         free(resp);
-        fprintf(stderr, "Runtime error: Failed to create libwebsockets context\n");
-        exit(1);
+        hml_runtime_error("Failed to create libwebsockets context");
     }
 
     struct lws_client_connect_info connect_info;
@@ -6213,8 +6209,7 @@ HmlValue hml_lws_http_post(HmlValue url_val, HmlValue body_val, HmlValue content
         lws_context_destroy(context);
         free(resp->body);
         free(resp);
-        fprintf(stderr, "Runtime error: Failed to connect\n");
-        exit(1);
+        hml_runtime_error("Failed to connect");
     }
 
     int timeout = 3000;
@@ -6227,8 +6222,7 @@ HmlValue hml_lws_http_post(HmlValue url_val, HmlValue body_val, HmlValue content
     if (resp->failed || timeout <= 0) {
         free(resp->body);
         free(resp);
-        fprintf(stderr, "Runtime error: HTTP request failed or timed out\n");
-        exit(1);
+        hml_runtime_error("HTTP request failed or timed out");
     }
 
     return hml_val_ptr(resp);
@@ -6579,8 +6573,7 @@ static int hml_parse_ws_url(const char *url, char *host, int *port, char *path, 
 // __lws_ws_connect(url: string): ptr
 HmlValue hml_lws_ws_connect(HmlValue url_val) {
     if (url_val.type != HML_VAL_STRING) {
-        fprintf(stderr, "Runtime error: __lws_ws_connect() expects string URL\n");
-        exit(1);
+        hml_runtime_error("__lws_ws_connect() expects string URL");
     }
 
     const char *url = url_val.as.as_string->data;
@@ -6588,14 +6581,12 @@ HmlValue hml_lws_ws_connect(HmlValue url_val) {
     int port, ssl;
 
     if (hml_parse_ws_url(url, host, &port, path, &ssl) < 0) {
-        fprintf(stderr, "Runtime error: Invalid WebSocket URL (must start with ws:// or wss://)\n");
-        exit(1);
+        hml_runtime_error("Invalid WebSocket URL (must start with ws:// or wss://)");
     }
 
     hml_ws_connection_t *conn = calloc(1, sizeof(hml_ws_connection_t));
     if (!conn) {
-        fprintf(stderr, "Runtime error: Failed to allocate WebSocket connection\n");
-        exit(1);
+        hml_runtime_error("Failed to allocate WebSocket connection");
     }
     conn->owns_memory = 1;
 
@@ -6613,8 +6604,7 @@ HmlValue hml_lws_ws_connect(HmlValue url_val) {
     conn->context = lws_create_context(&info);
     if (!conn->context) {
         free(conn);
-        fprintf(stderr, "Runtime error: Failed to create libwebsockets context\n");
-        exit(1);
+        hml_runtime_error("Failed to create libwebsockets context");
     }
 
     struct lws_client_connect_info connect_info;
@@ -6638,8 +6628,7 @@ HmlValue hml_lws_ws_connect(HmlValue url_val) {
     if (!lws_client_connect_via_info(&connect_info)) {
         lws_context_destroy(conn->context);
         free(conn);
-        fprintf(stderr, "Runtime error: Failed to connect WebSocket\n");
-        exit(1);
+        hml_runtime_error("Failed to connect WebSocket");
     }
 
     // Wait for connection (timeout 10 seconds)
@@ -6651,8 +6640,7 @@ HmlValue hml_lws_ws_connect(HmlValue url_val) {
     if (conn->failed || conn->closed || !conn->established) {
         lws_context_destroy(conn->context);
         free(conn);
-        fprintf(stderr, "Runtime error: WebSocket connection failed or timed out\n");
-        exit(1);
+        hml_runtime_error("WebSocket connection failed or timed out");
     }
 
     // Start service thread
@@ -6661,8 +6649,7 @@ HmlValue hml_lws_ws_connect(HmlValue url_val) {
     if (pthread_create(&conn->service_thread, NULL, hml_ws_service_thread, conn) != 0) {
         lws_context_destroy(conn->context);
         free(conn);
-        fprintf(stderr, "Runtime error: Failed to create WebSocket service thread\n");
-        exit(1);
+        hml_runtime_error("Failed to create WebSocket service thread");
     }
 
     return hml_val_ptr(conn);
@@ -6838,8 +6825,7 @@ HmlValue hml_lws_ws_is_closed(HmlValue conn_val) {
 // __lws_ws_server_create(host: string, port: i32): ptr
 HmlValue hml_lws_ws_server_create(HmlValue host_val, HmlValue port_val) {
     if (host_val.type != HML_VAL_STRING) {
-        fprintf(stderr, "Runtime error: __lws_ws_server_create() expects string host\n");
-        exit(1);
+        hml_runtime_error("__lws_ws_server_create() expects string host");
     }
 
     const char *host = host_val.as.as_string->data;
@@ -6847,8 +6833,7 @@ HmlValue hml_lws_ws_server_create(HmlValue host_val, HmlValue port_val) {
 
     hml_ws_server_t *server = calloc(1, sizeof(hml_ws_server_t));
     if (!server) {
-        fprintf(stderr, "Runtime error: Failed to allocate WebSocket server\n");
-        exit(1);
+        hml_runtime_error("Failed to allocate WebSocket server");
     }
 
     server->port = port;
@@ -6871,8 +6856,7 @@ HmlValue hml_lws_ws_server_create(HmlValue host_val, HmlValue port_val) {
     if (!server->context) {
         pthread_mutex_destroy(&server->pending_mutex);
         free(server);
-        fprintf(stderr, "Runtime error: Failed to create WebSocket server context\n");
-        exit(1);
+        hml_runtime_error("Failed to create WebSocket server context");
     }
 
     server->shutdown = 0;
@@ -6880,8 +6864,7 @@ HmlValue hml_lws_ws_server_create(HmlValue host_val, HmlValue port_val) {
         lws_context_destroy(server->context);
         pthread_mutex_destroy(&server->pending_mutex);
         free(server);
-        fprintf(stderr, "Runtime error: Failed to create WebSocket server thread\n");
-        exit(1);
+        hml_runtime_error("Failed to create WebSocket server thread");
     }
 
     return hml_val_ptr(server);
@@ -7009,32 +6992,27 @@ HmlValue hml_builtin_lws_ws_server_close(HmlClosureEnv *env, HmlValue server) {
 // Stub implementations
 HmlValue hml_lws_http_get(HmlValue url_val) {
     (void)url_val;
-    fprintf(stderr, "Runtime error: HTTP support not available (libwebsockets not installed)\n");
-    exit(1);
+    hml_runtime_error("HTTP support not available (libwebsockets not installed)");
 }
 
 HmlValue hml_lws_http_post(HmlValue url_val, HmlValue body_val, HmlValue content_type_val) {
     (void)url_val; (void)body_val; (void)content_type_val;
-    fprintf(stderr, "Runtime error: HTTP support not available (libwebsockets not installed)\n");
-    exit(1);
+    hml_runtime_error("HTTP support not available (libwebsockets not installed)");
 }
 
 HmlValue hml_lws_response_status(HmlValue resp_val) {
     (void)resp_val;
-    fprintf(stderr, "Runtime error: HTTP support not available (libwebsockets not installed)\n");
-    exit(1);
+    hml_runtime_error("HTTP support not available (libwebsockets not installed)");
 }
 
 HmlValue hml_lws_response_body(HmlValue resp_val) {
     (void)resp_val;
-    fprintf(stderr, "Runtime error: HTTP support not available (libwebsockets not installed)\n");
-    exit(1);
+    hml_runtime_error("HTTP support not available (libwebsockets not installed)");
 }
 
 HmlValue hml_lws_response_headers(HmlValue resp_val) {
     (void)resp_val;
-    fprintf(stderr, "Runtime error: HTTP support not available (libwebsockets not installed)\n");
-    exit(1);
+    hml_runtime_error("HTTP support not available (libwebsockets not installed)");
 }
 
 HmlValue hml_lws_response_free(HmlValue resp_val) {
@@ -7075,20 +7053,17 @@ HmlValue hml_builtin_lws_response_free(HmlClosureEnv *env, HmlValue resp) {
 // WebSocket stub implementations
 HmlValue hml_lws_ws_connect(HmlValue url_val) {
     (void)url_val;
-    fprintf(stderr, "Runtime error: WebSocket support not available (libwebsockets not installed)\n");
-    exit(1);
+    hml_runtime_error("WebSocket support not available (libwebsockets not installed)");
 }
 
 HmlValue hml_lws_ws_send_text(HmlValue conn_val, HmlValue text_val) {
     (void)conn_val; (void)text_val;
-    fprintf(stderr, "Runtime error: WebSocket support not available (libwebsockets not installed)\n");
-    exit(1);
+    hml_runtime_error("WebSocket support not available (libwebsockets not installed)");
 }
 
 HmlValue hml_lws_ws_recv(HmlValue conn_val, HmlValue timeout_val) {
     (void)conn_val; (void)timeout_val;
-    fprintf(stderr, "Runtime error: WebSocket support not available (libwebsockets not installed)\n");
-    exit(1);
+    hml_runtime_error("WebSocket support not available (libwebsockets not installed)");
 }
 
 HmlValue hml_lws_ws_close(HmlValue conn_val) {
@@ -7123,14 +7098,12 @@ HmlValue hml_lws_msg_free(HmlValue msg_val) {
 
 HmlValue hml_lws_ws_server_create(HmlValue host_val, HmlValue port_val) {
     (void)host_val; (void)port_val;
-    fprintf(stderr, "Runtime error: WebSocket support not available (libwebsockets not installed)\n");
-    exit(1);
+    hml_runtime_error("WebSocket support not available (libwebsockets not installed)");
 }
 
 HmlValue hml_lws_ws_server_accept(HmlValue server_val, HmlValue timeout_val) {
     (void)server_val; (void)timeout_val;
-    fprintf(stderr, "Runtime error: WebSocket support not available (libwebsockets not installed)\n");
-    exit(1);
+    hml_runtime_error("WebSocket support not available (libwebsockets not installed)");
 }
 
 HmlValue hml_lws_ws_server_close(HmlValue server_val) {
