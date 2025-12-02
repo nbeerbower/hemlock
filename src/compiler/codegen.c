@@ -5328,15 +5328,37 @@ void codegen_program(CodegenContext *ctx, Stmt **stmts, int stmt_count) {
     codegen_write(ctx, "#define SIGTSTP_VAL 20\n\n");
 
     // FFI: Global library handle and function pointer declarations
-    // Collect all extern fn declarations recursively (including from block scopes)
+    // Collect all extern fn declarations recursively (including from block scopes and modules)
     ExternFnList all_extern_fns = {NULL, 0, 0};
     collect_extern_fn_from_stmts(stmts, stmt_count, &all_extern_fns);
+
+    // Also collect from imported modules
+    if (ctx->module_cache) {
+        CompiledModule *mod = ctx->module_cache->modules;
+        while (mod) {
+            collect_extern_fn_from_stmts(mod->statements, mod->num_statements, &all_extern_fns);
+            mod = mod->next;
+        }
+    }
 
     int has_ffi = 0;
     for (int i = 0; i < stmt_count; i++) {
         if (stmts[i]->type == STMT_IMPORT_FFI) {
             has_ffi = 1;
             break;
+        }
+    }
+    // Also check modules for FFI imports
+    if (!has_ffi && ctx->module_cache) {
+        CompiledModule *mod = ctx->module_cache->modules;
+        while (mod && !has_ffi) {
+            for (int i = 0; i < mod->num_statements; i++) {
+                if (mod->statements[i]->type == STMT_IMPORT_FFI) {
+                    has_ffi = 1;
+                    break;
+                }
+            }
+            mod = mod->next;
         }
     }
     if (!has_ffi && all_extern_fns.count > 0) {
