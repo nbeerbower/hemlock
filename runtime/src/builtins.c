@@ -3254,10 +3254,10 @@ HmlValue hml_call_function(HmlValue fn, HmlValue *args, int num_args) {
 
         // Arity check: must have at least num_required args and at most num_params
         if (num_args < num_required) {
-            hml_runtime_error("Callback expects %d arguments, got %d", num_required, num_args);
+            hml_runtime_error("Function expects %d arguments, got %d", num_required, num_args);
         }
         if (num_args > num_params) {
-            hml_runtime_error("Callback expects %d arguments, got %d", num_params, num_args);
+            hml_runtime_error("Function expects %d arguments, got %d", num_params, num_args);
         }
 
         // Build args array with nulls for missing optional parameters
