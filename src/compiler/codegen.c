@@ -4327,15 +4327,19 @@ void codegen_stmt(CodegenContext *ctx, Stmt *stmt) {
                 }
                 // Execute all defers in LIFO order
                 codegen_defer_execute_all(ctx);
+                codegen_writeln(ctx, "hml_call_exit();");
                 codegen_writeln(ctx, "return %s;", ret_val);
                 free(ret_val);
             } else {
                 // No defers or try-finally - simple return
+                // Evaluate expression first, then decrement call depth
                 if (stmt->as.return_stmt.value) {
                     char *value = codegen_expr(ctx, stmt->as.return_stmt.value);
+                    codegen_writeln(ctx, "hml_call_exit();");
                     codegen_writeln(ctx, "return %s;", value);
                     free(value);
                 } else {
+                    codegen_writeln(ctx, "hml_call_exit();");
                     codegen_writeln(ctx, "return hml_val_null();");
                 }
             }
@@ -4448,6 +4452,7 @@ void codegen_stmt(CodegenContext *ctx, Stmt *stmt) {
                 if (needs_return_tracking) {
                     codegen_writeln(ctx, "if (%s) {", has_return_var);
                     codegen_indent_inc(ctx);
+                    codegen_writeln(ctx, "hml_call_exit();");
                     codegen_writeln(ctx, "return %s;", return_value_var);
                     codegen_indent_dec(ctx);
                     codegen_writeln(ctx, "}");
@@ -4872,6 +4877,9 @@ static void codegen_function_decl(CodegenContext *ctx, Expr *func, const char *n
         }
     }
 
+    // Track call depth for stack overflow detection
+    codegen_writeln(ctx, "hml_call_enter();");
+
     // Generate body
     if (func->as.function.body->type == STMT_BLOCK) {
         for (int i = 0; i < func->as.function.body->as.block.count; i++) {
@@ -4883,6 +4891,9 @@ static void codegen_function_decl(CodegenContext *ctx, Expr *func, const char *n
 
     // Execute any remaining defers before implicit return
     codegen_defer_execute_all(ctx);
+
+    // Decrement call depth before implicit return
+    codegen_writeln(ctx, "hml_call_exit();");
 
     // Default return null
     codegen_writeln(ctx, "return hml_val_null();");
@@ -4979,6 +4990,9 @@ static void codegen_closure_impl(CodegenContext *ctx, ClosureInfo *closure) {
         }
     }
 
+    // Track call depth for stack overflow detection
+    codegen_writeln(ctx, "hml_call_enter();");
+
     // Scan for all closures in the function body and set up a shared environment
     // This allows multiple closures within this function to share the same environment
     Scope *scan_scope = scope_new(NULL);
@@ -5024,6 +5038,9 @@ static void codegen_closure_impl(CodegenContext *ctx, ClosureInfo *closure) {
     for (int i = 0; i < closure->num_captured; i++) {
         codegen_writeln(ctx, "hml_release(&%s);", closure->captured_vars[i]);
     }
+
+    // Decrement call depth before implicit return
+    codegen_writeln(ctx, "hml_call_exit();");
 
     // Default return null
     codegen_writeln(ctx, "return hml_val_null();");

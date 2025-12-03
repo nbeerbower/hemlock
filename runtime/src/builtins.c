@@ -4577,6 +4577,26 @@ void hml_channel_close(HmlValue channel) {
     pthread_mutex_unlock((pthread_mutex_t*)ch->mutex);
 }
 
+// ========== CALL STACK TRACKING ==========
+
+// Thread-local call depth counter for stack overflow detection
+static __thread int g_call_depth = 0;
+
+void hml_call_enter(void) {
+    g_call_depth++;
+    if (g_call_depth > HML_MAX_CALL_DEPTH) {
+        // Reset depth before throwing so exception handling works
+        g_call_depth = 0;
+        hml_runtime_error("Maximum call stack depth exceeded (infinite recursion?)");
+    }
+}
+
+void hml_call_exit(void) {
+    if (g_call_depth > 0) {
+        g_call_depth--;
+    }
+}
+
 // ========== SIGNAL HANDLING ==========
 
 #include <signal.h>

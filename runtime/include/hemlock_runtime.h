@@ -657,6 +657,15 @@ HmlValue hml_builtin_lws_ws_server_create(HmlClosureEnv *env, HmlValue host, Hml
 HmlValue hml_builtin_lws_ws_server_accept(HmlClosureEnv *env, HmlValue server, HmlValue timeout_ms);
 HmlValue hml_builtin_lws_ws_server_close(HmlClosureEnv *env, HmlValue server);
 
+// ========== CALL STACK TRACKING ==========
+
+// Maximum call stack depth (matches interpreter's limit)
+#define HML_MAX_CALL_DEPTH 1000
+
+// Call depth tracking - called at function entry/exit to detect stack overflow
+void hml_call_enter(void);
+void hml_call_exit(void);
+
 // ========== UTILITY MACROS ==========
 
 // Create a string literal value (compile-time optimization)
