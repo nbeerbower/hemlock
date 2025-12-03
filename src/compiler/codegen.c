@@ -54,6 +54,9 @@ CodegenContext* codegen_new(FILE *output) {
     ctx->main_imports = NULL;
     ctx->num_main_imports = 0;
     ctx->main_imports_capacity = 0;
+    ctx->shadow_vars = NULL;
+    ctx->num_shadow_vars = 0;
+    ctx->shadow_vars_capacity = 0;
     return ctx;
 }
 
@@ -107,6 +110,14 @@ void codegen_free(CodegenContext *ctx) {
                 free(ctx->main_funcs[i]);
             }
             free(ctx->main_funcs);
+        }
+
+        // Free shadow variables tracking
+        if (ctx->shadow_vars) {
+            for (int i = 0; i < ctx->num_shadow_vars; i++) {
+                free(ctx->shadow_vars[i]);
+            }
+            free(ctx->shadow_vars);
         }
 
         free(ctx);
@@ -191,6 +202,38 @@ void codegen_remove_local(CodegenContext *ctx, const char *name) {
                 ctx->local_vars[j] = ctx->local_vars[j + 1];
             }
             ctx->num_locals--;
+            return;
+        }
+    }
+}
+
+// Shadow variable tracking (locals that shadow main vars, like catch params)
+void codegen_add_shadow(CodegenContext *ctx, const char *name) {
+    if (ctx->num_shadow_vars >= ctx->shadow_vars_capacity) {
+        int new_cap = (ctx->shadow_vars_capacity == 0) ? 8 : ctx->shadow_vars_capacity * 2;
+        ctx->shadow_vars = realloc(ctx->shadow_vars, new_cap * sizeof(char*));
+        ctx->shadow_vars_capacity = new_cap;
+    }
+    ctx->shadow_vars[ctx->num_shadow_vars++] = strdup(name);
+}
+
+int codegen_is_shadow(CodegenContext *ctx, const char *name) {
+    for (int i = 0; i < ctx->num_shadow_vars; i++) {
+        if (strcmp(ctx->shadow_vars[i], name) == 0) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
+void codegen_remove_shadow(CodegenContext *ctx, const char *name) {
+    for (int i = 0; i < ctx->num_shadow_vars; i++) {
+        if (strcmp(ctx->shadow_vars[i], name) == 0) {
+            free(ctx->shadow_vars[i]);
+            for (int j = i; j < ctx->num_shadow_vars - 1; j++) {
+                ctx->shadow_vars[j] = ctx->shadow_vars[j + 1];
+            }
+            ctx->num_shadow_vars--;
             return;
         }
     }
@@ -1500,8 +1543,11 @@ char* codegen_expr(CodegenContext *ctx, Expr *expr) {
                     } else {
                         codegen_writeln(ctx, "HmlValue %s = %s;", result, expr->as.ident);
                     }
-                } else if (codegen_is_local(ctx, expr->as.ident)) {
-                    // Local variable - shadows main vars with same name (e.g., catch params)
+                } else if (codegen_is_shadow(ctx, expr->as.ident)) {
+                    // Shadow variable (like catch param) - use bare name, shadows main var
+                    codegen_writeln(ctx, "HmlValue %s = %s;", result, expr->as.ident);
+                } else if (codegen_is_local(ctx, expr->as.ident) && !codegen_is_main_var(ctx, expr->as.ident)) {
+                    // True local variable (not a main var added for tracking) - use bare name
                     codegen_writeln(ctx, "HmlValue %s = %s;", result, expr->as.ident);
                 } else if (codegen_is_main_var(ctx, expr->as.ident)) {
                     // Main file top-level variable - use _main_ prefix
@@ -3333,8 +3379,11 @@ char* codegen_expr(CodegenContext *ctx, Expr *expr) {
                 snprintf(prefixed_name, sizeof(prefixed_name), "%s%s",
                         ctx->current_module->module_prefix, var_name);
                 var_name = prefixed_name;
-            } else if (codegen_is_local(ctx, var_name)) {
-                // Local variable - keep bare name (shadows main vars with same name)
+            } else if (codegen_is_shadow(ctx, var_name)) {
+                // Shadow variable (like catch param) - use bare name
+                // var_name stays as-is
+            } else if (codegen_is_local(ctx, var_name) && !codegen_is_main_var(ctx, var_name)) {
+                // True local variable (not a main var added for tracking) - use bare name
                 // var_name stays as-is
             } else if (codegen_is_main_var(ctx, expr->as.assign.name)) {
                 // Main file top-level variable - use _main_ prefix
@@ -4218,16 +4267,16 @@ void codegen_stmt(CodegenContext *ctx, Stmt *stmt) {
             if (stmt->as.try_stmt.catch_block) {
                 codegen_writeln(ctx, "} else {");
                 codegen_indent_inc(ctx);
-                // Catch block - declare catch param as local to prevent prefixing
+                // Catch block - declare catch param as shadow var to shadow main vars
                 if (stmt->as.try_stmt.catch_param) {
-                    codegen_add_local(ctx, stmt->as.try_stmt.catch_param);
+                    codegen_add_shadow(ctx, stmt->as.try_stmt.catch_param);
                     codegen_writeln(ctx, "HmlValue %s = hml_exception_get_value();", stmt->as.try_stmt.catch_param);
                 }
                 codegen_stmt(ctx, stmt->as.try_stmt.catch_block);
                 if (stmt->as.try_stmt.catch_param) {
                     codegen_writeln(ctx, "hml_release(&%s);", stmt->as.try_stmt.catch_param);
-                    // Remove catch param from locals so outer scope variable is used again
-                    codegen_remove_local(ctx, stmt->as.try_stmt.catch_param);
+                    // Remove catch param from shadow vars so outer scope variable is used again
+                    codegen_remove_shadow(ctx, stmt->as.try_stmt.catch_param);
                 }
                 codegen_indent_dec(ctx);
             }
