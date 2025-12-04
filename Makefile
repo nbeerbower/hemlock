@@ -59,12 +59,12 @@ LDFLAGS += $(LDFLAGS_LIBWEBSOCKETS) -lwebsockets
 CFLAGS += -DHAVE_LIBWEBSOCKETS=1
 endif
 
-# Source files from src/ and src/parser/ and src/interpreter/ and src/interpreter/builtins/ and src/interpreter/io/ and src/interpreter/runtime/ and src/lsp/
-SRCS = $(wildcard $(SRC_DIR)/*.c) $(wildcard $(SRC_DIR)/parser/*.c) $(wildcard $(SRC_DIR)/interpreter/*.c) $(wildcard $(SRC_DIR)/interpreter/builtins/*.c) $(wildcard $(SRC_DIR)/interpreter/io/*.c) $(wildcard $(SRC_DIR)/interpreter/runtime/*.c) $(wildcard $(SRC_DIR)/lsp/*.c)
+# Source files from src/ and src/parser/ and src/interpreter/ and src/interpreter/builtins/ and src/interpreter/io/ and src/interpreter/runtime/ and src/lsp/ and src/bundler/
+SRCS = $(wildcard $(SRC_DIR)/*.c) $(wildcard $(SRC_DIR)/parser/*.c) $(wildcard $(SRC_DIR)/interpreter/*.c) $(wildcard $(SRC_DIR)/interpreter/builtins/*.c) $(wildcard $(SRC_DIR)/interpreter/io/*.c) $(wildcard $(SRC_DIR)/interpreter/runtime/*.c) $(wildcard $(SRC_DIR)/lsp/*.c) $(wildcard $(SRC_DIR)/bundler/*.c)
 OBJS = $(patsubst $(SRC_DIR)/%.c,$(BUILD_DIR)/%.o,$(SRCS))
 TARGET = hemlock
 
-all: $(BUILD_DIR) $(BUILD_DIR)/parser $(BUILD_DIR)/interpreter $(BUILD_DIR)/interpreter/builtins $(BUILD_DIR)/interpreter/io $(BUILD_DIR)/interpreter/runtime $(BUILD_DIR)/lsp $(TARGET)
+all: $(BUILD_DIR) $(BUILD_DIR)/parser $(BUILD_DIR)/interpreter $(BUILD_DIR)/interpreter/builtins $(BUILD_DIR)/interpreter/io $(BUILD_DIR)/interpreter/runtime $(BUILD_DIR)/lsp $(BUILD_DIR)/bundler $(TARGET)
 
 $(BUILD_DIR):
 	mkdir -p $(BUILD_DIR)
@@ -86,6 +86,9 @@ $(BUILD_DIR)/interpreter/runtime:
 
 $(BUILD_DIR)/lsp:
 	mkdir -p $(BUILD_DIR)/lsp
+
+$(BUILD_DIR)/bundler:
+	mkdir -p $(BUILD_DIR)/bundler
 
 $(TARGET): $(OBJS)
 	$(CC) $(OBJS) -o $(TARGET) $(LDFLAGS)
@@ -257,6 +260,11 @@ parity: $(TARGET) compiler
 parity-full: $(TARGET) compiler
 	@bash tests/run_full_parity.sh
 
+# Run bundler test suite
+.PHONY: test-bundler
+test-bundler: $(TARGET)
+	@bash tests/bundler/run_bundler_tests.sh
+
 # Run all test suites
 .PHONY: test-all
-test-all: test test-compiler parity
+test-all: test test-compiler parity test-bundler
