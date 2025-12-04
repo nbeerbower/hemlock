@@ -9,6 +9,7 @@
 #include "interpreter/internal.h"
 #include "lsp/lsp.h"
 #include "ast_serialize.h"
+#include "bundler/bundler.h"
 
 #define HEMLOCK_VERSION "1.0.0"
 #define HEMLOCK_BUILD_DATE __DATE__
@@ -234,6 +235,73 @@ static int compile_file(const char *input_path, const char *output_path, int deb
     return result;
 }
 
+// Bundle a .hml file with all its dependencies
+static int bundle_file(const char *input_path, const char *output_path, int verbose, int compressed) {
+    BundleOptions opts = bundle_options_default();
+    opts.verbose = verbose;
+
+    // Create bundle
+    Bundle *bundle = bundle_create(input_path, &opts);
+    if (!bundle) {
+        fprintf(stderr, "Failed to create bundle from '%s'\n", input_path);
+        return 1;
+    }
+
+    // Flatten all modules
+    if (bundle_flatten(bundle) != 0) {
+        fprintf(stderr, "Failed to flatten bundle\n");
+        bundle_free(bundle);
+        return 1;
+    }
+
+    if (verbose) {
+        bundle_print_summary(bundle);
+    }
+
+    // Determine output path
+    char *final_output = NULL;
+    if (output_path == NULL) {
+        size_t len = strlen(input_path);
+        final_output = malloc(len + 6);  // Room for ".hmlb\0" or ".hmlc\0"
+        strcpy(final_output, input_path);
+
+        const char *ext = compressed ? ".hmlb" : ".hmlc";
+        if (len > 4 && strcmp(input_path + len - 4, ".hml") == 0) {
+            strcpy(final_output + len - 4, ext);
+        } else {
+            strcat(final_output, ext);
+        }
+    } else {
+        final_output = strdup(output_path);
+    }
+
+    // Write output
+    int result;
+    if (compressed) {
+        result = bundle_write_compressed(bundle, final_output);
+    } else {
+        result = bundle_write_hmlc(bundle, final_output, HMLC_FLAG_DEBUG);
+    }
+
+    if (result == 0) {
+        FILE *f = fopen(final_output, "rb");
+        if (f) {
+            fseek(f, 0, SEEK_END);
+            long size = ftell(f);
+            fclose(f);
+            printf("Bundled '%s' -> '%s' (%ld bytes, %d module%s)\n",
+                   input_path, final_output, size,
+                   bundle->num_modules, bundle->num_modules == 1 ? "" : "s");
+        }
+    } else {
+        fprintf(stderr, "Failed to write bundle to '%s'\n", final_output);
+    }
+
+    free(final_output);
+    bundle_free(bundle);
+    return result;
+}
+
 // Run a .hmlc compiled file
 static void run_hmlc_file(const char *path, int argc, char **argv) {
     // Deserialize AST from file
@@ -360,6 +428,7 @@ static void print_help(const char *program) {
     printf("USAGE:\n");
     printf("    %s [OPTIONS] [FILE] [ARGS...]\n", program);
     printf("    %s --compile FILE [-o OUTPUT] [--debug]\n", program);
+    printf("    %s --bundle FILE [-o OUTPUT] [--compress] [--verbose]\n", program);
     printf("    %s lsp [--stdio | --tcp PORT]\n\n", program);
     printf("ARGUMENTS:\n");
     printf("    <FILE>       Hemlock script file to execute (.hml or .hmlc)\n");
@@ -374,8 +443,11 @@ static void print_help(const char *program) {
     printf("    -i, --interactive    Start REPL after executing file\n");
     printf("    -c, --command <CODE> Execute code string directly\n");
     printf("    --compile <FILE>     Compile .hml to binary AST (.hmlc)\n");
-    printf("    -o, --output <FILE>  Output path for compiled file\n");
-    printf("    --debug              Include line numbers in compiled output\n\n");
+    printf("    --bundle <FILE>      Bundle .hml with all imports into single file\n");
+    printf("    --compress           Use zlib compression for bundle output (.hmlb)\n");
+    printf("    -o, --output <FILE>  Output path for compiled/bundled file\n");
+    printf("    --debug              Include line numbers in compiled output\n");
+    printf("    --verbose            Print progress during bundling\n\n");
     printf("EXAMPLES:\n");
     printf("    %s                     # Start interactive REPL\n", program);
     printf("    %s script.hml          # Run script.hml\n", program);
@@ -385,6 +457,8 @@ static void print_help(const char *program) {
     printf("    %s -i script.hml       # Run script then start REPL\n", program);
     printf("    %s --compile script.hml    # Compile to script.hmlc\n", program);
     printf("    %s --compile src.hml -o out.hmlc --debug\n", program);
+    printf("    %s --bundle app.hml        # Bundle app.hml + imports -> app.hmlc\n", program);
+    printf("    %s --bundle app.hml --compress -o app.hmlb\n", program);
     printf("    %s lsp                 # Start LSP server (stdio)\n", program);
     printf("    %s lsp --tcp 6969      # Start LSP server (TCP)\n\n", program);
     printf("For more information, visit: https://github.com/nbeerbower/hemlock\n");
@@ -434,8 +508,12 @@ int main(int argc, char **argv) {
     int interactive_mode = 0;
     int compile_mode = 0;
     int compile_debug = 0;
+    int bundle_mode = 0;
+    int bundle_compress = 0;
+    int bundle_verbose = 0;
     const char *file_to_run = NULL;
     const char *file_to_compile = NULL;
+    const char *file_to_bundle = NULL;
     const char *output_path = NULL;
     const char *command_to_run = NULL;
     int first_script_arg = 0;  // Index of first argument to pass to script
@@ -482,6 +560,19 @@ int main(int argc, char **argv) {
             i++;  // Skip the output path
         } else if (strcmp(argv[i], "--debug") == 0) {
             compile_debug = 1;
+        } else if (strcmp(argv[i], "--bundle") == 0) {
+            bundle_mode = 1;
+            if (i + 1 >= argc) {
+                fprintf(stderr, "Error: --bundle requires a file argument\n");
+                fprintf(stderr, "Try '%s --help' for more information.\n", argv[0]);
+                return 1;
+            }
+            file_to_bundle = argv[i + 1];
+            i++;  // Skip the file argument
+        } else if (strcmp(argv[i], "--compress") == 0) {
+            bundle_compress = 1;
+        } else if (strcmp(argv[i], "--verbose") == 0) {
+            bundle_verbose = 1;
         } else if (argv[i][0] == '-') {
             // Unknown flag
             fprintf(stderr, "Error: Unknown option '%s'\n", argv[i]);
@@ -504,6 +595,16 @@ int main(int argc, char **argv) {
             return 1;
         }
         int result = compile_file(file_to_compile, output_path, compile_debug);
+        return result;
+    }
+
+    // Handle bundle mode
+    if (bundle_mode) {
+        if (file_to_bundle == NULL) {
+            fprintf(stderr, "Error: No input file specified for bundling\n");
+            return 1;
+        }
+        int result = bundle_file(file_to_bundle, output_path, bundle_verbose, bundle_compress);
         return result;
     }
 
