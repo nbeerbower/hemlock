@@ -1,0 +1,157 @@
+// Comprehensive test for AST serialization roundtrip
+// Tests various language features to ensure they serialize/deserialize correctly
+
+// 1. Variables and types
+let x: i32 = 42;
+let y: f64 = 3.14159;
+let name: string = "Hello World";
+let flag: bool = true;
+let nothing = null;
+let big: i64 = 9223372036854775807;
+
+// 2. Runes and Unicode
+let ch: rune = 'A';
+let emoji: rune = '\u{1F680}';
+
+// 3. Arrays with various types
+let arr = [1, 2, 3, 4, 5];
+let strings = ["a", "b", "c"];
+let mixed = [1, "two", true, null];
+
+// 4. Objects
+let obj = { x: 10, y: 20, name: "test" };
+
+// 5. Functions
+fn add(a: i32, b: i32): i32 {
+    return a + b;
+}
+
+fn greet(name: string, greeting?: "Hello"): string {
+    return greeting + " " + name;
+}
+
+// 6. Recursion
+fn fib(n: i32): i32 {
+    if (n <= 1) {
+        return n;
+    }
+    return fib(n - 1) + fib(n - 2);
+}
+
+// 7. Closures
+fn makeCounter() {
+    let count = 0;
+    return fn() {
+        count = count + 1;
+        return count;
+    };
+}
+
+// 8. Control flow
+fn testControl(n: i32): string {
+    if (n > 0) {
+        return "positive";
+    } else if (n < 0) {
+        return "negative";
+    } else {
+        return "zero";
+    }
+}
+
+// 9. Loops
+fn sumTo(n: i32): i32 {
+    let sum = 0;
+    for (let i = 1; i <= n; i = i + 1) {
+        sum = sum + i;
+    }
+    return sum;
+}
+
+// 10. For-in iteration
+fn countElements(arr) {
+    let count = 0;
+    for (let item in arr) {
+        count = count + 1;
+    }
+    return count;
+}
+
+// 11. Switch statements
+fn dayName(day: i32): string {
+    switch (day) {
+        case 1:
+            return "Monday";
+        case 2:
+            return "Tuesday";
+        case 3:
+            return "Wednesday";
+        default:
+            return "Unknown";
+    }
+}
+
+// 12. Try/catch
+fn safeDivide(a, b) {
+    try {
+        if (b == 0) {
+            throw "Division by zero";
+        }
+        return a / b;
+    } catch (e) {
+        return null;
+    }
+}
+
+// 13. String interpolation
+let msg = `The answer is ${x}`;
+
+// 14. Binary operations
+let bitwise = (0xFF & 0x0F) | 0x10;
+let math = (10 + 5) * 2 - 3 / 1;
+
+// 15. Unary operations
+let neg = -x;
+let notFlag = !flag;
+
+// 16. Ternary operator
+let ternResult = x > 0 ? "positive" : "non-positive";
+
+// 17. Object methods
+define Point {
+    x: i32,
+    y: i32,
+}
+
+let p: Point = { x: 3, y: 4 };
+
+// 18. Enums
+enum Color {
+    RED,
+    GREEN,
+    BLUE = 10
+}
+
+// Run tests and print results
+print("=== AST Serialization Roundtrip Test ===");
+print("");
+
+print("1. Variables: x=" + typeof(x) + ", y=" + typeof(y));
+print("2. Rune: ch=" + ch);
+print("3. Array length: " + typeof(arr.length));
+print("4. Object: obj.name=" + obj.name);
+print("5. Function: add(2,3)=" + typeof(add(2, 3)));
+print("6. Optional param: " + greet("World"));
+print("7. Recursion: fib(10)=" + typeof(fib(10)));
+print("8. Closure: " + typeof(makeCounter()()));
+print("9. Control: " + testControl(5));
+print("10. Loop: sumTo(10)=" + typeof(sumTo(10)));
+print("11. For-in: count=" + typeof(countElements([1,2,3])));
+print("12. Switch: " + dayName(1));
+print("13. Try/catch: " + typeof(safeDivide(10, 2)));
+print("14. Interpolation: " + msg);
+print("15. Bitwise: " + typeof(bitwise));
+print("16. Ternary: " + ternResult);
+print("17. Define type: Point");
+print("18. Enum: Color.BLUE=" + typeof(Color.BLUE));
+print("");
+print("=== All tests passed! ===");

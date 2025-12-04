@@ -363,7 +363,7 @@ let result = "  Hello World  "
     .replace("world", "hemlock");  // "hello hemlock"
 ```
 
-**Available String Methods:**
+**Available String Methods (19 total):**
 - `substr(start, length)` - Extract substring by codepoint position and length
 - `slice(start, end)` - Extract substring by codepoint range (end exclusive)
 - `find(needle)` - Find first occurrence, returns codepoint index or -1
@@ -382,6 +382,7 @@ let result = "  Hello World  "
 - `chars()` - Convert to array of runes (codepoints)
 - `bytes()` - Convert to array of bytes (u8 values)
 - `to_bytes()` - Convert to buffer for low-level access
+- `deserialize()` - Parse JSON string to value/object (pairs with `obj.serialize()`)
 
 ### String Interpolation
 
@@ -3315,7 +3316,7 @@ email_pattern.free();  // Manual cleanup required
 
 ---
 
-#### 8. **Strings** (`@stdlib/strings`)
+#### 10. **Strings** (`@stdlib/strings`)
 **Status:** Complete
 
 Advanced string utilities beyond the 18 built-in methods:
@@ -3349,6 +3350,264 @@ let s = pad_left("test", 10, "█");  // "██████test"
 
 **Documentation:** `stdlib/docs/strings.md`
 **Features:** Full UTF-8 Unicode support, complements built-in string methods, comprehensive error handling
+
+---
+
+#### 11. **Compression** (`@stdlib/compression`)
+**Status:** Complete
+
+Data compression using zlib/gzip and tar archive support:
+- `deflate_compress(data)` - Compress data using DEFLATE
+- `deflate_decompress(data)` - Decompress DEFLATE data
+- `gzip(data)` - Compress with gzip format
+- `gunzip(data)` - Decompress gzip data
+- `TarWriter` - Create tar archives
+- `TarReader` - Extract tar archives
+
+```hemlock
+import { gzip, gunzip } from "@stdlib/compression";
+
+let data = "Hello, World!";
+let compressed = gzip(data);
+let restored = gunzip(compressed);
+print(restored);  // "Hello, World!"
+```
+
+**Documentation:** `stdlib/docs/compression.md`
+
+---
+
+#### 12. **Cryptography** (`@stdlib/crypto`)
+**Status:** Complete
+
+Cryptographic operations via OpenSSL:
+- `random_bytes(size)` - Cryptographically secure random bytes
+- `aes_encrypt(key, data)` / `aes_decrypt(key, data)` - AES encryption
+- `rsa_generate_key(bits)` - Generate RSA key pair
+- `rsa_sign(key, data)` / `rsa_verify(key, data, sig)` - RSA signatures
+- `ecdsa_generate_key()` - Generate ECDSA key pair
+- `ecdsa_sign(key, data)` / `ecdsa_verify(key, data, sig)` - ECDSA signatures
+
+```hemlock
+import { random_bytes, aes_encrypt, aes_decrypt } from "@stdlib/crypto";
+
+let key = random_bytes(32);  // 256-bit key
+let plaintext = "Secret message";
+let encrypted = aes_encrypt(key, plaintext);
+let decrypted = aes_decrypt(key, encrypted);
+```
+
+**Documentation:** `stdlib/docs/crypto.md`
+
+---
+
+#### 13. **Encoding** (`@stdlib/encoding`)
+**Status:** Complete
+
+Data encoding and decoding utilities:
+- `base64_encode(data)` / `base64_decode(data)` - Base64 encoding
+- `hex_encode(data)` / `hex_decode(data)` - Hexadecimal encoding
+- `url_encode(str)` / `url_decode(str)` - URL encoding
+
+```hemlock
+import { base64_encode, base64_decode, hex_encode } from "@stdlib/encoding";
+
+let encoded = base64_encode("Hello");  // "SGVsbG8="
+let decoded = base64_decode(encoded);  // "Hello"
+let hex = hex_encode("ABC");           // "414243"
+```
+
+**Documentation:** `stdlib/docs/encoding.md`
+
+---
+
+#### 14. **Hash Functions** (`@stdlib/hash`)
+**Status:** Complete
+
+Cryptographic and non-cryptographic hash functions:
+- **Non-crypto:** `djb2(str)`, `fnv1a(str)`, `murmur3(str)`
+- **Crypto:** `sha256(data)`, `sha512(data)`, `md5(data)`
+- `file_checksum(path, algorithm)` - Hash file contents
+
+```hemlock
+import { sha256, md5, djb2 } from "@stdlib/hash";
+
+let hash = sha256("password");
+let checksum = md5("data");
+let fast_hash = djb2("key");  // For hash tables
+```
+
+**Documentation:** `stdlib/docs/hash.md`
+
+---
+
+#### 15. **HTTP Client** (`@stdlib/http`)
+**Status:** Complete
+
+HTTP client using libwebsockets:
+- `http_get(url)` - Simple GET request
+- `http_post(url, body)` - POST request with body
+- `http_request(options)` - Full-featured request with headers
+
+```hemlock
+import { http_get, http_post } from "@stdlib/http";
+
+let response = http_get("https://api.example.com/data");
+print(response.status);  // 200
+print(response.body);    // Response content
+
+let post_resp = http_post("https://api.example.com/submit", '{"key":"value"}');
+```
+
+**Documentation:** `stdlib/docs/http.md`
+
+---
+
+#### 16. **JSON** (`@stdlib/json`)
+**Status:** Complete
+
+Advanced JSON manipulation beyond built-in serialize/deserialize:
+- `parse(str)` / `stringify(obj)` - Basic conversion
+- `pretty(obj, indent?)` - Pretty-printed JSON
+- `get(obj, path)` / `set(obj, path, value)` - Path-based access
+- `keys(obj)` / `values(obj)` - Object introspection
+- `has(obj, key)` / `del(obj, key)` - Key operations
+- `merge(obj1, obj2)` - Deep merge objects
+- `query(obj, jsonpath)` - JSONPath queries
+
+```hemlock
+import { parse, pretty, get, merge } from "@stdlib/json";
+
+let obj = parse('{"user":{"name":"Alice"}}');
+let name = get(obj, "user.name");  // "Alice"
+
+let merged = merge({ a: 1 }, { b: 2 });  // { a: 1, b: 2 }
+print(pretty(merged, 2));  // Formatted output
+```
+
+**Documentation:** `stdlib/docs/json.md`
+
+---
+
+#### 17. **Logging** (`@stdlib/logging`)
+**Status:** Complete
+
+Production logging framework:
+- `Logger(name, options?)` - Create named logger
+- Log levels: `DEBUG`, `INFO`, `WARN`, `ERROR`
+- Multiple output targets (console, file)
+- Structured logging support
+
+```hemlock
+import { Logger, INFO, ERROR } from "@stdlib/logging";
+
+let log = Logger("myapp", { level: INFO });
+log.info("Application started");
+log.error("Something went wrong", { code: 500 });
+log.debug("Debug info");  // Filtered out (below INFO level)
+```
+
+**Documentation:** `stdlib/docs/logging.md`
+
+---
+
+#### 18. **Operating System** (`@stdlib/os`)
+**Status:** Complete
+
+System information and hardware detection:
+- `platform()` - OS platform (linux, darwin, windows)
+- `arch()` - CPU architecture (x64, arm64)
+- `os_name()` / `os_version()` - OS details
+- `hostname()` / `username()` / `homedir()` / `tmpdir()`
+- `uptime()` - System uptime in seconds
+- `cpu_count()` - Number of CPU cores
+- `total_memory()` / `free_memory()` - Memory in bytes
+
+```hemlock
+import { platform, cpu_count, total_memory, hostname } from "@stdlib/os";
+
+print("Platform: " + platform());      // "linux"
+print("CPUs: " + typeof(cpu_count())); // "8"
+print("Memory: " + typeof(total_memory() / 1024 / 1024 / 1024) + " GB");
+print("Host: " + hostname());
+```
+
+**Documentation:** `stdlib/docs/os.md`
+
+---
+
+#### 19. **Terminal** (`@stdlib/terminal`)
+**Status:** Complete
+
+ANSI terminal control and colors:
+- **Colors:** RED, GREEN, BLUE, YELLOW, CYAN, MAGENTA, etc.
+- **Styles:** BOLD, UNDERLINE, ITALIC, DIM, BLINK
+- **Cursor:** move_to, clear_screen, clear_line
+- **Background:** BG_RED, BG_GREEN, etc.
+- `RESET` - Reset all formatting
+
+```hemlock
+import { RED, GREEN, BOLD, RESET } from "@stdlib/terminal";
+
+print(RED + "Error: " + RESET + "Something failed");
+print(GREEN + BOLD + "Success!" + RESET);
+print(YELLOW + "Warning: " + RESET + "Check this");
+```
+
+**Documentation:** `stdlib/docs/terminal.md`
+
+---
+
+#### 20. **Testing Framework** (`@stdlib/testing`)
+**Status:** Complete
+
+BDD-style testing framework:
+- `describe(name, fn)` - Test suite
+- `test(name, fn)` - Individual test
+- `expect(value)` - Assertion builder
+- `beforeEach(fn)` / `afterEach(fn)` - Setup/teardown
+- `skip(name, fn)` - Skip test
+
+```hemlock
+import { describe, test, expect, beforeEach } from "@stdlib/testing";
+
+describe("Math operations", fn() {
+    test("addition", fn() {
+        expect(1 + 1).toBe(2);
+        expect(2 + 2).toEqual(4);
+    });
+
+    test("comparison", fn() {
+        expect(5).toBeGreaterThan(3);
+        expect([1, 2]).toContain(1);
+    });
+});
+```
+
+**Documentation:** `stdlib/docs/testing.md`
+
+---
+
+#### 21. **WebSocket** (`@stdlib/websocket`)
+**Status:** Complete
+
+WebSocket client/server support via libwebsockets:
+- `WebSocket(url)` - Connect to WebSocket server
+- Message types: TEXT, BINARY
+- Methods: `send()`, `recv()`, `close()`
+- Event handlers: `on_open`, `on_message`, `on_close`
+
+```hemlock
+import { WebSocket } from "@stdlib/websocket";
+
+let ws = WebSocket("wss://echo.websocket.org");
+ws.send("Hello, WebSocket!");
+let response = ws.recv();
+print(response);
+ws.close();
+```
+
+**Documentation:** `stdlib/docs/websocket.md`
 
 ---
 
@@ -3386,22 +3645,29 @@ let restored = json2.deserialize();
 stdlib/
 ├── README.md              # Module overview
 ├── collections.hml        # Data structures
-├── math.hml               # Mathematical functions
-├── time.hml               # Time/date operations
+├── compression.hml        # zlib/gzip/tar compression
+├── crypto.hml             # Cryptography (OpenSSL)
+├── datetime.hml           # Date/time manipulation
+├── encoding.hml           # Base64, hex, URL encoding
 ├── env.hml                # Environment variables
 ├── fs.hml                 # Filesystem operations
+├── hash.hml               # Hash functions
+├── http.hml               # HTTP client
+├── json.hml               # Advanced JSON manipulation
+├── logging.hml            # Logging framework
+├── math.hml               # Mathematical functions
 ├── net.hml                # Networking (TCP/UDP)
+├── os.hml                 # System information
+├── process.hml            # Process management
 ├── regex.hml              # Regular expressions (via FFI)
 ├── strings.hml            # String utilities
-└── docs/
-    ├── collections.md     # Collections API reference
-    ├── math.md            # Math API reference
-    ├── time.md            # Time API reference
-    ├── env.md             # Environment API reference
-    ├── fs.md              # Filesystem API reference
-    ├── net.md             # Networking API reference
-    ├── regex.md           # Regex API reference
-    └── strings.md         # Strings API reference
+├── terminal.hml           # ANSI terminal control
+├── testing.hml            # Test framework
+├── time.hml               # Time/date operations
+├── websocket.hml          # WebSocket support
+├── c/                     # C wrapper code
+│   └── lws_wrapper.c      # libwebsockets wrapper
+└── docs/                  # Module documentation (21 .md files)
 ```
 
 ### Testing
@@ -3414,33 +3680,50 @@ make test
 
 # Run specific module tests
 make test | grep stdlib_collections
-make test | grep stdlib_math
-make test | grep stdlib_time
+make test | grep stdlib_compression
+make test | grep stdlib_crypto
+make test | grep stdlib_datetime
+make test | grep stdlib_encoding
 make test | grep stdlib_env
+make test | grep stdlib_hash
+make test | grep stdlib_http
+make test | grep stdlib_json
+make test | grep stdlib_logging
+make test | grep stdlib_math
 make test | grep stdlib_net
+make test | grep stdlib_os
+make test | grep stdlib_process
 make test | grep stdlib_regex
 make test | grep stdlib_strings
+make test | grep stdlib_terminal
+make test | grep stdlib_testing
+make test | grep stdlib_time
+make test | grep stdlib_websocket
 ```
 
 **Test locations:**
 - `tests/stdlib_collections/` - Collections tests
-- `tests/stdlib_math/` - Math tests
-- `tests/stdlib_time/` - Time tests
+- `tests/stdlib_compression/` - Compression tests
+- `tests/stdlib_crypto/` - Cryptography tests
+- `tests/stdlib_datetime/` - Date/time tests
+- `tests/stdlib_encoding/` - Encoding tests
 - `tests/stdlib_env/` - Environment tests
+- `tests/stdlib_hash/` - Hash function tests
+- `tests/stdlib_http/` - HTTP client tests
+- `tests/stdlib_json/` - JSON tests
+- `tests/stdlib_logging/` - Logging tests
+- `tests/stdlib_math/` - Math tests
 - `tests/stdlib_net/` - Networking tests (TCP/UDP)
+- `tests/stdlib_os/` - OS info tests
+- `tests/stdlib_process/` - Process tests
 - `tests/stdlib_regex/` - Regular expression tests
 - `tests/stdlib_strings/` - String utilities tests
+- `tests/stdlib_terminal/` - Terminal tests
+- `tests/stdlib_testing/` - Testing framework tests
+- `tests/stdlib_time/` - Time tests
+- `tests/stdlib_websocket/` - WebSocket tests
 
-### Future Stdlib Modules
-
-Planned additions:
-- **path** - Path manipulation (join, basename, dirname, extname, normalize)
-- **encoding** - Base64, hex, URL encoding/decoding
-- **testing** - Test framework with describe/test/expect/assertions
-- **crypto** - Cryptographic functions (via FFI + OpenSSL)
-- **compression** - zlib/gzip compression (via FFI)
-
-See `stdlib/README.md`, `STDLIB_ANALYSIS_UPDATED.md`, and `STDLIB_NETWORKING_DESIGN.md` for detailed roadmap.
+See `stdlib/README.md` for detailed module documentation.
 
 ---
 
@@ -3453,21 +3736,73 @@ hemlock/
 │   ├── ast.h
 │   ├── lexer.h
 │   ├── parser.h
-│   └── interpreter.h
+│   ├── interpreter.h
+│   └── module.h          # Module/import system
 ├── src/                  # Implementation
 │   ├── ast.c             # AST node constructors and cleanup
 │   ├── lexer.c           # Tokenization
-│   ├── parser.c          # Parsing (tokens → AST)
 │   ├── main.c            # CLI entry point, REPL
+│   ├── module.c          # Module loading and imports
+│   ├── parser/           # Parser subsystem (modular)
+│   │   ├── core.c            # Parser core
+│   │   ├── expressions.c     # Expression parsing
+│   │   ├── statements.c      # Statement parsing
+│   │   └── internal.h        # Internal parser API
+│   ├── compiler/         # C code generation backend
+│   │   ├── codegen.c         # Main code generator (307KB)
+│   │   ├── codegen.h         # Codegen header
+│   │   └── main.c            # Compiler entry point
+│   ├── lsp/              # Language Server Protocol
+│   │   ├── lsp.c/h           # LSP server
+│   │   ├── protocol.c/h      # Protocol handling
+│   │   └── handlers.c/h      # Request handlers
 │   └── interpreter/      # Interpreter subsystem (modular)
 │       ├── internal.h        # Internal API shared between modules
-│       ├── environment.c     # Variable scoping (121 lines)
-│       ├── values.c          # Value constructors, data structures (394 lines)
-│       ├── types.c           # Type system, conversions, duck typing (440 lines)
-│       ├── builtins.c        # Builtin functions, registration (955 lines)
-│       ├── io.c              # File I/O, serialization (449 lines)
-│       └── runtime.c         # eval_expr, eval_stmt, control flow (865 lines)
-├── tests/                # Test suite, ran by tests/run_tests.sh
+│       ├── environment.c     # Variable scoping
+│       ├── values.c          # Value constructors, data structures
+│       ├── types.c           # Type system, conversions, duck typing
+│       ├── ffi.c             # Foreign function interface
+│       ├── utf8.c/h          # UTF-8 encoding utilities
+│       ├── builtins/         # Builtin functions (17 files)
+│       │   ├── registration.c    # Builtin registration
+│       │   ├── math.c            # Math functions
+│       │   ├── filesystem.c      # File operations
+│       │   ├── net.c             # Networking builtins
+│       │   ├── os.c              # OS operations
+│       │   ├── time.c            # Time functions
+│       │   ├── env.c             # Environment variables
+│       │   ├── memory.c          # Memory operations
+│       │   ├── signals.c         # Signal handling
+│       │   ├── compression.c     # Compression (zlib)
+│       │   ├── concurrency.c     # Async/threading
+│       │   ├── websockets.c      # WebSocket support
+│       │   └── ...               # Other builtins
+│       ├── io/               # I/O and methods (6 files)
+│       │   ├── string_methods.c  # String methods
+│       │   ├── array_methods.c   # Array methods
+│       │   ├── serialization.c   # JSON serialization
+│       │   ├── file_methods.c    # File I/O methods
+│       │   ├── channel_methods.c # Channel methods
+│       │   └── internal.h        # Internal I/O API
+│       └── runtime/          # Runtime evaluation (4 files)
+│           ├── expressions.c     # Expression evaluation (92KB)
+│           ├── statements.c      # Statement evaluation
+│           ├── context.c         # Runtime context
+│           └── internal.h        # Internal runtime API
+├── runtime/              # Separate runtime library
+│   ├── include/
+│   │   ├── hemlock_runtime.h # Runtime API
+│   │   └── hemlock_value.h   # Value types
+│   ├── src/
+│   │   ├── builtins.c        # Runtime builtins (219KB)
+│   │   └── value.c           # Value operations
+│   └── Makefile
+├── stdlib/               # Standard library modules (21 .hml files)
+│   ├── docs/             # Module documentation
+│   └── c/                # C wrapper code
+├── docs/                 # Project documentation
+├── editors/              # Editor support (VSCode, Vim)
+├── tests/                # Test suite (618+ tests)
 └── examples/             # Example programs
 ```
 
@@ -3481,19 +3816,19 @@ hemlock/
 ### Compilation Pipeline
 1. **Lexer** → tokens
 2. **Parser** → AST
-3. **Interpreter** → tree-walking execution (current)
-4. **Compiler** → C code generation (future)
+3. **Interpreter** → tree-walking execution
+4. **Compiler** → C code generation (implemented in `src/compiler/`)
 
-### Current Runtime
-- Tree-walking interpreter
+### Runtime Options
+- **Interpreter mode** (default): Tree-walking interpreter with tagged union values
+- **Compiled mode**: Generates C code via `codegen.c` (307KB implementation)
+- **Runtime library**: Separate `runtime/` directory provides compiled program support
+
+### Architecture Features
 - Tagged union for values (`Value` struct)
 - Environment-based variable storage
-- No optimization yet
-
-### Future Runtime
-- Compile to C code
-- Keep runtime library for dynamic features
-- Optional `--no-tags` flag for fully static builds
+- Separate runtime library for compiled programs
+- LSP server for IDE integration (`src/lsp/`)
 
 ### External Dependencies
 
@@ -3526,7 +3861,7 @@ sudo apt-get install libssl-dev libwebsockets-dev libffi-dev
 ## Testing Philosophy
 
 - **Test-driven development** for new features
-- Comprehensive test suite in `tests/`
+- Comprehensive test suite in `tests/` with **618+ tests**
 - Test both success and error cases
 - Run `make test` before committing
 
@@ -3545,8 +3880,25 @@ tests/
 ├── exceptions/       # Try/catch/finally/throw tests
 ├── io/               # File I/O tests
 ├── args/             # Command-line argument tests
+├── async/            # Async/concurrency tests
+├── defer/            # Defer statement tests
+├── signals/          # Signal handling tests
+├── switch/           # Switch statement tests
+├── bitwise/          # Bitwise operator tests
+├── ffi/              # FFI tests
+├── typed_arrays/     # Typed array tests
+├── modules/          # Module system tests
+├── stdlib_*/         # Standard library tests (20 modules)
+├── compiler/         # Compiler parity tests
+├── parity/           # Interpreter/compiler parity tests
 └── run_tests.sh      # Test runner
 ```
+
+**Test counts:**
+- Main test suite: 530+ tests
+- Expected error tests: 27 tests
+- Compiler tests: 49 tests
+- Parity tests: 39 tests
 
 ---
 
@@ -3690,7 +4042,7 @@ When adding features to Hemlock:
 
 ## Version History
 
-- **v0.1** - Primitives, memory management, UTF-8 strings, control flow, functions, closures, recursion, objects, arrays, enums, error handling, file I/O, signal handling, command-line arguments, async/await, structured concurrency, FFI (current)
+- **v0.1** - Primitives, memory management, UTF-8 strings, control flow, functions, closures, recursion, objects, arrays, enums, error handling, file I/O, signal handling, command-line arguments, async/await, structured concurrency, FFI, compiler backend, LSP server, 21 stdlib modules (current)
   - Type system: i8-i64, u8-u64, f32/f64, bool, string, rune, null, ptr, buffer, array, object, enum, file, task, channel, void
   - **64-bit integer support:** i64 and u64 types with full type promotion, conversion, and FFI support
   - **UTF-8 first-class strings:** Full Unicode support (U+0000 to U+10FFFF), codepoint-based indexing and operations, `.length` (codepoints) and `.byte_length` (bytes) properties
@@ -3698,7 +4050,7 @@ When adding features to Hemlock:
   - Memory: alloc, free, memset, memcpy, realloc, talloc, sizeof
   - Objects: literals, methods, duck typing, optional fields, serialize/deserialize
   - **Enums:** C-style enumerations with auto-incrementing or explicit values, type checking, namespace objects
-  - **Strings:** 18 methods including substr, slice, find, contains, split, trim, to_upper, to_lower, starts_with, ends_with, replace, replace_all, repeat, char_at, byte_at, chars, bytes, to_bytes
+  - **Strings:** 19 methods including substr, slice, find, contains, split, trim, to_upper, to_lower, starts_with, ends_with, replace, replace_all, repeat, char_at, byte_at, chars, bytes, to_bytes, deserialize
   - **Arrays:** 18 methods including push, pop, shift, unshift, insert, remove, find, contains, slice, join, concat, reverse, first, last, clear, **map, filter, reduce** (higher-order functions for functional programming)
   - Control flow: if/else, while, for, for-in, break, continue, switch, bitwise operators (&, |, ^, <<, >>, ~), **defer**
   - **Error handling:** try/catch/finally/throw, panic - **all user-facing runtime errors are catchable** (array bounds, type conversions, arity mismatches, stack overflow, async errors)
@@ -3707,9 +4059,12 @@ When adding features to Hemlock:
   - Command-line arguments: built-in `args` array
   - **Async/Concurrency:** async/await syntax, spawn/join/detach (supports both fire-and-forget and spawn-then-detach patterns), channels with send/recv/close, pthread-based true parallelism, exception propagation
   - **FFI (Foreign Function Interface):** Call C functions from shared libraries using libffi, support for all primitive types, automatic type conversion
-  - **Architecture:** Modular interpreter (environment, values, types, builtins, io, runtime, ffi)
-  - **472 tests** - 447 passing + 25 expected error tests (100% test success rate including async, FFI, i64/u64, signals, defer, map/filter/reduce, networking, crypto, compression, edge cases)
-- **v0.2** - Compiler backend, optimization (planned)
+  - **Compiler Backend:** C code generation (`src/compiler/codegen.c`, 307KB), separate runtime library
+  - **LSP Server:** Language Server Protocol support for IDE integration (`src/lsp/`)
+  - **Standard Library:** 21 modules including collections, math, time, datetime, env, process, fs, net, regex, strings, compression, crypto, encoding, hash, http, json, logging, os, terminal, testing, websocket
+  - **Architecture:** Modular interpreter with subdirectories (builtins/, io/, runtime/), separate parser module, module system for imports
+  - **618+ tests** - 530+ main tests + 27 error tests + 49 compiler tests + 39 parity tests (100% test success rate including async, FFI, i64/u64, signals, defer, map/filter/reduce, networking, crypto, compression, all stdlib modules)
+- **v0.2** - Optimization passes, extended compiler features (planned)
 - **v0.3** - Advanced features (planned)
 
 ---
