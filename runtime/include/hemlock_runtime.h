@@ -596,6 +596,36 @@ void* hml_ffi_sym(HmlValue lib, const char *name);
 // types array contains: [return_type, arg1_type, arg2_type, ...]
 HmlValue hml_ffi_call(void *func_ptr, HmlValue *args, int num_args, HmlFFIType *types);
 
+// ========== FFI CALLBACKS ==========
+
+// Opaque handle for FFI callback
+typedef struct HmlFFICallback HmlFFICallback;
+
+// Create a C-callable function pointer from a Hemlock function
+// param_types: array of HmlFFIType for each parameter
+// return_type: HmlFFIType for the return value
+// Returns a callback handle (must be freed with hml_ffi_callback_free)
+HmlFFICallback* hml_ffi_callback_create(HmlValue fn, HmlFFIType *param_types, int num_params, HmlFFIType return_type);
+
+// Get the C-callable function pointer from a callback handle
+void* hml_ffi_callback_ptr(HmlFFICallback *cb);
+
+// Free a callback handle
+void hml_ffi_callback_free(HmlFFICallback *cb);
+
+// Free a callback by its code pointer (for cleanup)
+int hml_ffi_callback_free_by_ptr(void *ptr);
+
+// Builtin wrappers for callback functions
+HmlValue hml_builtin_callback(HmlClosureEnv *env, HmlValue fn, HmlValue param_types, HmlValue return_type);
+HmlValue hml_builtin_callback_free(HmlClosureEnv *env, HmlValue ptr);
+
+// Pointer helper functions for FFI
+HmlValue hml_builtin_ptr_deref_i32(HmlClosureEnv *env, HmlValue ptr);
+HmlValue hml_builtin_ptr_write_i32(HmlClosureEnv *env, HmlValue ptr, HmlValue value);
+HmlValue hml_builtin_ptr_offset(HmlClosureEnv *env, HmlValue ptr, HmlValue offset, HmlValue element_size);
+HmlValue hml_builtin_ptr_read_i32(HmlClosureEnv *env, HmlValue ptr);
+
 // ========== HTTP/WEBSOCKET FUNCTIONS ==========
 // These require libwebsockets at runtime
 
