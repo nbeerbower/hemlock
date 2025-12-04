@@ -33,6 +33,8 @@ GCC_ERROR=0
 INTERP_TIMEOUT=0
 COMPILED_TIMEOUT=0
 SKIPPED=0
+EXPECTED_FAIL_PASS=0
+EXPECTED_FAIL_MISMATCH=0
 TOTAL=0
 
 # Track failures for detailed reporting
@@ -82,10 +84,24 @@ SKIP_CATEGORIES="compiler parity ast_serialize lsp"
 # Specific tests to skip (e.g., require user input, network, etc.)
 SKIP_TESTS=""
 
+# Tests that are expected to fail (invalid syntax, etc.)
+# Both interpreter and compiler should reject these
+EXPECTED_FAIL_TESTS="primitives/binary_invalid.hml primitives/hex_invalid.hml"
+
 should_skip_category() {
     local category="$1"
     for skip in $SKIP_CATEGORIES; do
         if [ "$category" = "$skip" ]; then
+            return 0
+        fi
+    done
+    return 1
+}
+
+is_expected_fail() {
+    local test_name="$1"
+    for fail_test in $EXPECTED_FAIL_TESTS; do
+        if [ "$test_name" = "$fail_test" ]; then
             return 0
         fi
     done
@@ -103,6 +119,33 @@ run_test() {
     # Skip certain categories
     if should_skip_category "$category"; then
         SKIPPED=$((SKIPPED + 1))
+        return
+    fi
+
+    # Handle expected-fail tests (invalid syntax, etc.)
+    if is_expected_fail "$test_name"; then
+        # Run interpreter - should fail
+        local interp_failed=0
+        if ! timeout "$TEST_TIMEOUT" "$HEMLOCK" "$test_file" >/dev/null 2>&1; then
+            interp_failed=1
+        fi
+
+        # Run compiler - should also fail
+        local compiler_failed=0
+        local c_file="$TEMP_DIR/${base_name}_$$.c"
+        if ! timeout "$TEST_TIMEOUT" "$HEMLOCKC" "$test_file" -c --emit-c "$c_file" 2>/dev/null; then
+            compiler_failed=1
+        fi
+        rm -f "$c_file"
+
+        # Both should fail for parity
+        if [ $interp_failed -eq 1 ] && [ $compiler_failed -eq 1 ]; then
+            echo -e "${GREEN}✓${NC} $test_name (expected failure - both reject)"
+            EXPECTED_FAIL_PASS=$((EXPECTED_FAIL_PASS + 1))
+        else
+            echo -e "${RED}✗${NC} $test_name (expected failure mismatch: interp=$interp_failed, compiler=$compiler_failed)"
+            EXPECTED_FAIL_MISMATCH=$((EXPECTED_FAIL_MISMATCH + 1))
+        fi
         return
     fi
 
@@ -195,7 +238,9 @@ echo "======================================"
 echo "              Summary"
 echo "======================================"
 echo -e "${GREEN}Parity Pass:${NC}      $PARITY_PASS"
+echo -e "${GREEN}Expected Fail:${NC}    $EXPECTED_FAIL_PASS (both reject invalid syntax)"
 echo -e "${RED}Parity Fail:${NC}      $PARITY_FAIL"
+echo -e "${RED}Expected Mismatch:${NC} $EXPECTED_FAIL_MISMATCH"
 echo -e "${YELLOW}Compile Error:${NC}    $COMPILE_ERROR (hemlockc)"
 echo -e "${YELLOW}GCC Error:${NC}        $GCC_ERROR"
 echo -e "${YELLOW}Interp Timeout:${NC}   $INTERP_TIMEOUT"
@@ -205,11 +250,12 @@ echo "--------------------------------------"
 echo "Total:            $TOTAL"
 echo ""
 
-# Calculate parity rate
-TESTED=$((PARITY_PASS + PARITY_FAIL))
-if [ $TESTED -gt 0 ]; then
-    PARITY_RATE=$((PARITY_PASS * 100 / TESTED))
-    echo -e "Parity Rate: ${GREEN}${PARITY_RATE}%${NC} ($PARITY_PASS/$TESTED tests with matching output)"
+# Calculate parity rate (expected failures count as parity matches)
+TOTAL_PASS=$((PARITY_PASS + EXPECTED_FAIL_PASS))
+TOTAL_TESTED=$((PARITY_PASS + PARITY_FAIL + EXPECTED_FAIL_PASS + EXPECTED_FAIL_MISMATCH))
+if [ $TOTAL_TESTED -gt 0 ]; then
+    PARITY_RATE=$((TOTAL_PASS * 100 / TOTAL_TESTED))
+    echo -e "Parity Rate: ${GREEN}${PARITY_RATE}%${NC} ($TOTAL_PASS/$TOTAL_TESTED tests with matching behavior)"
 fi
 
 # Show failure details
@@ -237,11 +283,12 @@ echo ""
 echo "======================================"
 
 # Exit code based on parity rate
-if [ $PARITY_FAIL -eq 0 ] && [ $PARITY_PASS -gt 0 ]; then
-    echo -e "${GREEN}Full parity achieved! 🎉${NC}"
+TOTAL_FAIL=$((PARITY_FAIL + EXPECTED_FAIL_MISMATCH))
+if [ $TOTAL_FAIL -eq 0 ] && [ $TOTAL_PASS -gt 0 ]; then
+    echo -e "${GREEN}Full parity achieved!${NC}"
     exit 0
 elif [ $PARITY_RATE -ge 90 ]; then
-    echo -e "${GREEN}Parity rate >= 90% ✓${NC}"
+    echo -e "${GREEN}Parity rate >= 90%${NC}"
     exit 0
 elif [ $PARITY_RATE -ge 75 ]; then
     echo -e "${YELLOW}Parity rate >= 75% (acceptable)${NC}"
