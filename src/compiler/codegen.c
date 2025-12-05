@@ -65,6 +65,7 @@ CodegenContext* codegen_new(FILE *output) {
     ctx->return_value_vars = NULL;
     ctx->has_return_vars = NULL;
     ctx->try_finally_capacity = 0;
+    ctx->loop_depth = 0;
     return ctx;
 }
 
@@ -4485,6 +4486,7 @@ void codegen_stmt(CodegenContext *ctx, Stmt *stmt) {
         }
 
         case STMT_WHILE: {
+            ctx->loop_depth++;
             codegen_writeln(ctx, "while (1) {");
             codegen_indent_inc(ctx);
             char *cond = codegen_expr(ctx, stmt->as.while_stmt.condition);
@@ -4493,11 +4495,13 @@ void codegen_stmt(CodegenContext *ctx, Stmt *stmt) {
             codegen_stmt(ctx, stmt->as.while_stmt.body);
             codegen_indent_dec(ctx);
             codegen_writeln(ctx, "}");
+            ctx->loop_depth--;
             free(cond);
             break;
         }
 
         case STMT_FOR: {
+            ctx->loop_depth++;
             codegen_writeln(ctx, "{");
             codegen_indent_inc(ctx);
             // Initializer
@@ -4525,12 +4529,14 @@ void codegen_stmt(CodegenContext *ctx, Stmt *stmt) {
             codegen_writeln(ctx, "}");
             codegen_indent_dec(ctx);
             codegen_writeln(ctx, "}");
+            ctx->loop_depth--;
             break;
         }
 
         case STMT_FOR_IN: {
             // Generate for-in loop for arrays, objects, or strings
             // for (let val in iterable) or for (let key, val in iterable)
+            ctx->loop_depth++;
             codegen_writeln(ctx, "{");
             codegen_indent_inc(ctx);
 
@@ -4616,6 +4622,7 @@ void codegen_stmt(CodegenContext *ctx, Stmt *stmt) {
 
             codegen_indent_dec(ctx);
             codegen_writeln(ctx, "}");
+            ctx->loop_depth--;
 
             free(iter_val);
             free(len_var);
@@ -4663,6 +4670,8 @@ void codegen_stmt(CodegenContext *ctx, Stmt *stmt) {
                 }
                 // Execute all defers in LIFO order
                 codegen_defer_execute_all(ctx);
+                // Execute any runtime defers (from loops)
+                codegen_writeln(ctx, "hml_defer_execute_all();");
                 codegen_writeln(ctx, "hml_call_exit();");
                 codegen_writeln(ctx, "return %s;", ret_val);
                 free(ret_val);
@@ -4671,10 +4680,14 @@ void codegen_stmt(CodegenContext *ctx, Stmt *stmt) {
                 // Evaluate expression first, then decrement call depth
                 if (stmt->as.return_stmt.value) {
                     char *value = codegen_expr(ctx, stmt->as.return_stmt.value);
+                    // Execute any runtime defers (from loops)
+                    codegen_writeln(ctx, "hml_defer_execute_all();");
                     codegen_writeln(ctx, "hml_call_exit();");
                     codegen_writeln(ctx, "return %s;", value);
                     free(value);
                 } else {
+                    // Execute any runtime defers (from loops)
+                    codegen_writeln(ctx, "hml_defer_execute_all();");
                     codegen_writeln(ctx, "hml_call_exit();");
                     codegen_writeln(ctx, "return hml_val_null();");
                 }
@@ -4788,6 +4801,8 @@ void codegen_stmt(CodegenContext *ctx, Stmt *stmt) {
                 if (needs_return_tracking) {
                     codegen_writeln(ctx, "if (%s) {", has_return_var);
                     codegen_indent_inc(ctx);
+                    // Execute any runtime defers (from loops)
+                    codegen_writeln(ctx, "hml_defer_execute_all();");
                     codegen_writeln(ctx, "hml_call_exit();");
                     codegen_writeln(ctx, "return %s;", return_value_var);
                     codegen_indent_dec(ctx);
@@ -4891,8 +4906,26 @@ void codegen_stmt(CodegenContext *ctx, Stmt *stmt) {
         }
 
         case STMT_DEFER: {
-            // Push the expression onto the defer stack - will be executed at function return
-            codegen_defer_push(ctx, stmt->as.defer_stmt.call);
+            if (ctx->loop_depth > 0) {
+                // Inside a loop - use runtime defer stack
+                // For `defer foo()`, we need to push the function `foo` to be called later
+                if (stmt->as.defer_stmt.call->type == EXPR_CALL) {
+                    // Get the function being called
+                    char *fn_val = codegen_expr(ctx, stmt->as.defer_stmt.call->as.call.func);
+                    codegen_writeln(ctx, "hml_defer_push_call(%s);", fn_val);
+                    codegen_writeln(ctx, "hml_release(&%s);", fn_val);
+                    free(fn_val);
+                } else {
+                    // For non-call expressions, evaluate and push
+                    char *val = codegen_expr(ctx, stmt->as.defer_stmt.call);
+                    codegen_writeln(ctx, "hml_defer_push_call(%s);", val);
+                    codegen_writeln(ctx, "hml_release(&%s);", val);
+                    free(val);
+                }
+            } else {
+                // Not in a loop - use compile-time defer stack
+                codegen_defer_push(ctx, stmt->as.defer_stmt.call);
+            }
             break;
         }
 
@@ -5232,6 +5265,9 @@ static void codegen_function_decl(CodegenContext *ctx, Expr *func, const char *n
     // Execute any remaining defers before implicit return
     codegen_defer_execute_all(ctx);
 
+    // Execute any runtime defers (from loops)
+    codegen_writeln(ctx, "hml_defer_execute_all();");
+
     // Decrement call depth before implicit return
     codegen_writeln(ctx, "hml_call_exit();");
 
@@ -5373,6 +5409,9 @@ static void codegen_closure_impl(CodegenContext *ctx, ClosureInfo *closure) {
 
     // Execute any remaining defers before implicit return
     codegen_defer_execute_all(ctx);
+
+    // Execute any runtime defers (from loops)
+    codegen_writeln(ctx, "hml_defer_execute_all();");
 
     // Release captured variables before default return
     for (int i = 0; i < closure->num_captured; i++) {

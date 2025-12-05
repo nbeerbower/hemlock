@@ -162,6 +162,9 @@ typedef struct {
     char **return_value_vars;     // Stack of return value variable names
     char **has_return_vars;       // Stack of "has return" flag variable names
     int try_finally_capacity;     // Capacity of the stacks
+
+    // Loop tracking (for runtime defer support)
+    int loop_depth;               // Current loop nesting depth (0 = not in loop)
 } CodegenContext;
 
 // Initialize code generation context

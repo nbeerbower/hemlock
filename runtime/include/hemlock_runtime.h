@@ -347,6 +347,7 @@ void hml_runtime_error(const char *format, ...);
 typedef void (*HmlDeferFn)(void *arg);
 
 void hml_defer_push(HmlDeferFn fn, void *arg);
+void hml_defer_push_call(HmlValue fn);
 void hml_defer_pop_and_execute(void);
 void hml_defer_execute_all(void);
 
