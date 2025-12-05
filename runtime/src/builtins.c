@@ -173,7 +173,8 @@ static void print_value_to(FILE *out, HmlValue val) {
             break;
         case HML_VAL_BUFFER:
             if (val.as.as_buffer) {
-                fprintf(out, "buffer[%d]", val.as.as_buffer->length);
+                fprintf(out, "<buffer %p length=%d capacity=%d>",
+                    (void*)val.as.as_buffer->data, val.as.as_buffer->length, val.as.as_buffer->capacity);
             } else {
                 fprintf(out, "buffer[null]");
             }
@@ -1434,12 +1435,17 @@ HmlValue hml_unary_op(HmlUnaryOp op, HmlValue operand) {
             if (!hml_is_integer(operand)) {
                 hml_runtime_error("Bitwise NOT requires integer type");
             }
-            if (operand.type == HML_VAL_I64) {
-                return hml_val_i64(~operand.as.as_i64);
-            } else if (operand.type == HML_VAL_U64) {
-                return hml_val_u64(~operand.as.as_u64);
-            } else {
-                return hml_val_i32(~hml_to_i32(operand));
+            // Preserve the original type
+            switch (operand.type) {
+                case HML_VAL_I8:  return hml_val_i8(~operand.as.as_i8);
+                case HML_VAL_I16: return hml_val_i16(~operand.as.as_i16);
+                case HML_VAL_I32: return hml_val_i32(~operand.as.as_i32);
+                case HML_VAL_I64: return hml_val_i64(~operand.as.as_i64);
+                case HML_VAL_U8:  return hml_val_u8(~operand.as.as_u8);
+                case HML_VAL_U16: return hml_val_u16(~operand.as.as_u16);
+                case HML_VAL_U32: return hml_val_u32(~operand.as.as_u32);
+                case HML_VAL_U64: return hml_val_u64(~operand.as.as_u64);
+                default: return hml_val_i32(~hml_to_i32(operand));
             }
     }
 
@@ -2040,6 +2046,13 @@ HmlValue hml_buffer_length(HmlValue buf) {
     return hml_val_i32(buf.as.as_buffer->length);
 }
 
+HmlValue hml_buffer_capacity(HmlValue buf) {
+    if (buf.type != HML_VAL_BUFFER || !buf.as.as_buffer) {
+        hml_runtime_error("capacity requires buffer");
+    }
+    return hml_val_i32(buf.as.as_buffer->capacity);
+}
+
 // ========== FFI CALLBACK OPERATIONS ==========
 
 // Create an FFI callback that wraps a Hemlock function
@@ -2085,8 +2098,33 @@ void hml_free(HmlValue ptr_or_buffer) {
             }
             free(ptr_or_buffer.as.as_buffer);
         }
+    } else if (ptr_or_buffer.type == HML_VAL_ARRAY) {
+        if (ptr_or_buffer.as.as_array) {
+            HmlArray *arr = ptr_or_buffer.as.as_array;
+            // Release all elements
+            for (int i = 0; i < arr->length; i++) {
+                hml_release(&arr->elements[i]);
+            }
+            free(arr->elements);
+            free(arr);
+        }
+    } else if (ptr_or_buffer.type == HML_VAL_OBJECT) {
+        if (ptr_or_buffer.as.as_object) {
+            HmlObject *obj = ptr_or_buffer.as.as_object;
+            // Release all field values and free names
+            for (int i = 0; i < obj->num_fields; i++) {
+                hml_release(&obj->field_values[i]);
+                free(obj->field_names[i]);
+            }
+            free(obj->field_names);
+            free(obj->field_values);
+            if (obj->type_name) free(obj->type_name);
+            free(obj);
+        }
+    } else if (ptr_or_buffer.type == HML_VAL_NULL) {
+        // free(null) is a safe no-op (like C's free(NULL))
     } else {
-        hml_runtime_error("free() requires pointer or buffer");
+        hml_runtime_error("free() requires pointer, buffer, object, or array");
     }
 }
 
@@ -2223,6 +2261,11 @@ void hml_array_push(HmlValue arr, HmlValue val) {
 
     HmlArray *a = arr.as.as_array;
 
+    // Check element type for typed arrays
+    if (a->element_type != HML_VAL_NULL && val.type != a->element_type) {
+        hml_runtime_error("Type mismatch in typed array - expected element of specific type");
+    }
+
     // Grow if needed
     if (a->length >= a->capacity) {
         int new_cap = (a->capacity == 0) ? 8 : a->capacity * 2;
@@ -2259,6 +2302,11 @@ void hml_array_set(HmlValue arr, HmlValue index, HmlValue val) {
 
     int idx = hml_to_i32(index);
     HmlArray *a = arr.as.as_array;
+
+    // Check element type for typed arrays
+    if (a->element_type != HML_VAL_NULL && val.type != a->element_type) {
+        hml_runtime_error("Type mismatch in typed array - expected element of specific type");
+    }
 
     if (idx < 0) {
         hml_runtime_error("Negative array index not supported");
@@ -2330,6 +2378,11 @@ void hml_array_unshift(HmlValue arr, HmlValue val) {
 
     HmlArray *a = arr.as.as_array;
 
+    // Check element type for typed arrays
+    if (a->element_type != HML_VAL_NULL && val.type != a->element_type) {
+        hml_runtime_error("Type mismatch in typed array - expected element of specific type");
+    }
+
     // Grow if needed
     if (a->length >= a->capacity) {
         int new_cap = (a->capacity == 0) ? 8 : a->capacity * 2;
@@ -2354,6 +2407,11 @@ void hml_array_insert(HmlValue arr, HmlValue index, HmlValue val) {
 
     int idx = hml_to_i32(index);
     HmlArray *a = arr.as.as_array;
+
+    // Check element type for typed arrays
+    if (a->element_type != HML_VAL_NULL && val.type != a->element_type) {
+        hml_runtime_error("Type mismatch in typed array - expected element of specific type");
+    }
 
     if (idx < 0 || idx > a->length) {
         hml_runtime_error("insert index %d out of bounds (length %d)", idx, a->length);
@@ -2613,8 +2671,7 @@ HmlValue hml_validate_typed_array(HmlValue arr, HmlValueType element_type) {
     // Validate all existing elements match the type constraint
     for (int i = 0; i < a->length; i++) {
         if (!hml_type_matches(a->elements[i], element_type)) {
-            hml_runtime_error("Array element type mismatch at index %d: expected %s, got %s",
-                    i, hml_type_name(element_type), hml_type_name(a->elements[i].type));
+            hml_runtime_error("Type mismatch in typed array - expected element of specific type");
         }
     }
 
@@ -4383,8 +4440,7 @@ static void* task_thread_wrapper(void* arg) {
 
 HmlValue hml_spawn(HmlValue fn, HmlValue *args, int num_args) {
     if (fn.type != HML_VAL_FUNCTION) {
-        fprintf(stderr, "Error: spawn() expects a function\n");
-        exit(1);
+        hml_runtime_error("spawn() expects a function");
     }
 
     // Create task
@@ -4429,20 +4485,17 @@ HmlValue hml_spawn(HmlValue fn, HmlValue *args, int num_args) {
 
 HmlValue hml_join(HmlValue task_val) {
     if (task_val.type != HML_VAL_TASK) {
-        fprintf(stderr, "Error: join() expects a task\n");
-        exit(1);
+        hml_runtime_error("join() expects a task");
     }
 
     HmlTask *task = task_val.as.as_task;
 
     if (task->joined) {
-        fprintf(stderr, "Error: Task already joined\n");
-        exit(1);
+        hml_runtime_error("task handle already joined");
     }
 
     if (task->detached) {
-        fprintf(stderr, "Error: Cannot join a detached task\n");
-        exit(1);
+        hml_runtime_error("cannot join detached task");
     }
 
     // Wait for task to complete
@@ -4464,15 +4517,13 @@ HmlValue hml_join(HmlValue task_val) {
 
 void hml_detach(HmlValue task_val) {
     if (task_val.type != HML_VAL_TASK) {
-        fprintf(stderr, "Error: detach() expects a task\n");
-        exit(1);
+        hml_runtime_error("detach() expects a task");
     }
 
     HmlTask *task = task_val.as.as_task;
 
     if (task->joined) {
-        fprintf(stderr, "Error: Cannot detach an already joined task\n");
-        exit(1);
+        hml_runtime_error("cannot detach already joined task");
     }
 
     if (task->detached) {
@@ -4486,8 +4537,7 @@ void hml_detach(HmlValue task_val) {
 // task_debug_info(task) - Print debug information about a task
 void hml_task_debug_info(HmlValue task_val) {
     if (task_val.type != HML_VAL_TASK) {
-        fprintf(stderr, "Error: task_debug_info() expects a task\n");
-        exit(1);
+        hml_runtime_error("task_debug_info() expects a task");
     }
 
     HmlTask *task = task_val.as.as_task;
@@ -4539,8 +4589,7 @@ HmlValue hml_channel(int32_t capacity) {
 
 void hml_channel_send(HmlValue channel, HmlValue value) {
     if (channel.type != HML_VAL_CHANNEL) {
-        fprintf(stderr, "Error: send() expects a channel\n");
-        exit(1);
+        hml_runtime_error("send() expects a channel");
     }
 
     HmlChannel *ch = channel.as.as_channel;
@@ -4554,8 +4603,7 @@ void hml_channel_send(HmlValue channel, HmlValue value) {
 
     if (ch->closed) {
         pthread_mutex_unlock((pthread_mutex_t*)ch->mutex);
-        fprintf(stderr, "Error: Cannot send on closed channel\n");
-        exit(1);
+        hml_runtime_error("cannot send to closed channel");
     }
 
     // Add value to buffer
@@ -4570,8 +4618,7 @@ void hml_channel_send(HmlValue channel, HmlValue value) {
 
 HmlValue hml_channel_recv(HmlValue channel) {
     if (channel.type != HML_VAL_CHANNEL) {
-        fprintf(stderr, "Error: recv() expects a channel\n");
-        exit(1);
+        hml_runtime_error("recv() expects a channel");
     }
 
     HmlChannel *ch = channel.as.as_channel;
@@ -5441,6 +5488,428 @@ HmlValue hml_ffi_call(void *func_ptr, HmlValue *args, int num_args, HmlFFIType *
     }
 
     return ret;
+}
+
+// ========== FFI CALLBACKS ==========
+
+// Structure for FFI callback handle
+struct HmlFFICallback {
+    void *closure;           // ffi_closure (opaque)
+    void *code_ptr;          // C-callable function pointer
+    ffi_cif cif;             // Call interface
+    ffi_type **arg_types;    // libffi argument types
+    ffi_type *return_type;   // libffi return type
+    HmlValue hemlock_fn;     // The Hemlock function to invoke
+    HmlFFIType *param_types; // Hemlock parameter types
+    HmlFFIType ret_type;     // Hemlock return type
+    int num_params;
+    int id;                  // Unique callback ID
+};
+
+// Global callback tracking
+static HmlFFICallback **g_callbacks = NULL;
+static int g_num_callbacks = 0;
+static int g_callbacks_capacity = 0;
+static int g_next_callback_id = 1;
+static pthread_mutex_t g_callback_mutex = PTHREAD_MUTEX_INITIALIZER;
+
+// Forward declaration
+HmlValue hml_call_function(HmlValue fn, HmlValue *args, int num_args);
+
+// Convert C value to HmlValue for callback arguments
+static HmlValue hml_ffi_ptr_to_value(void *ptr, HmlFFIType type) {
+    switch (type) {
+        case HML_FFI_I8:     return hml_val_i32(*(int8_t*)ptr);
+        case HML_FFI_I16:    return hml_val_i32(*(int16_t*)ptr);
+        case HML_FFI_I32:    return hml_val_i32(*(int32_t*)ptr);
+        case HML_FFI_I64:    return hml_val_i64(*(int64_t*)ptr);
+        case HML_FFI_U8:     return hml_val_u32(*(uint8_t*)ptr);
+        case HML_FFI_U16:    return hml_val_u32(*(uint16_t*)ptr);
+        case HML_FFI_U32:    return hml_val_u32(*(uint32_t*)ptr);
+        case HML_FFI_U64:    return hml_val_u64(*(uint64_t*)ptr);
+        case HML_FFI_F32:    return hml_val_f64(*(float*)ptr);
+        case HML_FFI_F64:    return hml_val_f64(*(double*)ptr);
+        case HML_FFI_PTR:    return hml_val_ptr(*(void**)ptr);
+        case HML_FFI_STRING: return hml_val_string(*(char**)ptr);
+        default:             return hml_val_null();
+    }
+}
+
+// Convert HmlValue to C storage for callback return
+static void hml_value_to_ffi_storage(HmlValue val, HmlFFIType type, void *storage) {
+    switch (type) {
+        case HML_FFI_VOID:
+            break;
+        case HML_FFI_I8:
+            *(int8_t*)storage = (int8_t)hml_to_i32(val);
+            break;
+        case HML_FFI_I16:
+            *(int16_t*)storage = (int16_t)hml_to_i32(val);
+            break;
+        case HML_FFI_I32:
+            *(int32_t*)storage = hml_to_i32(val);
+            break;
+        case HML_FFI_I64:
+            *(int64_t*)storage = hml_to_i64(val);
+            break;
+        case HML_FFI_U8:
+            *(uint8_t*)storage = (uint8_t)hml_to_i32(val);
+            break;
+        case HML_FFI_U16:
+            *(uint16_t*)storage = (uint16_t)hml_to_i32(val);
+            break;
+        case HML_FFI_U32:
+            *(uint32_t*)storage = (uint32_t)hml_to_i64(val);
+            break;
+        case HML_FFI_U64:
+            *(uint64_t*)storage = (uint64_t)hml_to_i64(val);
+            break;
+        case HML_FFI_F32:
+            *(float*)storage = (float)hml_to_f64(val);
+            break;
+        case HML_FFI_F64:
+            *(double*)storage = hml_to_f64(val);
+            break;
+        case HML_FFI_PTR:
+            *(void**)storage = (val.type == HML_VAL_PTR) ? val.as.as_ptr : NULL;
+            break;
+        case HML_FFI_STRING:
+            *(char**)storage = (val.type == HML_VAL_STRING && val.as.as_string)
+                              ? val.as.as_string->data : NULL;
+            break;
+    }
+}
+
+// Universal callback handler - this is called by libffi when C code invokes the callback
+static void hml_ffi_callback_handler(ffi_cif *cif, void *ret, void **args, void *user_data) {
+    (void)cif;  // Unused parameter
+    HmlFFICallback *cb = (HmlFFICallback *)user_data;
+
+    // Lock to ensure thread-safety
+    pthread_mutex_lock(&g_callback_mutex);
+
+    // Convert C arguments to Hemlock values
+    HmlValue *hemlock_args = NULL;
+    if (cb->num_params > 0) {
+        hemlock_args = malloc(cb->num_params * sizeof(HmlValue));
+        for (int i = 0; i < cb->num_params; i++) {
+            hemlock_args[i] = hml_ffi_ptr_to_value(args[i], cb->param_types[i]);
+        }
+    }
+
+    // Call the Hemlock function
+    HmlValue result = hml_call_function(cb->hemlock_fn, hemlock_args, cb->num_params);
+
+    // Handle return value
+    if (cb->ret_type != HML_FFI_VOID) {
+        hml_value_to_ffi_storage(result, cb->ret_type, ret);
+    }
+
+    // Cleanup
+    hml_release(&result);
+    if (hemlock_args) {
+        for (int i = 0; i < cb->num_params; i++) {
+            hml_release(&hemlock_args[i]);
+        }
+        free(hemlock_args);
+    }
+
+    pthread_mutex_unlock(&g_callback_mutex);
+}
+
+// Create a C-callable function pointer from a Hemlock function
+HmlFFICallback* hml_ffi_callback_create(HmlValue fn, HmlFFIType *param_types, int num_params, HmlFFIType return_type) {
+    if (fn.type != HML_VAL_FUNCTION || !fn.as.as_function) {
+        hml_runtime_error("callback() requires a function");
+    }
+
+    HmlFFICallback *cb = malloc(sizeof(HmlFFICallback));
+    if (!cb) {
+        hml_runtime_error("Failed to allocate FFI callback");
+    }
+
+    cb->hemlock_fn = fn;
+    hml_retain(&cb->hemlock_fn);
+    cb->num_params = num_params;
+    cb->ret_type = return_type;
+    cb->id = g_next_callback_id++;
+
+    // Copy parameter types
+    cb->param_types = NULL;
+    if (num_params > 0) {
+        cb->param_types = malloc(sizeof(HmlFFIType) * num_params);
+        for (int i = 0; i < num_params; i++) {
+            cb->param_types[i] = param_types[i];
+        }
+    }
+
+    // Build libffi type arrays
+    cb->arg_types = NULL;
+    if (num_params > 0) {
+        cb->arg_types = malloc(sizeof(ffi_type*) * num_params);
+        for (int i = 0; i < num_params; i++) {
+            cb->arg_types[i] = hml_ffi_type_to_ffi(param_types[i]);
+        }
+    }
+
+    cb->return_type = hml_ffi_type_to_ffi(return_type);
+
+    // Prepare the CIF (Call Interface)
+    ffi_status status = ffi_prep_cif(&cb->cif, FFI_DEFAULT_ABI, num_params, cb->return_type, cb->arg_types);
+    if (status != FFI_OK) {
+        hml_release(&cb->hemlock_fn);
+        free(cb->param_types);
+        free(cb->arg_types);
+        free(cb);
+        hml_runtime_error("Failed to prepare FFI callback interface");
+    }
+
+    // Allocate the closure
+    void *code_ptr;
+    ffi_closure *closure = ffi_closure_alloc(sizeof(ffi_closure), &code_ptr);
+    if (!closure) {
+        hml_release(&cb->hemlock_fn);
+        free(cb->param_types);
+        free(cb->arg_types);
+        free(cb);
+        hml_runtime_error("Failed to allocate FFI closure");
+    }
+
+    cb->closure = closure;
+    cb->code_ptr = code_ptr;
+
+    // Prepare the closure with our handler
+    status = ffi_prep_closure_loc(closure, &cb->cif, hml_ffi_callback_handler, cb, code_ptr);
+    if (status != FFI_OK) {
+        ffi_closure_free(closure);
+        hml_release(&cb->hemlock_fn);
+        free(cb->param_types);
+        free(cb->arg_types);
+        free(cb);
+        hml_runtime_error("Failed to prepare FFI closure");
+    }
+
+    // Track the callback
+    pthread_mutex_lock(&g_callback_mutex);
+    if (g_num_callbacks >= g_callbacks_capacity) {
+        g_callbacks_capacity = g_callbacks_capacity == 0 ? 8 : g_callbacks_capacity * 2;
+        g_callbacks = realloc(g_callbacks, sizeof(HmlFFICallback*) * g_callbacks_capacity);
+    }
+    g_callbacks[g_num_callbacks++] = cb;
+    pthread_mutex_unlock(&g_callback_mutex);
+
+    return cb;
+}
+
+// Get the C-callable function pointer from a callback handle
+void* hml_ffi_callback_ptr(HmlFFICallback *cb) {
+    return cb ? cb->code_ptr : NULL;
+}
+
+// Free a callback handle
+void hml_ffi_callback_free(HmlFFICallback *cb) {
+    if (!cb) return;
+
+    // Remove from tracking list
+    pthread_mutex_lock(&g_callback_mutex);
+    for (int i = 0; i < g_num_callbacks; i++) {
+        if (g_callbacks[i] == cb) {
+            for (int j = i; j < g_num_callbacks - 1; j++) {
+                g_callbacks[j] = g_callbacks[j + 1];
+            }
+            g_num_callbacks--;
+            break;
+        }
+    }
+    pthread_mutex_unlock(&g_callback_mutex);
+
+    // Free the closure
+    if (cb->closure) {
+        ffi_closure_free(cb->closure);
+    }
+
+    // Release the Hemlock function
+    hml_release(&cb->hemlock_fn);
+
+    // Free type arrays
+    free(cb->param_types);
+    free(cb->arg_types);
+    free(cb);
+}
+
+// Free a callback by its code pointer
+int hml_ffi_callback_free_by_ptr(void *ptr) {
+    if (!ptr) return 0;
+
+    pthread_mutex_lock(&g_callback_mutex);
+    for (int i = 0; i < g_num_callbacks; i++) {
+        HmlFFICallback *cb = g_callbacks[i];
+        if (cb && cb->code_ptr == ptr) {
+            // Remove from list
+            for (int j = i; j < g_num_callbacks - 1; j++) {
+                g_callbacks[j] = g_callbacks[j + 1];
+            }
+            g_num_callbacks--;
+            pthread_mutex_unlock(&g_callback_mutex);
+
+            // Free the callback
+            if (cb->closure) {
+                ffi_closure_free(cb->closure);
+            }
+            hml_release(&cb->hemlock_fn);
+            free(cb->param_types);
+            free(cb->arg_types);
+            free(cb);
+            return 1;
+        }
+    }
+    pthread_mutex_unlock(&g_callback_mutex);
+    return 0;
+}
+
+// Helper: convert type name string to HmlFFIType
+static HmlFFIType hml_string_to_ffi_type(const char *name) {
+    if (!name) return HML_FFI_VOID;
+    if (strcmp(name, "void") == 0) return HML_FFI_VOID;
+    if (strcmp(name, "i8") == 0) return HML_FFI_I8;
+    if (strcmp(name, "i16") == 0) return HML_FFI_I16;
+    if (strcmp(name, "i32") == 0 || strcmp(name, "integer") == 0) return HML_FFI_I32;
+    if (strcmp(name, "i64") == 0) return HML_FFI_I64;
+    if (strcmp(name, "u8") == 0 || strcmp(name, "byte") == 0) return HML_FFI_U8;
+    if (strcmp(name, "u16") == 0) return HML_FFI_U16;
+    if (strcmp(name, "u32") == 0) return HML_FFI_U32;
+    if (strcmp(name, "u64") == 0) return HML_FFI_U64;
+    if (strcmp(name, "f32") == 0) return HML_FFI_F32;
+    if (strcmp(name, "f64") == 0 || strcmp(name, "number") == 0) return HML_FFI_F64;
+    if (strcmp(name, "ptr") == 0) return HML_FFI_PTR;
+    if (strcmp(name, "string") == 0) return HML_FFI_STRING;
+    return HML_FFI_I32; // Default
+}
+
+// Builtin wrapper: callback(fn, param_types, return_type) -> ptr
+HmlValue hml_builtin_callback(HmlClosureEnv *env, HmlValue fn, HmlValue param_types, HmlValue return_type) {
+    (void)env;
+
+    if (fn.type != HML_VAL_FUNCTION) {
+        hml_runtime_error("callback() first argument must be a function");
+    }
+
+    if (param_types.type != HML_VAL_ARRAY || !param_types.as.as_array) {
+        hml_runtime_error("callback() second argument must be an array of type names");
+    }
+
+    HmlArray *params_arr = param_types.as.as_array;
+    int num_params = params_arr->length;
+
+    // Build parameter types
+    HmlFFIType *types = NULL;
+    if (num_params > 0) {
+        types = malloc(sizeof(HmlFFIType) * num_params);
+        for (int i = 0; i < num_params; i++) {
+            HmlValue type_val = params_arr->elements[i];
+            if (type_val.type != HML_VAL_STRING || !type_val.as.as_string) {
+                free(types);
+                hml_runtime_error("callback() param_types must contain type name strings");
+            }
+            types[i] = hml_string_to_ffi_type(type_val.as.as_string->data);
+        }
+    }
+
+    // Get return type
+    HmlFFIType ret_type = HML_FFI_VOID;
+    if (return_type.type == HML_VAL_STRING && return_type.as.as_string) {
+        ret_type = hml_string_to_ffi_type(return_type.as.as_string->data);
+    }
+
+    // Create the callback
+    HmlFFICallback *cb = hml_ffi_callback_create(fn, types, num_params, ret_type);
+    free(types);
+
+    // Return the C-callable function pointer
+    return hml_val_ptr(hml_ffi_callback_ptr(cb));
+}
+
+// Builtin wrapper: callback_free(ptr)
+HmlValue hml_builtin_callback_free(HmlClosureEnv *env, HmlValue ptr) {
+    (void)env;
+
+    if (ptr.type != HML_VAL_PTR) {
+        hml_runtime_error("callback_free() argument must be a ptr");
+    }
+
+    int success = hml_ffi_callback_free_by_ptr(ptr.as.as_ptr);
+    if (!success) {
+        hml_runtime_error("callback_free(): pointer is not a valid callback");
+    }
+
+    return hml_val_null();
+}
+
+// Builtin: ptr_deref_i32(ptr) -> i32
+HmlValue hml_builtin_ptr_deref_i32(HmlClosureEnv *env, HmlValue ptr) {
+    (void)env;
+
+    if (ptr.type != HML_VAL_PTR) {
+        hml_runtime_error("ptr_deref_i32() argument must be a ptr");
+    }
+
+    void *p = ptr.as.as_ptr;
+    if (!p) {
+        hml_runtime_error("ptr_deref_i32() cannot dereference null pointer");
+    }
+
+    return hml_val_i32(*(int32_t*)p);
+}
+
+// Builtin: ptr_write_i32(ptr, value)
+HmlValue hml_builtin_ptr_write_i32(HmlClosureEnv *env, HmlValue ptr, HmlValue value) {
+    (void)env;
+
+    if (ptr.type != HML_VAL_PTR) {
+        hml_runtime_error("ptr_write_i32() first argument must be a ptr");
+    }
+
+    void *p = ptr.as.as_ptr;
+    if (!p) {
+        hml_runtime_error("ptr_write_i32() cannot write to null pointer");
+    }
+
+    *(int32_t*)p = hml_to_i32(value);
+    return hml_val_null();
+}
+
+// Builtin: ptr_offset(ptr, offset, element_size) -> ptr
+HmlValue hml_builtin_ptr_offset(HmlClosureEnv *env, HmlValue ptr, HmlValue offset, HmlValue element_size) {
+    (void)env;
+
+    if (ptr.type != HML_VAL_PTR) {
+        hml_runtime_error("ptr_offset() first argument must be a ptr");
+    }
+
+    void *p = ptr.as.as_ptr;
+    int64_t off = hml_to_i64(offset);
+    int64_t elem_size = hml_to_i64(element_size);
+
+    char *base = (char*)p;
+    return hml_val_ptr(base + (off * elem_size));
+}
+
+// Builtin: ptr_read_i32(ptr) -> i32  (dereference pointer-to-pointer, for qsort)
+HmlValue hml_builtin_ptr_read_i32(HmlClosureEnv *env, HmlValue ptr) {
+    (void)env;
+
+    if (ptr.type != HML_VAL_PTR) {
+        hml_runtime_error("ptr_read_i32() argument must be a ptr");
+    }
+
+    void *p = ptr.as.as_ptr;
+    if (!p) {
+        hml_runtime_error("ptr_read_i32() cannot read from null pointer");
+    }
+
+    // Read through pointer-to-pointer (qsort passes ptr to element)
+    int32_t *actual_ptr = *(int32_t**)p;
+    return hml_val_i32(*actual_ptr);
 }
 
 // ========== COMPRESSION OPERATIONS ==========

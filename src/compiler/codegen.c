@@ -1963,35 +1963,66 @@ char* codegen_expr(CodegenContext *ctx, Expr *expr) {
                     break;
                 }
 
-                // Handle ptr_deref_i32(ptr) - dereference pointer to read i32
+                // ========== FFI CALLBACK BUILTINS ==========
+
+                // callback(fn, param_types, return_type) -> ptr
+                if (strcmp(fn_name, "callback") == 0 && (expr->as.call.num_args == 2 || expr->as.call.num_args == 3)) {
+                    char *fn_arg = codegen_expr(ctx, expr->as.call.args[0]);
+                    char *param_types = codegen_expr(ctx, expr->as.call.args[1]);
+                    char *ret_type;
+                    if (expr->as.call.num_args == 3) {
+                        ret_type = codegen_expr(ctx, expr->as.call.args[2]);
+                    } else {
+                        ret_type = strdup("hml_val_string(\"void\")");
+                    }
+                    codegen_writeln(ctx, "HmlValue %s = hml_builtin_callback(NULL, %s, %s, %s);", result, fn_arg, param_types, ret_type);
+                    codegen_writeln(ctx, "hml_release(&%s);", fn_arg);
+                    codegen_writeln(ctx, "hml_release(&%s);", param_types);
+                    if (expr->as.call.num_args == 3) {
+                        codegen_writeln(ctx, "hml_release(&%s);", ret_type);
+                    }
+                    free(fn_arg);
+                    free(param_types);
+                    free(ret_type);
+                    break;
+                }
+
+                // callback_free(ptr)
+                if (strcmp(fn_name, "callback_free") == 0 && expr->as.call.num_args == 1) {
+                    char *ptr = codegen_expr(ctx, expr->as.call.args[0]);
+                    codegen_writeln(ctx, "HmlValue %s = hml_builtin_callback_free(NULL, %s);", result, ptr);
+                    codegen_writeln(ctx, "hml_release(&%s);", ptr);
+                    free(ptr);
+                    break;
+                }
+
+                // ptr_deref_i32(ptr) -> i32
                 if (strcmp(fn_name, "ptr_deref_i32") == 0 && expr->as.call.num_args == 1) {
                     char *ptr = codegen_expr(ctx, expr->as.call.args[0]);
-                    codegen_writeln(ctx, "HmlValue %s = hml_val_i32(*((int32_t*)%s.as.as_ptr));", result, ptr);
+                    codegen_writeln(ctx, "HmlValue %s = hml_builtin_ptr_deref_i32(NULL, %s);", result, ptr);
                     codegen_writeln(ctx, "hml_release(&%s);", ptr);
                     free(ptr);
                     break;
                 }
 
-                // Handle ptr_write_i32(ptr, value) - write i32 to pointer
+                // ptr_write_i32(ptr, value)
                 if (strcmp(fn_name, "ptr_write_i32") == 0 && expr->as.call.num_args == 2) {
                     char *ptr = codegen_expr(ctx, expr->as.call.args[0]);
-                    char *val = codegen_expr(ctx, expr->as.call.args[1]);
-                    codegen_writeln(ctx, "*((int32_t*)%s.as.as_ptr) = hml_to_i32(%s);", ptr, val);
-                    codegen_writeln(ctx, "HmlValue %s = hml_val_null();", result);
+                    char *value = codegen_expr(ctx, expr->as.call.args[1]);
+                    codegen_writeln(ctx, "HmlValue %s = hml_builtin_ptr_write_i32(NULL, %s, %s);", result, ptr, value);
                     codegen_writeln(ctx, "hml_release(&%s);", ptr);
-                    codegen_writeln(ctx, "hml_release(&%s);", val);
+                    codegen_writeln(ctx, "hml_release(&%s);", value);
                     free(ptr);
-                    free(val);
+                    free(value);
                     break;
                 }
 
-                // Handle ptr_offset(ptr, offset, element_size) - pointer arithmetic
+                // ptr_offset(ptr, offset, element_size) -> ptr
                 if (strcmp(fn_name, "ptr_offset") == 0 && expr->as.call.num_args == 3) {
                     char *ptr = codegen_expr(ctx, expr->as.call.args[0]);
                     char *offset = codegen_expr(ctx, expr->as.call.args[1]);
                     char *elem_size = codegen_expr(ctx, expr->as.call.args[2]);
-                    codegen_writeln(ctx, "HmlValue %s = hml_val_ptr((char*)%s.as.as_ptr + (hml_to_i64(%s) * hml_to_i64(%s)));",
-                                  result, ptr, offset, elem_size);
+                    codegen_writeln(ctx, "HmlValue %s = hml_builtin_ptr_offset(NULL, %s, %s, %s);", result, ptr, offset, elem_size);
                     codegen_writeln(ctx, "hml_release(&%s);", ptr);
                     codegen_writeln(ctx, "hml_release(&%s);", offset);
                     codegen_writeln(ctx, "hml_release(&%s);", elem_size);
@@ -2001,28 +2032,12 @@ char* codegen_expr(CodegenContext *ctx, Expr *expr) {
                     break;
                 }
 
-                // Handle callback(fn, arg_types, ret_type) - create FFI callback (stub - not fully implemented)
-                if (strcmp(fn_name, "callback") == 0 && expr->as.call.num_args == 3) {
-                    char *fn = codegen_expr(ctx, expr->as.call.args[0]);
-                    char *arg_types = codegen_expr(ctx, expr->as.call.args[1]);
-                    char *ret_type = codegen_expr(ctx, expr->as.call.args[2]);
-                    codegen_writeln(ctx, "HmlValue %s = hml_callback_create(%s, %s, %s);", result, fn, arg_types, ret_type);
-                    codegen_writeln(ctx, "hml_release(&%s);", fn);
-                    codegen_writeln(ctx, "hml_release(&%s);", arg_types);
-                    codegen_writeln(ctx, "hml_release(&%s);", ret_type);
-                    free(fn);
-                    free(arg_types);
-                    free(ret_type);
-                    break;
-                }
-
-                // Handle callback_free(callback) - free FFI callback
-                if (strcmp(fn_name, "callback_free") == 0 && expr->as.call.num_args == 1) {
-                    char *cb = codegen_expr(ctx, expr->as.call.args[0]);
-                    codegen_writeln(ctx, "hml_callback_free(%s);", cb);
-                    codegen_writeln(ctx, "HmlValue %s = hml_val_null();", result);
-                    codegen_writeln(ctx, "hml_release(&%s);", cb);
-                    free(cb);
+                // ptr_read_i32(ptr) -> i32 (dereference pointer-to-pointer, for qsort)
+                if (strcmp(fn_name, "ptr_read_i32") == 0 && expr->as.call.num_args == 1) {
+                    char *ptr = codegen_expr(ctx, expr->as.call.args[0]);
+                    codegen_writeln(ctx, "HmlValue %s = hml_builtin_ptr_read_i32(NULL, %s);", result, ptr);
+                    codegen_writeln(ctx, "hml_release(&%s);", ptr);
+                    free(ptr);
                     break;
                 }
 
@@ -3666,6 +3681,18 @@ char* codegen_expr(CodegenContext *ctx, Expr *expr) {
                 codegen_writeln(ctx, "} else {");
                 codegen_indent_inc(ctx);
                 codegen_writeln(ctx, "%s = hml_object_get_field(%s, \"byte_length\");", result, obj);
+                codegen_indent_dec(ctx);
+                codegen_writeln(ctx, "}");
+            // Buffer capacity property
+            } else if (strcmp(expr->as.get_property.property, "capacity") == 0) {
+                codegen_writeln(ctx, "HmlValue %s;", result);
+                codegen_writeln(ctx, "if (%s.type == HML_VAL_BUFFER) {", obj);
+                codegen_indent_inc(ctx);
+                codegen_writeln(ctx, "%s = hml_buffer_capacity(%s);", result, obj);
+                codegen_indent_dec(ctx);
+                codegen_writeln(ctx, "} else {");
+                codegen_indent_inc(ctx);
+                codegen_writeln(ctx, "%s = hml_object_get_field(%s, \"capacity\");", result, obj);
                 codegen_indent_dec(ctx);
                 codegen_writeln(ctx, "}");
             } else {

@@ -407,6 +407,7 @@ Value eval_expr(Expr *expr, Environment *env, ExecutionContext *ctx) {
                     case OP_DIV:
                         if (r == 0.0) {
                             runtime_error(ctx, "Division by zero");
+                            goto binary_cleanup;
                         }
                         binary_result = (result_type == VAL_F32) ? val_f32((float)(l / r)) : val_f64(l / r);
                         goto binary_cleanup;
@@ -428,6 +429,13 @@ Value eval_expr(Expr *expr, Environment *env, ExecutionContext *ctx) {
                     case OP_GREATER_EQUAL:
                         binary_result = val_bool(l >= r);
                         goto binary_cleanup;
+                    case OP_BIT_AND:
+                    case OP_BIT_OR:
+                    case OP_BIT_XOR:
+                    case OP_BIT_LSHIFT:
+                    case OP_BIT_RSHIFT:
+                        runtime_error(ctx, "Invalid operation for floats");
+                        goto binary_cleanup;
                     default: break;
                 }
             } else {
@@ -445,6 +453,7 @@ Value eval_expr(Expr *expr, Environment *env, ExecutionContext *ctx) {
                                 int8_t r = right.as.as_i8;
                                 if ((expr->as.binary.op == OP_DIV || expr->as.binary.op == OP_MOD) && r == 0) {
                                     runtime_error(ctx, "Division by zero");
+                                    goto binary_cleanup;
                                 }
                                 int8_t result = (expr->as.binary.op == OP_ADD) ? (l + r) :
                                                (expr->as.binary.op == OP_SUB) ? (l - r) :
@@ -458,6 +467,7 @@ Value eval_expr(Expr *expr, Environment *env, ExecutionContext *ctx) {
                                 int16_t r = right.as.as_i16;
                                 if ((expr->as.binary.op == OP_DIV || expr->as.binary.op == OP_MOD) && r == 0) {
                                     runtime_error(ctx, "Division by zero");
+                                    goto binary_cleanup;
                                 }
                                 int16_t result = (expr->as.binary.op == OP_ADD) ? (l + r) :
                                                 (expr->as.binary.op == OP_SUB) ? (l - r) :
@@ -471,6 +481,7 @@ Value eval_expr(Expr *expr, Environment *env, ExecutionContext *ctx) {
                                 int32_t r = right.as.as_i32;
                                 if ((expr->as.binary.op == OP_DIV || expr->as.binary.op == OP_MOD) && r == 0) {
                                     runtime_error(ctx, "Division by zero");
+                                    goto binary_cleanup;
                                 }
                                 int32_t result = (expr->as.binary.op == OP_ADD) ? (l + r) :
                                                 (expr->as.binary.op == OP_SUB) ? (l - r) :
@@ -484,6 +495,7 @@ Value eval_expr(Expr *expr, Environment *env, ExecutionContext *ctx) {
                                 int64_t r = right.as.as_i64;
                                 if ((expr->as.binary.op == OP_DIV || expr->as.binary.op == OP_MOD) && r == 0) {
                                     runtime_error(ctx, "Division by zero");
+                                    goto binary_cleanup;
                                 }
                                 int64_t result = (expr->as.binary.op == OP_ADD) ? (l + r) :
                                                 (expr->as.binary.op == OP_SUB) ? (l - r) :
@@ -497,6 +509,7 @@ Value eval_expr(Expr *expr, Environment *env, ExecutionContext *ctx) {
                                 uint8_t r = right.as.as_u8;
                                 if ((expr->as.binary.op == OP_DIV || expr->as.binary.op == OP_MOD) && r == 0) {
                                     runtime_error(ctx, "Division by zero");
+                                    goto binary_cleanup;
                                 }
                                 uint8_t result = (expr->as.binary.op == OP_ADD) ? (l + r) :
                                                 (expr->as.binary.op == OP_SUB) ? (l - r) :
@@ -510,6 +523,7 @@ Value eval_expr(Expr *expr, Environment *env, ExecutionContext *ctx) {
                                 uint16_t r = right.as.as_u16;
                                 if ((expr->as.binary.op == OP_DIV || expr->as.binary.op == OP_MOD) && r == 0) {
                                     runtime_error(ctx, "Division by zero");
+                                    goto binary_cleanup;
                                 }
                                 uint16_t result = (expr->as.binary.op == OP_ADD) ? (l + r) :
                                                  (expr->as.binary.op == OP_SUB) ? (l - r) :
@@ -523,6 +537,7 @@ Value eval_expr(Expr *expr, Environment *env, ExecutionContext *ctx) {
                                 uint32_t r = right.as.as_u32;
                                 if ((expr->as.binary.op == OP_DIV || expr->as.binary.op == OP_MOD) && r == 0) {
                                     runtime_error(ctx, "Division by zero");
+                                    goto binary_cleanup;
                                 }
                                 uint32_t result = (expr->as.binary.op == OP_ADD) ? (l + r) :
                                                  (expr->as.binary.op == OP_SUB) ? (l - r) :
@@ -536,6 +551,7 @@ Value eval_expr(Expr *expr, Environment *env, ExecutionContext *ctx) {
                                 uint64_t r = right.as.as_u64;
                                 if ((expr->as.binary.op == OP_DIV || expr->as.binary.op == OP_MOD) && r == 0) {
                                     runtime_error(ctx, "Division by zero");
+                                    goto binary_cleanup;
                                 }
                                 uint64_t result = (expr->as.binary.op == OP_ADD) ? (l + r) :
                                                  (expr->as.binary.op == OP_SUB) ? (l - r) :
@@ -632,6 +648,10 @@ Value eval_expr(Expr *expr, Environment *env, ExecutionContext *ctx) {
                     case OP_BIT_LSHIFT:
                     case OP_BIT_RSHIFT: {
                         // Bitwise operations require both operands to be integers
+                        if (result_type == VAL_F32 || result_type == VAL_F64) {
+                            runtime_error(ctx, "Invalid operation for floats");
+                            goto binary_cleanup;
+                        }
                         int is_signed = (result_type == VAL_I8 || result_type == VAL_I16 ||
                                         result_type == VAL_I32 || result_type == VAL_I64);
 

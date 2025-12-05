@@ -161,6 +161,9 @@ Value builtin_assert(Value *args, int num_args, ExecutionContext *ctx) {
 }
 
 Value builtin_panic(Value *args, int num_args, ExecutionContext *ctx) {
+    // Flush stdout first so output appears in correct order before panic message
+    fflush(stdout);
+
     if (num_args > 1) {
         fprintf(stderr, "Runtime error: panic() expects 0 or 1 argument (message)\n");
         call_stack_print(&ctx->call_stack);
@@ -175,7 +178,10 @@ Value builtin_panic(Value *args, int num_args, ExecutionContext *ctx) {
         } else {
             // Convert non-string to string representation
             fprintf(stderr, "panic: ");
-            print_value(args[0]);
+            // Print value to stderr using value_to_string
+            char *str = value_to_string(args[0]);
+            fprintf(stderr, "%s", str);
+            free(str);
             fprintf(stderr, "\n");
             call_stack_print(&ctx->call_stack);
             exit(1);
