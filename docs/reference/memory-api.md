@@ -11,8 +11,22 @@ Hemlock provides **manual memory management** with explicit allocation and deall
 **Key Principles:**
 - Explicit allocation and deallocation
 - No garbage collection
-- No automatic resource cleanup
-- User responsible for memory safety
+- User responsible for calling `free()`
+- Internal refcounting for scope/reassignment safety (see below)
+
+### Internal Reference Counting
+
+The runtime uses reference counting internally to manage object lifetimes through scopes. This is **not** automatic cleanup - you must still call `free()`.
+
+**What refcounting handles automatically:**
+- Releasing old values when variables are reassigned
+- Releasing local variables when scopes exit
+- Releasing container elements when containers are freed
+
+**What you must do manually:**
+- Call `free()` on buffers, arrays, and objects you allocate
+
+See [Memory Management Guide](../language-guide/memory.md#internal-reference-counting) for details.
 
 ---
 
@@ -48,7 +62,7 @@ free(p);
 
 **Description:** Safe pointer wrapper with bounds checking.
 
-**Structure:** Pointer + length + capacity
+**Structure:** Pointer + length + capacity + ref_count
 
 **Properties:**
 - `.length` - Buffer size (i32)
@@ -60,6 +74,8 @@ free(p);
 - Dynamic arrays
 
 **Safety:** Bounds-checked on index access
+
+**Refcounting:** Buffers are internally refcounted. When reassigned or when scope exits, ref_count is decremented. You must still call `free()` to deallocate.
 
 **Examples:**
 ```hemlock

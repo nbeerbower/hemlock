@@ -6,11 +6,90 @@ Hemlock embraces **manual memory management** with explicit control over allocat
 
 Hemlock follows the principle: "You allocated it, you free it." There is:
 - No garbage collection
-- No automatic resource cleanup
-- No reference counting
-- Full responsibility on the programmer
+- No automatic resource cleanup at the language level
+- Full responsibility on the programmer to call `free()`
 
 This explicit approach gives you complete control but requires careful management to avoid memory leaks and dangling pointers.
+
+## Internal Reference Counting
+
+While Hemlock requires manual memory management, the runtime uses **internal reference counting** to track object lifetimes through scopes. This is an implementation detail, not automatic cleanup.
+
+### What Reference Counting Handles
+
+The runtime automatically manages reference counts when:
+
+1. **Variables are reassigned** - the old value is released:
+   ```hemlock
+   let x = "first";   // ref_count = 1
+   x = "second";      // "first" released internally, "second" ref_count = 1
+   ```
+
+2. **Scopes exit** - local variables are released:
+   ```hemlock
+   fn example() {
+       let arr = [1, 2, 3];  // ref_count = 1
+   }  // arr released when function returns
+   ```
+
+3. **Containers are freed** - elements are released:
+   ```hemlock
+   let arr = [obj1, obj2];
+   free(arr);  // obj1 and obj2 get their ref_counts decremented
+   ```
+
+### What You Must Still Do
+
+**You must explicitly call `free()` for:**
+- Raw pointers from `alloc()`
+- Buffers from `buffer()`
+- Arrays created with `[...]`
+- Objects created with `{...}`
+
+```hemlock
+let buf = buffer(64);
+let arr = [1, 2, 3];
+let obj = { x: 10 };
+
+// These will NOT be freed automatically - you must call free()
+free(buf);
+free(arr);
+free(obj);
+```
+
+### Refcounting vs Garbage Collection
+
+| Aspect | Hemlock Refcounting | Garbage Collection |
+|--------|---------------------|-------------------|
+| Cleanup timing | Deterministic (immediate when ref hits 0) | Non-deterministic (GC decides when) |
+| User responsibility | Must call `free()` | Fully automatic |
+| Runtime pauses | None | "Stop the world" pauses |
+| Visibility | Hidden implementation detail | Usually invisible |
+| Cycles | Handled with visited-set tracking | Handled by tracing |
+
+### Which Types Have Refcounting
+
+| Type | Refcounted | Notes |
+|------|------------|-------|
+| `ptr` | ❌ No | Completely manual, no tracking |
+| `buffer` | ✅ Yes | Still requires `free()` |
+| `array` | ✅ Yes | Still requires `free()` |
+| `object` | ✅ Yes | Still requires `free()` |
+| `string` | ✅ Yes | Released automatically on reassignment |
+| `function` | ✅ Yes | For closure environments |
+| `task` | ✅ Yes | Thread-safe atomic refcounting |
+| `channel` | ✅ Yes | Thread-safe atomic refcounting |
+| Primitives | ❌ No | Stack-allocated, no heap |
+
+### Why This Design?
+
+This hybrid approach gives you:
+- **Explicit control** - You decide when to deallocate
+- **Safety from scope bugs** - Reassignment doesn't leak
+- **Predictable performance** - No GC pauses
+- **Closure support** - Functions can safely capture variables
+
+The philosophy remains: you're in control, but the runtime helps prevent common bugs like leaking on reassignment or double-freeing in containers.
 
 ## The Two Pointer Types
 
@@ -374,8 +453,7 @@ free(pool);
 
 Current limitations to be aware of:
 
-- **No reference counting** - Objects and arrays are never freed automatically
-- **No cycle detection** - Circular references will leak memory
+- **No automatic deallocation** - You must call `free()` explicitly
 - **No custom allocators** - Only system malloc/free
 
 ## Related Topics
