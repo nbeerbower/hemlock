@@ -1,0 +1,154 @@
+// Test: Unbuffered channels (capacity 0)
+// Tests rendezvous semantics where sender blocks until receiver is ready
+
+// Test 1: Basic rendezvous - receiver waits first
+async fn test_receiver_first() {
+    let ch = channel(0);
+
+    // Spawn receiver
+    let receiver = spawn(async fn(c) {
+        let msg = c.recv();
+        return msg;
+    }, ch);
+
+    // Give receiver time to start waiting
+    __sleep(0.02);
+
+    // Send message
+    ch.send(42);
+
+    let result = join(receiver);
+    assert(result == 42);
+    ch.close();
+    return "ok";
+}
+
+let r1 = join(spawn(test_receiver_first));
+assert(r1 == "ok");
+print("PASS: unbuffered channel - receiver waits first");
+
+// Test 2: Sender waits for receiver
+async fn test_sender_first() {
+    let ch = channel(0);
+
+    // Spawn sender
+    let sender = spawn(async fn(c) {
+        c.send(123);
+        return "sent";
+    }, ch);
+
+    // Let sender start waiting
+    __sleep(0.02);
+
+    // Now receive
+    let msg = ch.recv();
+    assert(msg == 123);
+
+    let r = join(sender);
+    assert(r == "sent");
+    ch.close();
+    return "ok";
+}
+
+let r2 = join(spawn(test_sender_first));
+assert(r2 == "ok");
+print("PASS: unbuffered channel - sender waits first");
+
+// Test 3: Multiple messages
+async fn test_multiple_messages() {
+    let ch = channel(0);
+
+    // Spawn receiver that gets multiple messages
+    let receiver = spawn(async fn(c) {
+        let total = 0;
+        let i = 0;
+        while (i < 5) {
+            let msg = c.recv();
+            if (msg == null) {
+                break;
+            }
+            total = total + msg;
+            i = i + 1;
+        }
+        return total;
+    }, ch);
+
+    // Send 5 messages
+    let i = 0;
+    while (i < 5) {
+        ch.send(i + 1);
+        i = i + 1;
+    }
+
+    ch.close();
+    let result = join(receiver);
+    assert(result == 15);  // 1+2+3+4+5 = 15
+    return "ok";
+}
+
+let r3 = join(spawn(test_multiple_messages));
+assert(r3 == "ok");
+print("PASS: unbuffered channel - multiple messages");
+
+// Test 4: Close channel with waiting receiver
+async fn test_close_receiver() {
+    let ch = channel(0);
+
+    // Spawn receiver
+    let receiver = spawn(async fn(c) {
+        let msg = c.recv();  // Will get null when closed
+        return msg;
+    }, ch);
+
+    // Let receiver start waiting
+    __sleep(0.02);
+
+    // Close without sending
+    ch.close();
+
+    let result = join(receiver);
+    assert(result == null);
+    return "ok";
+}
+
+let r4 = join(spawn(test_close_receiver));
+assert(r4 == "ok");
+print("PASS: unbuffered channel - close with waiting receiver");
+
+// Test 5: Ping-pong between two threads
+async fn test_ping_pong() {
+    let ch1 = channel(0);  // A -> B
+    let ch2 = channel(0);  // B -> A
+
+    // Spawn ping thread
+    let pinger = spawn(async fn(send_ch, recv_ch) {
+        let i = 0;
+        while (i < 3) {
+            send_ch.send("ping" + i);
+            let response = recv_ch.recv();
+            i = i + 1;
+        }
+        return "pinger done";
+    }, ch1, ch2);
+
+    // Ponger in main thread
+    let i = 0;
+    while (i < 3) {
+        let msg = ch1.recv();
+        assert(msg == "ping" + i);
+        ch2.send("pong" + i);
+        i = i + 1;
+    }
+
+    let result = join(pinger);
+    assert(result == "pinger done");
+    ch1.close();
+    ch2.close();
+    return "ok";
+}
+
+let r5 = join(spawn(test_ping_pong));
+assert(r5 == "ok");
+print("PASS: unbuffered channel - ping pong");
+
+print("All unbuffered channel tests passed!");

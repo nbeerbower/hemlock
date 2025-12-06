@@ -655,11 +655,15 @@ Channel* channel_new(int capacity) {
     ch->not_empty = malloc(sizeof(pthread_cond_t));
     ch->not_full = malloc(sizeof(pthread_cond_t));
 
-    if (!ch->mutex || !ch->not_empty || !ch->not_full) {
+    // For unbuffered channels, also allocate the rendezvous condvar
+    ch->rendezvous = malloc(sizeof(pthread_cond_t));
+
+    if (!ch->mutex || !ch->not_empty || !ch->not_full || !ch->rendezvous) {
         if (ch->buffer) free(ch->buffer);
         if (ch->mutex) free(ch->mutex);
         if (ch->not_empty) free(ch->not_empty);
         if (ch->not_full) free(ch->not_full);
+        if (ch->rendezvous) free(ch->rendezvous);
         free(ch);
         fprintf(stderr, "Runtime error: Memory allocation failed\n");
         exit(1);
@@ -668,6 +672,15 @@ Channel* channel_new(int capacity) {
     pthread_mutex_init((pthread_mutex_t*)ch->mutex, NULL);
     pthread_cond_init((pthread_cond_t*)ch->not_empty, NULL);
     pthread_cond_init((pthread_cond_t*)ch->not_full, NULL);
+    pthread_cond_init((pthread_cond_t*)ch->rendezvous, NULL);
+
+    // Initialize unbuffered channel fields
+    ch->unbuffered_value = malloc(sizeof(Value));
+    if (ch->unbuffered_value) {
+        *(ch->unbuffered_value) = val_null();
+    }
+    ch->sender_waiting = 0;
+    ch->receiver_waiting = 0;
 
     return ch;
 }
@@ -688,6 +701,13 @@ void channel_free(Channel *ch) {
         if (ch->not_full) {
             pthread_cond_destroy((pthread_cond_t*)ch->not_full);
             free(ch->not_full);
+        }
+        if (ch->rendezvous) {
+            pthread_cond_destroy((pthread_cond_t*)ch->rendezvous);
+            free(ch->rendezvous);
+        }
+        if (ch->unbuffered_value) {
+            free(ch->unbuffered_value);
         }
         free(ch);
     }

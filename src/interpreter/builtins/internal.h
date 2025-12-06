@@ -119,6 +119,7 @@ Value builtin_spawn(Value *args, int num_args, ExecutionContext *ctx);
 Value builtin_join(Value *args, int num_args, ExecutionContext *ctx);
 Value builtin_detach(Value *args, int num_args, ExecutionContext *ctx);
 Value builtin_channel(Value *args, int num_args, ExecutionContext *ctx);
+Value builtin_select(Value *args, int num_args, ExecutionContext *ctx);
 Value builtin_task_debug_info(Value *args, int num_args, ExecutionContext *ctx);
 
 // Filesystem builtins (filesystem.c)
@@ -156,6 +157,7 @@ Value builtin_cstr_to_string(Value *args, int num_args, ExecutionContext *ctx);
 // Networking builtins (net.c)
 Value builtin_socket_create(Value *args, int num_args, ExecutionContext *ctx);
 Value builtin_dns_resolve(Value *args, int num_args, ExecutionContext *ctx);
+Value builtin_poll(Value *args, int num_args, ExecutionContext *ctx);
 Value val_socket(SocketHandle *sock);
 void socket_free(SocketHandle *sock);
 Value get_socket_property(SocketHandle *sock, const char *property, ExecutionContext *ctx);
