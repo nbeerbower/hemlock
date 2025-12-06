@@ -268,3 +268,31 @@ test-bundler: $(TARGET)
 # Run all test suites
 .PHONY: test-all
 test-all: test test-compiler parity test-bundler
+
+# ========== INSTALLATION ==========
+
+# Installation directories (can be overridden)
+PREFIX ?= /usr/local
+BINDIR ?= $(PREFIX)/bin
+LIBDIR ?= $(PREFIX)/lib/hemlock
+DESTDIR ?=
+
+.PHONY: install uninstall
+
+install: $(TARGET)
+	@echo "Installing Hemlock to $(DESTDIR)$(PREFIX)..."
+	install -d $(DESTDIR)$(BINDIR)
+	install -m 755 $(TARGET) $(DESTDIR)$(BINDIR)/$(TARGET)
+	@echo "Installing stdlib to $(DESTDIR)$(LIBDIR)..."
+	install -d $(DESTDIR)$(LIBDIR)/stdlib
+	cp -r stdlib/* $(DESTDIR)$(LIBDIR)/stdlib/
+	@echo ""
+	@echo "✓ Hemlock installed successfully"
+	@echo "  Binary: $(DESTDIR)$(BINDIR)/$(TARGET)"
+	@echo "  Stdlib: $(DESTDIR)$(LIBDIR)/stdlib/"
+
+uninstall:
+	@echo "Uninstalling Hemlock from $(DESTDIR)$(PREFIX)..."
+	rm -f $(DESTDIR)$(BINDIR)/$(TARGET)
+	rm -rf $(DESTDIR)$(LIBDIR)
+	@echo "✓ Hemlock uninstalled"

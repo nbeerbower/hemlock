@@ -104,6 +104,14 @@ make        # Build hemlock
 make test   # Run 618+ tests
 ```
 
+### Install
+
+```bash
+sudo make install              # Install to /usr/local
+make install PREFIX=~/.local   # Install to custom prefix
+sudo make uninstall            # Remove installation
+```
+
 ## Running Programs
 
 ```bash
