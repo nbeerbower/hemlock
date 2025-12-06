@@ -114,26 +114,42 @@ Value socket_method_bind(SocketHandle *sock, Value *args, int num_args, Executio
     const char *address = args[0].as.as_string->data;
     int port = value_to_int(args[1]);
 
-    // Only support IPv4 for now (AF_INET)
-    if (sock->domain != AF_INET) {
-        return throw_runtime_error(ctx, "Only AF_INET sockets supported currently");
-    }
+    if (sock->domain == AF_INET) {
+        // IPv4
+        struct sockaddr_in addr;
+        memset(&addr, 0, sizeof(addr));
+        addr.sin_family = AF_INET;
+        addr.sin_port = htons(port);
 
-    struct sockaddr_in addr;
-    memset(&addr, 0, sizeof(addr));
-    addr.sin_family = AF_INET;
-    addr.sin_port = htons(port);
+        // Handle "0.0.0.0" and other special addresses
+        if (strcmp(address, "0.0.0.0") == 0) {
+            addr.sin_addr.s_addr = INADDR_ANY;
+        } else if (inet_pton(AF_INET, address, &addr.sin_addr) != 1) {
+            return throw_runtime_error(ctx, "Invalid IPv4 address: %s", address);
+        }
 
-    // Handle "0.0.0.0" and other special addresses
-    if (strcmp(address, "0.0.0.0") == 0) {
-        addr.sin_addr.s_addr = INADDR_ANY;
-    } else if (inet_pton(AF_INET, address, &addr.sin_addr) != 1) {
-        return throw_runtime_error(ctx, "Invalid IP address: %s", address);
-    }
+        if (bind(sock->fd, (struct sockaddr *)&addr, sizeof(addr)) < 0) {
+            return throw_runtime_error(ctx, "bind() failed: %s", strerror(errno));
+        }
+    } else if (sock->domain == AF_INET6) {
+        // IPv6
+        struct sockaddr_in6 addr6;
+        memset(&addr6, 0, sizeof(addr6));
+        addr6.sin6_family = AF_INET6;
+        addr6.sin6_port = htons(port);
 
-    if (bind(sock->fd, (struct sockaddr *)&addr, sizeof(addr)) < 0) {
-        return throw_runtime_error(ctx, "Failed to bind socket to %s:%d: %s",
-                address, port, strerror(errno));
+        // Handle "::" (all interfaces) and other addresses
+        if (strcmp(address, "::") == 0 || strcmp(address, "::0") == 0) {
+            addr6.sin6_addr = in6addr_any;
+        } else if (inet_pton(AF_INET6, address, &addr6.sin6_addr) != 1) {
+            return throw_runtime_error(ctx, "Invalid IPv6 address: %s", address);
+        }
+
+        if (bind(sock->fd, (struct sockaddr *)&addr6, sizeof(addr6)) < 0) {
+            return throw_runtime_error(ctx, "bind() failed: %s", strerror(errno));
+        }
+    } else {
+        return throw_runtime_error(ctx, "Unsupported socket domain (use AF_INET or AF_INET6)");
     }
 
     // Store address and port
@@ -183,7 +199,8 @@ Value socket_method_accept(SocketHandle *sock, Value *args, int num_args, Execut
         return throw_runtime_error(ctx, "Socket must be listening before accept()");
     }
 
-    struct sockaddr_in client_addr;
+    // Use sockaddr_storage to handle both IPv4 and IPv6
+    struct sockaddr_storage client_addr;
     socklen_t client_len = sizeof(client_addr);
 
     int client_fd = accept(sock->fd, (struct sockaddr *)&client_addr, &client_len);
@@ -209,11 +226,20 @@ Value socket_method_accept(SocketHandle *sock, Value *args, int num_args, Execut
     client_sock->listening = 0;
     client_sock->nonblocking = 0;
 
-    // Get client address and port
-    char addr_str[INET_ADDRSTRLEN];
-    inet_ntop(AF_INET, &client_addr.sin_addr, addr_str, sizeof(addr_str));
-    client_sock->address = strdup(addr_str);
-    client_sock->port = ntohs(client_addr.sin_port);
+    // Get client address and port based on address family
+    if (sock->domain == AF_INET6) {
+        struct sockaddr_in6 *addr6 = (struct sockaddr_in6 *)&client_addr;
+        char addr_str[INET6_ADDRSTRLEN];
+        inet_ntop(AF_INET6, &addr6->sin6_addr, addr_str, sizeof(addr_str));
+        client_sock->address = strdup(addr_str);
+        client_sock->port = ntohs(addr6->sin6_port);
+    } else {
+        struct sockaddr_in *addr4 = (struct sockaddr_in *)&client_addr;
+        char addr_str[INET_ADDRSTRLEN];
+        inet_ntop(AF_INET, &addr4->sin_addr, addr_str, sizeof(addr_str));
+        client_sock->address = strdup(addr_str);
+        client_sock->port = ntohs(addr4->sin_port);
+    }
 
     return val_socket(client_sock);
 }
@@ -237,24 +263,24 @@ Value socket_method_connect(SocketHandle *sock, Value *args, int num_args, Execu
     const char *address = args[0].as.as_string->data;
     int port = value_to_int(args[1]);
 
-    // Resolve hostname to IP address
-    struct hostent *host = gethostbyname(address);
-    if (!host) {
-        return throw_runtime_error(ctx, "Failed to resolve hostname '%s'", address);
+    // Use getaddrinfo for both IPv4 and IPv6 resolution
+    struct addrinfo hints, *result;
+    memset(&hints, 0, sizeof(hints));
+    hints.ai_family = sock->domain;  // AF_INET or AF_INET6
+    hints.ai_socktype = sock->type;
+
+    char port_str[16];
+    snprintf(port_str, sizeof(port_str), "%d", port);
+
+    int gai_err = getaddrinfo(address, port_str, &hints, &result);
+    if (gai_err != 0) {
+        return throw_runtime_error(ctx, "Failed to resolve '%s': %s", address, gai_strerror(gai_err));
     }
 
-    // Only support IPv4 for now
-    if (sock->domain != AF_INET) {
-        return throw_runtime_error(ctx, "Only AF_INET sockets supported currently");
-    }
+    int connect_result = connect(sock->fd, result->ai_addr, result->ai_addrlen);
+    freeaddrinfo(result);
 
-    struct sockaddr_in server_addr;
-    memset(&server_addr, 0, sizeof(server_addr));
-    server_addr.sin_family = AF_INET;
-    server_addr.sin_port = htons(port);
-    memcpy(&server_addr.sin_addr.s_addr, host->h_addr_list[0], host->h_length);
-
-    if (connect(sock->fd, (struct sockaddr *)&server_addr, sizeof(server_addr)) < 0) {
+    if (connect_result < 0) {
         return throw_runtime_error(ctx, "Failed to connect to %s:%d: %s",
                 address, port, strerror(errno));
     }
@@ -402,22 +428,34 @@ Value socket_method_sendto(SocketHandle *sock, Value *args, int num_args, Execut
         return throw_runtime_error(ctx, "sendto() data must be string or buffer");
     }
 
-    // Only support IPv4 for now
-    if (sock->domain != AF_INET) {
-        return throw_runtime_error(ctx, "Only AF_INET sockets supported currently");
+    ssize_t sent;
+    if (sock->domain == AF_INET) {
+        struct sockaddr_in dest_addr;
+        memset(&dest_addr, 0, sizeof(dest_addr));
+        dest_addr.sin_family = AF_INET;
+        dest_addr.sin_port = htons(port);
+
+        if (inet_pton(AF_INET, address, &dest_addr.sin_addr) != 1) {
+            return throw_runtime_error(ctx, "Invalid IPv4 address: %s", address);
+        }
+
+        sent = sendto(sock->fd, data, len, 0,
+                (struct sockaddr *)&dest_addr, sizeof(dest_addr));
+    } else if (sock->domain == AF_INET6) {
+        struct sockaddr_in6 dest_addr6;
+        memset(&dest_addr6, 0, sizeof(dest_addr6));
+        dest_addr6.sin6_family = AF_INET6;
+        dest_addr6.sin6_port = htons(port);
+
+        if (inet_pton(AF_INET6, address, &dest_addr6.sin6_addr) != 1) {
+            return throw_runtime_error(ctx, "Invalid IPv6 address: %s", address);
+        }
+
+        sent = sendto(sock->fd, data, len, 0,
+                (struct sockaddr *)&dest_addr6, sizeof(dest_addr6));
+    } else {
+        return throw_runtime_error(ctx, "Unsupported socket domain (use AF_INET or AF_INET6)");
     }
-
-    struct sockaddr_in dest_addr;
-    memset(&dest_addr, 0, sizeof(dest_addr));
-    dest_addr.sin_family = AF_INET;
-    dest_addr.sin_port = htons(port);
-
-    if (inet_pton(AF_INET, address, &dest_addr.sin_addr) != 1) {
-        return throw_runtime_error(ctx, "Invalid IP address: %s", address);
-    }
-
-    ssize_t sent = sendto(sock->fd, data, len, 0,
-            (struct sockaddr *)&dest_addr, sizeof(dest_addr));
 
     if (sent < 0) {
         return throw_runtime_error(ctx, "Failed to sendto %s:%d: %s",
@@ -451,7 +489,8 @@ Value socket_method_recvfrom(SocketHandle *sock, Value *args, int num_args, Exec
         return throw_runtime_error(ctx, "Memory allocation failed");
     }
 
-    struct sockaddr_in src_addr;
+    // Use sockaddr_storage to handle both IPv4 and IPv6
+    struct sockaddr_storage src_addr;
     socklen_t addr_len = sizeof(src_addr);
 
     ssize_t received = recvfrom(sock->fd, data, size, 0,
@@ -469,10 +508,18 @@ Value socket_method_recvfrom(SocketHandle *sock, Value *args, int num_args, Exec
     buf->capacity = size;
     buf->ref_count = 1;  // Start with 1 - caller owns the first reference
 
-    // Get source address and port
-    char addr_str[INET_ADDRSTRLEN];
-    inet_ntop(AF_INET, &src_addr.sin_addr, addr_str, sizeof(addr_str));
-    int src_port = ntohs(src_addr.sin_port);
+    // Get source address and port based on address family
+    char addr_str[INET6_ADDRSTRLEN];
+    int src_port;
+    if (sock->domain == AF_INET6) {
+        struct sockaddr_in6 *addr6 = (struct sockaddr_in6 *)&src_addr;
+        inet_ntop(AF_INET6, &addr6->sin6_addr, addr_str, sizeof(addr_str));
+        src_port = ntohs(addr6->sin6_port);
+    } else {
+        struct sockaddr_in *addr4 = (struct sockaddr_in *)&src_addr;
+        inet_ntop(AF_INET, &addr4->sin_addr, addr_str, sizeof(addr_str));
+        src_port = ntohs(addr4->sin_port);
+    }
 
     // Create result object { data, address, port }
     Object *result = object_new(NULL, 3);
