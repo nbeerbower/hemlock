@@ -32,6 +32,7 @@ Value call_channel_method(Channel *ch, const char *method, Value *args, int num_
         }
 
         Value msg = args[0];
+        pthread_cond_t *rendezvous = (pthread_cond_t*)ch->rendezvous;
 
         pthread_mutex_lock(mutex);
 
@@ -42,12 +43,33 @@ Value call_channel_method(Channel *ch, const char *method, Value *args, int num_
         }
 
         if (ch->capacity == 0) {
-            // Unbuffered channel - would need rendezvous
+            // Unbuffered channel - rendezvous with receiver
+            value_retain(msg);
+            *(ch->unbuffered_value) = msg;
+            ch->sender_waiting = 1;
+
+            // Signal any waiting receiver that data is available
+            pthread_cond_signal(not_empty);
+
+            // Wait for receiver to pick up the value
+            while (ch->sender_waiting && !ch->closed) {
+                pthread_cond_wait(rendezvous, mutex);
+            }
+
+            // Check if we were woken because channel closed
+            if (ch->closed && ch->sender_waiting) {
+                ch->sender_waiting = 0;
+                value_release(*(ch->unbuffered_value));
+                *(ch->unbuffered_value) = val_null();
+                pthread_mutex_unlock(mutex);
+                return throw_runtime_error(ctx, "cannot send to closed channel");
+            }
+
             pthread_mutex_unlock(mutex);
-            return throw_runtime_error(ctx, "unbuffered channels not yet supported (use buffered channel)");
+            return val_null();
         }
 
-        // Wait while buffer is full
+        // Buffered channel - wait while buffer is full
         while (ch->count >= ch->capacity && !ch->closed) {
             pthread_cond_wait(not_full, mutex);
         }
@@ -77,9 +99,36 @@ Value call_channel_method(Channel *ch, const char *method, Value *args, int num_
             return throw_runtime_error(ctx, "recv() expects 0 arguments");
         }
 
+        pthread_cond_t *rendezvous = (pthread_cond_t*)ch->rendezvous;
+
         pthread_mutex_lock(mutex);
 
-        // Wait while buffer is empty and channel not closed
+        if (ch->capacity == 0) {
+            // Unbuffered channel - rendezvous with sender
+            // Wait for sender to have data available
+            while (!ch->sender_waiting && !ch->closed) {
+                pthread_cond_wait(not_empty, mutex);
+            }
+
+            // If channel is closed and no sender waiting, return null
+            if (!ch->sender_waiting && ch->closed) {
+                pthread_mutex_unlock(mutex);
+                return val_null();
+            }
+
+            // Get the value from sender
+            Value msg = *(ch->unbuffered_value);
+            *(ch->unbuffered_value) = val_null();
+            ch->sender_waiting = 0;
+
+            // Signal sender that value was received
+            pthread_cond_signal(rendezvous);
+            pthread_mutex_unlock(mutex);
+
+            return msg;
+        }
+
+        // Buffered channel - wait while buffer is empty
         while (ch->count == 0 && !ch->closed) {
             pthread_cond_wait(not_empty, mutex);
         }
@@ -224,11 +273,15 @@ Value call_channel_method(Channel *ch, const char *method, Value *args, int num_
             return throw_runtime_error(ctx, "close() expects 0 arguments");
         }
 
+        pthread_cond_t *rendezvous = (pthread_cond_t*)ch->rendezvous;
+
         pthread_mutex_lock(mutex);
         ch->closed = 1;
         // Wake up all waiting threads
         pthread_cond_broadcast(not_empty);
         pthread_cond_broadcast(not_full);
+        // Also wake up any unbuffered channel senders waiting on rendezvous
+        pthread_cond_broadcast(rendezvous);
         pthread_mutex_unlock(mutex);
 
         return val_null();
