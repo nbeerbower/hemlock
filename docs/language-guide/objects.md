@@ -398,7 +398,7 @@ print(typeof(p));    // "Person"
 - **Heap-allocated** - All objects are allocated on the heap
 - **Shallow copy** - Assignment copies the reference, not the object
 - **Dynamic fields** - Stored as dynamic arrays of name/value pairs
-- **No automatic cleanup** - Objects are never freed in v0.1
+- **No automatic cleanup** - Objects must be manually freed
 
 ### Reference Semantics
 
@@ -564,10 +564,11 @@ print(f());  // ERROR: self is not defined
 ### Pitfall: Memory Leaks
 
 ```hemlock
-// Objects are never freed in v0.1
+// Objects must be manually freed
 fn create_objects() {
     let obj = { data: alloc(1000) };
     // obj never freed - memory leak
+    // Should call: free(obj);
 }
 
 create_objects();  // Leaks memory
@@ -691,7 +692,7 @@ emitter.on("message", fn(data) {
 emitter.emit("message", "Hello!");
 ```
 
-## Limitations (v0.1)
+## Limitations
 
 Current limitations:
 

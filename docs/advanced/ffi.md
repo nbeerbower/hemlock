@@ -32,7 +32,7 @@ The Foreign Function Interface (FFI) allows Hemlock programs to:
 
 ## Current Status
 
-FFI support is available in Hemlock v0.1 with the following features:
+FFI support is available in Hemlock with the following features:
 
 **Implemented:**
 - ✅ Call C functions from shared libraries
@@ -284,24 +284,18 @@ fn sqrt(x: f64): f64;
 let result = sqrt(16.0);  // Type-checked
 ```
 
-### Roadmap
+### Features
 
-**v0.1 (Current):**
+**v1.0:**
 - ✅ Basic FFI with primitive types
 - ✅ Dynamic library loading
 - ✅ Function calling
+- ✅ Callback support via libffi closures
 
-**v0.2 (Planned):**
-- 🔄 Struct support
-- 🔄 Array handling
-- 🔄 String marshaling
-- 🔄 Function pointers
-
-**v0.3 (Future):**
-- 🔄 Advanced type mapping
-- 🔄 Automatic binding generation
-- 🔄 FFI debugging tools
-- 🔄 Performance optimizations
+**Future:**
+- Struct support
+- Array handling improvements
+- Automatic binding generation
 
 ## FFI Callbacks
 
@@ -513,15 +507,11 @@ Hemlock's FFI provides:
 - ✅ Foundation for native library integration
 - ✅ **Function pointer callbacks** - pass Hemlock functions to C
 
-**Current status:** FFI available in v0.1 with primitive types and callback support
+**Current status:** FFI available with primitive types and callback support
 
-**Coming soon:** Structs, arrays, string marshaling
+**Future:** Structs, arrays, string marshaling
 
 **Use cases:** System libraries, third-party libraries, qsort, event loops, callback-based APIs
-
----
-
-**Note:** This documentation reflects FFI features as of Hemlock v0.1. FFI is under active development, and this document will be updated as features are added. For the most current information, refer to the test suite and CLAUDE.md.
 
 ## Contributing
 

@@ -299,6 +299,7 @@ Value json_parse_string(JSONParser *p, ExecutionContext *ctx) {
 }
 
 Value json_parse_number(JSONParser *p, ExecutionContext *ctx) {
+    (void)ctx;  // Parameter reserved for future type inference
     int start = p->pos;
     int is_float = 0;
 

@@ -698,7 +698,7 @@ sort(numbers, ascending);
 print(numbers);  // [1, 2, 5, 8, 9]
 ```
 
-## Limitations (v0.1)
+## Limitations
 
 Current limitations to be aware of:
 

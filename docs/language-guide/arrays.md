@@ -513,7 +513,7 @@ arr.contains({ x: 10 });  // false (different object)
 ### Pitfall: Memory Leaks
 
 ```hemlock
-// Arrays are never freed in v0.1
+// Arrays must be manually freed
 fn create_large_array() {
     let arr = [];
     let i = 0;
@@ -521,10 +521,10 @@ fn create_large_array() {
         arr.push(i);
         i = i + 1;
     }
-    // arr never freed - memory leak
+    // Should call: free(arr);
 }
 
-create_large_array();  // Leaks memory
+create_large_array();  // Leaks memory without free()
 ```
 
 ## Examples
@@ -659,15 +659,13 @@ sort(numbers);  // Modifies in-place
 print(numbers);  // [1, 2, 5, 8, 9]
 ```
 
-## Limitations (v0.1)
+## Limitations
 
 Current limitations:
 
 - **No reference counting** - Arrays never freed automatically
 - **No bounds checking on indexing** - Direct access is unchecked
 - **Reference equality for objects** - `find()` and `contains()` use reference comparison
-- **No built-in sort** - Must implement manually
-- **No map/filter/reduce** - Must implement as functions
 - **No array destructuring** - No `let [a, b] = arr` syntax
 - **No spread operator** - No `[...arr1, ...arr2]` syntax
 

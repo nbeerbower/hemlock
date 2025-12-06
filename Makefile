@@ -202,8 +202,9 @@ valgrind-clean:
 # ========== COMPILER AND RUNTIME ==========
 
 # Compiler source files (reuse lexer, parser, ast from interpreter)
-COMPILER_SRCS = src/compiler/main.c src/compiler/codegen.c src/lexer.c src/ast.c $(wildcard src/parser/*.c)
-COMPILER_OBJS = $(BUILD_DIR)/compiler/main.o $(BUILD_DIR)/compiler/codegen.o $(BUILD_DIR)/lexer.o $(BUILD_DIR)/ast.o $(patsubst src/parser/%.c,$(BUILD_DIR)/parser/%.o,$(wildcard src/parser/*.c))
+# Modular codegen: core, expr, stmt, closure, program, module
+COMPILER_SRCS = src/compiler/main.c $(wildcard src/compiler/codegen*.c) src/lexer.c src/ast.c $(wildcard src/parser/*.c)
+COMPILER_OBJS = $(BUILD_DIR)/compiler/main.o $(BUILD_DIR)/compiler/codegen.o $(BUILD_DIR)/compiler/codegen_expr.o $(BUILD_DIR)/compiler/codegen_stmt.o $(BUILD_DIR)/compiler/codegen_closure.o $(BUILD_DIR)/compiler/codegen_program.o $(BUILD_DIR)/compiler/codegen_module.o $(BUILD_DIR)/lexer.o $(BUILD_DIR)/ast.o $(patsubst src/parser/%.c,$(BUILD_DIR)/parser/%.o,$(wildcard src/parser/*.c))
 COMPILER_TARGET = hemlockc
 
 # Runtime library
@@ -268,3 +269,31 @@ test-bundler: $(TARGET)
 # Run all test suites
 .PHONY: test-all
 test-all: test test-compiler parity test-bundler
+
+# ========== INSTALLATION ==========
+
+# Installation directories (can be overridden)
+PREFIX ?= /usr/local
+BINDIR ?= $(PREFIX)/bin
+LIBDIR ?= $(PREFIX)/lib/hemlock
+DESTDIR ?=
+
+.PHONY: install uninstall
+
+install: $(TARGET)
+	@echo "Installing Hemlock to $(DESTDIR)$(PREFIX)..."
+	install -d $(DESTDIR)$(BINDIR)
+	install -m 755 $(TARGET) $(DESTDIR)$(BINDIR)/$(TARGET)
+	@echo "Installing stdlib to $(DESTDIR)$(LIBDIR)..."
+	install -d $(DESTDIR)$(LIBDIR)/stdlib
+	cp -r stdlib/* $(DESTDIR)$(LIBDIR)/stdlib/
+	@echo ""
+	@echo "✓ Hemlock installed successfully"
+	@echo "  Binary: $(DESTDIR)$(BINDIR)/$(TARGET)"
+	@echo "  Stdlib: $(DESTDIR)$(LIBDIR)/stdlib/"
+
+uninstall:
+	@echo "Uninstalling Hemlock from $(DESTDIR)$(PREFIX)..."
+	rm -f $(DESTDIR)$(BINDIR)/$(TARGET)
+	rm -rf $(DESTDIR)$(LIBDIR)
+	@echo "✓ Hemlock uninstalled"

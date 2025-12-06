@@ -410,7 +410,7 @@ Strings are heap-allocated and follow these rules:
 - **Creation**: Allocated on heap with capacity tracking
 - **Concatenation**: Creates new string (old strings unchanged)
 - **Methods**: Most methods return new strings
-- **Lifetime**: Never automatically freed (v0.1 limitation)
+- **Lifetime**: Strings are not automatically freed - manual cleanup required
 
 **Memory leak example:**
 ```hemlock
@@ -421,7 +421,7 @@ fn create_strings() {
 }
 ```
 
-**Current limitation:** Strings are not automatically freed in v0.1. Manual memory management for strings will be addressed in future versions.
+**Note:** Hemlock uses manual memory management. Strings that are no longer needed should be explicitly freed if memory is a concern.
 
 ## Best Practices
 

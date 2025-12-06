@@ -67,7 +67,7 @@ static void ctx_init(SerializeContext *ctx, uint16_t flags) {
     ctx->flags = flags;
 }
 
-static void ctx_free(SerializeContext *ctx) {
+static void __attribute__((unused)) ctx_free(SerializeContext *ctx) {
     string_table_free(&ctx->strings);
     // Note: buffer ownership is transferred to caller
     ctx->buffer = NULL;

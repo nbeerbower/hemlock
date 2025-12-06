@@ -1,0 +1,128 @@
+// Test: Async File System operations
+// Tests non-blocking file I/O using ThreadPool
+
+import {
+    async_read_file,
+    async_write_file,
+    async_exists,
+    async_remove_file,
+    read_files_parallel,
+    write_files_parallel,
+    shutdown_async_fs
+} from "@stdlib/async_fs";
+
+// Test 1: async_write_file and async_read_file
+print("Test: async write and read file");
+let test_path = "/tmp/hemlock_async_test.txt";
+let content = "Hello from async file I/O!";
+
+let write_future = async_write_file(test_path, content);
+write_future.get();  // Wait for write to complete
+print("  Written file");
+
+let read_future = async_read_file(test_path);
+let read_content = read_future.get();
+print("  Read content: " + read_content);
+assert(read_content == content);
+print("PASS: async write and read file");
+
+// Test 2: async_exists
+print("Test: async exists");
+let exists_future = async_exists(test_path);
+let exists = exists_future.get();
+assert(exists == true);
+
+let not_exists_future = async_exists("/tmp/nonexistent_file_12345.txt");
+let not_exists = not_exists_future.get();
+assert(not_exists == false);
+print("PASS: async exists");
+
+// Test 3: async_remove_file
+print("Test: async remove file");
+let remove_future = async_remove_file(test_path);
+remove_future.get();
+
+let after_remove = async_exists(test_path).get();
+assert(after_remove == false);
+print("PASS: async remove file");
+
+// Test 4: Multiple async operations in parallel
+print("Test: parallel async operations");
+
+// Write 3 files
+let f1 = async_write_file("/tmp/hemlock_async_1.txt", "content1");
+let f2 = async_write_file("/tmp/hemlock_async_2.txt", "content2");
+let f3 = async_write_file("/tmp/hemlock_async_3.txt", "content3");
+
+// Wait for all writes
+f1.get();
+f2.get();
+f3.get();
+
+// Read all in parallel
+let r1 = async_read_file("/tmp/hemlock_async_1.txt");
+let r2 = async_read_file("/tmp/hemlock_async_2.txt");
+let r3 = async_read_file("/tmp/hemlock_async_3.txt");
+
+assert(r1.get() == "content1");
+assert(r2.get() == "content2");
+assert(r3.get() == "content3");
+
+// Cleanup
+async_remove_file("/tmp/hemlock_async_1.txt").get();
+async_remove_file("/tmp/hemlock_async_2.txt").get();
+async_remove_file("/tmp/hemlock_async_3.txt").get();
+
+print("PASS: parallel async operations");
+
+// Test 5: read_files_parallel helper
+print("Test: read_files_parallel");
+
+// Create test files first
+async_write_file("/tmp/hemlock_batch_1.txt", "batch1").get();
+async_write_file("/tmp/hemlock_batch_2.txt", "batch2").get();
+async_write_file("/tmp/hemlock_batch_3.txt", "batch3").get();
+
+let paths = [
+    "/tmp/hemlock_batch_1.txt",
+    "/tmp/hemlock_batch_2.txt",
+    "/tmp/hemlock_batch_3.txt"
+];
+
+let contents = read_files_parallel(paths);
+assert(contents.length == 3);
+assert(contents[0] == "batch1");
+assert(contents[1] == "batch2");
+assert(contents[2] == "batch3");
+
+// Cleanup
+async_remove_file("/tmp/hemlock_batch_1.txt").get();
+async_remove_file("/tmp/hemlock_batch_2.txt").get();
+async_remove_file("/tmp/hemlock_batch_3.txt").get();
+
+print("PASS: read_files_parallel");
+
+// Test 6: write_files_parallel helper
+print("Test: write_files_parallel");
+
+let files = [
+    { path: "/tmp/hemlock_write_1.txt", content: "write1" },
+    { path: "/tmp/hemlock_write_2.txt", content: "write2" }
+];
+
+write_files_parallel(files);
+
+// Verify
+assert(async_read_file("/tmp/hemlock_write_1.txt").get() == "write1");
+assert(async_read_file("/tmp/hemlock_write_2.txt").get() == "write2");
+
+// Cleanup
+async_remove_file("/tmp/hemlock_write_1.txt").get();
+async_remove_file("/tmp/hemlock_write_2.txt").get();
+
+print("PASS: write_files_parallel");
+
+// Shutdown the thread pool
+shutdown_async_fs();
+
+print("All async file I/O tests passed!");

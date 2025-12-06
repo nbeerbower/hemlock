@@ -169,7 +169,7 @@ let task = spawn(background_work);
 detach(task);  // Task runs independently, cannot join
 ```
 
-**Important:** Detached tasks cannot be joined. The pthread is cleaned up by OS, but Task struct (~64-96 bytes) currently leaks.
+**Important:** Detached tasks cannot be joined. Both the pthread and Task struct are automatically cleaned up when the task completes.
 
 ## Channels
 
@@ -430,7 +430,7 @@ Channel Structure:
 ### Memory & Cleanup
 
 - **Joined tasks:** Automatically cleaned up after `join()` returns
-- **Detached tasks:** pthread is cleaned up by OS, but Task struct (~64-96 bytes) currently leaks
+- **Detached tasks:** Automatically cleaned up when the task completes
 - **Channels:** Reference-counted and freed when no longer used
 
 ## Best Practices
@@ -700,9 +700,9 @@ let ch = channel(10);
 // Cannot dynamically resize to 20
 ```
 
-### 5. Task Struct Leaks on Detach
+### 5. Channel Size is Fixed
 
-Detached tasks leak the Task struct (~64-96 bytes) - to be fixed with reference counting in v0.2.
+Channel buffer size cannot be changed after creation.
 
 ## Common Patterns
 

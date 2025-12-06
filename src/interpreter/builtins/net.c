@@ -8,6 +8,7 @@
 #include <errno.h>
 #include <string.h>
 #include <stdarg.h>
+#include <poll.h>
 
 // ========== SOCKET BUILTINS ==========
 
@@ -89,6 +90,7 @@ Value builtin_socket_create(Value *args, int num_args, ExecutionContext *ctx) {
     sock->type = type;
     sock->closed = 0;
     sock->listening = 0;
+    sock->nonblocking = 0;
 
     return val_socket(sock);
 }
@@ -112,26 +114,42 @@ Value socket_method_bind(SocketHandle *sock, Value *args, int num_args, Executio
     const char *address = args[0].as.as_string->data;
     int port = value_to_int(args[1]);
 
-    // Only support IPv4 for now (AF_INET)
-    if (sock->domain != AF_INET) {
-        return throw_runtime_error(ctx, "Only AF_INET sockets supported currently");
-    }
+    if (sock->domain == AF_INET) {
+        // IPv4
+        struct sockaddr_in addr;
+        memset(&addr, 0, sizeof(addr));
+        addr.sin_family = AF_INET;
+        addr.sin_port = htons(port);
 
-    struct sockaddr_in addr;
-    memset(&addr, 0, sizeof(addr));
-    addr.sin_family = AF_INET;
-    addr.sin_port = htons(port);
+        // Handle "0.0.0.0" and other special addresses
+        if (strcmp(address, "0.0.0.0") == 0) {
+            addr.sin_addr.s_addr = INADDR_ANY;
+        } else if (inet_pton(AF_INET, address, &addr.sin_addr) != 1) {
+            return throw_runtime_error(ctx, "Invalid IPv4 address: %s", address);
+        }
 
-    // Handle "0.0.0.0" and other special addresses
-    if (strcmp(address, "0.0.0.0") == 0) {
-        addr.sin_addr.s_addr = INADDR_ANY;
-    } else if (inet_pton(AF_INET, address, &addr.sin_addr) != 1) {
-        return throw_runtime_error(ctx, "Invalid IP address: %s", address);
-    }
+        if (bind(sock->fd, (struct sockaddr *)&addr, sizeof(addr)) < 0) {
+            return throw_runtime_error(ctx, "bind() failed: %s", strerror(errno));
+        }
+    } else if (sock->domain == AF_INET6) {
+        // IPv6
+        struct sockaddr_in6 addr6;
+        memset(&addr6, 0, sizeof(addr6));
+        addr6.sin6_family = AF_INET6;
+        addr6.sin6_port = htons(port);
 
-    if (bind(sock->fd, (struct sockaddr *)&addr, sizeof(addr)) < 0) {
-        return throw_runtime_error(ctx, "Failed to bind socket to %s:%d: %s",
-                address, port, strerror(errno));
+        // Handle "::" (all interfaces) and other addresses
+        if (strcmp(address, "::") == 0 || strcmp(address, "::0") == 0) {
+            addr6.sin6_addr = in6addr_any;
+        } else if (inet_pton(AF_INET6, address, &addr6.sin6_addr) != 1) {
+            return throw_runtime_error(ctx, "Invalid IPv6 address: %s", address);
+        }
+
+        if (bind(sock->fd, (struct sockaddr *)&addr6, sizeof(addr6)) < 0) {
+            return throw_runtime_error(ctx, "bind() failed: %s", strerror(errno));
+        }
+    } else {
+        return throw_runtime_error(ctx, "Unsupported socket domain (use AF_INET or AF_INET6)");
     }
 
     // Store address and port
@@ -181,11 +199,16 @@ Value socket_method_accept(SocketHandle *sock, Value *args, int num_args, Execut
         return throw_runtime_error(ctx, "Socket must be listening before accept()");
     }
 
-    struct sockaddr_in client_addr;
+    // Use sockaddr_storage to handle both IPv4 and IPv6
+    struct sockaddr_storage client_addr;
     socklen_t client_len = sizeof(client_addr);
 
     int client_fd = accept(sock->fd, (struct sockaddr *)&client_addr, &client_len);
     if (client_fd < 0) {
+        // In non-blocking mode, EAGAIN/EWOULDBLOCK means no pending connections
+        if (sock->nonblocking && (errno == EAGAIN || errno == EWOULDBLOCK)) {
+            return val_null();  // No connection available
+        }
         return throw_runtime_error(ctx, "Failed to accept connection: %s", strerror(errno));
     }
 
@@ -201,12 +224,22 @@ Value socket_method_accept(SocketHandle *sock, Value *args, int num_args, Execut
     client_sock->type = sock->type;
     client_sock->closed = 0;
     client_sock->listening = 0;
+    client_sock->nonblocking = 0;
 
-    // Get client address and port
-    char addr_str[INET_ADDRSTRLEN];
-    inet_ntop(AF_INET, &client_addr.sin_addr, addr_str, sizeof(addr_str));
-    client_sock->address = strdup(addr_str);
-    client_sock->port = ntohs(client_addr.sin_port);
+    // Get client address and port based on address family
+    if (sock->domain == AF_INET6) {
+        struct sockaddr_in6 *addr6 = (struct sockaddr_in6 *)&client_addr;
+        char addr_str[INET6_ADDRSTRLEN];
+        inet_ntop(AF_INET6, &addr6->sin6_addr, addr_str, sizeof(addr_str));
+        client_sock->address = strdup(addr_str);
+        client_sock->port = ntohs(addr6->sin6_port);
+    } else {
+        struct sockaddr_in *addr4 = (struct sockaddr_in *)&client_addr;
+        char addr_str[INET_ADDRSTRLEN];
+        inet_ntop(AF_INET, &addr4->sin_addr, addr_str, sizeof(addr_str));
+        client_sock->address = strdup(addr_str);
+        client_sock->port = ntohs(addr4->sin_port);
+    }
 
     return val_socket(client_sock);
 }
@@ -230,24 +263,24 @@ Value socket_method_connect(SocketHandle *sock, Value *args, int num_args, Execu
     const char *address = args[0].as.as_string->data;
     int port = value_to_int(args[1]);
 
-    // Resolve hostname to IP address
-    struct hostent *host = gethostbyname(address);
-    if (!host) {
-        return throw_runtime_error(ctx, "Failed to resolve hostname '%s'", address);
+    // Use getaddrinfo for both IPv4 and IPv6 resolution
+    struct addrinfo hints, *result;
+    memset(&hints, 0, sizeof(hints));
+    hints.ai_family = sock->domain;  // AF_INET or AF_INET6
+    hints.ai_socktype = sock->type;
+
+    char port_str[16];
+    snprintf(port_str, sizeof(port_str), "%d", port);
+
+    int gai_err = getaddrinfo(address, port_str, &hints, &result);
+    if (gai_err != 0) {
+        return throw_runtime_error(ctx, "Failed to resolve '%s': %s", address, gai_strerror(gai_err));
     }
 
-    // Only support IPv4 for now
-    if (sock->domain != AF_INET) {
-        return throw_runtime_error(ctx, "Only AF_INET sockets supported currently");
-    }
+    int connect_result = connect(sock->fd, result->ai_addr, result->ai_addrlen);
+    freeaddrinfo(result);
 
-    struct sockaddr_in server_addr;
-    memset(&server_addr, 0, sizeof(server_addr));
-    server_addr.sin_family = AF_INET;
-    server_addr.sin_port = htons(port);
-    memcpy(&server_addr.sin_addr.s_addr, host->h_addr_list[0], host->h_length);
-
-    if (connect(sock->fd, (struct sockaddr *)&server_addr, sizeof(server_addr)) < 0) {
+    if (connect_result < 0) {
         return throw_runtime_error(ctx, "Failed to connect to %s:%d: %s",
                 address, port, strerror(errno));
     }
@@ -289,13 +322,17 @@ Value socket_method_send(SocketHandle *sock, Value *args, int num_args, Executio
 
     ssize_t sent = send(sock->fd, data, len, 0);
     if (sent < 0) {
+        // In non-blocking mode, EAGAIN/EWOULDBLOCK means socket buffer is full
+        if (sock->nonblocking && (errno == EAGAIN || errno == EWOULDBLOCK)) {
+            return val_i32(0);  // No bytes sent (would block)
+        }
         return throw_runtime_error(ctx, "Failed to send data: %s", strerror(errno));
     }
 
     return val_i32((int32_t)sent);
 }
 
-// socket.recv(size: i32) -> buffer
+// socket.recv(size: i32) -> buffer | null (null if non-blocking and no data)
 Value socket_method_recv(SocketHandle *sock, Value *args, int num_args, ExecutionContext *ctx) {
     if (num_args != 1) {
         return throw_runtime_error(ctx, "recv() expects 1 argument (size)");
@@ -327,8 +364,25 @@ Value socket_method_recv(SocketHandle *sock, Value *args, int num_args, Executio
 
     ssize_t received = recv(sock->fd, data, size, 0);
     if (received < 0) {
+        // In non-blocking mode, EAGAIN/EWOULDBLOCK means no data available (not an error)
+        if (sock->nonblocking && (errno == EAGAIN || errno == EWOULDBLOCK)) {
+            free(data);
+            return val_null();  // No data available
+        }
         free(data);
         return throw_runtime_error(ctx, "Failed to receive data: %s", strerror(errno));
+    }
+
+    // received == 0 means connection closed by peer
+    if (received == 0) {
+        free(data);
+        // Return empty buffer to indicate EOF
+        Buffer *buf = malloc(sizeof(Buffer));
+        buf->data = malloc(1);
+        buf->length = 0;
+        buf->capacity = 0;
+        buf->ref_count = 1;
+        return (Value){ .type = VAL_BUFFER, .as.as_buffer = buf };
     }
 
     Buffer *buf = malloc(sizeof(Buffer));
@@ -374,22 +428,34 @@ Value socket_method_sendto(SocketHandle *sock, Value *args, int num_args, Execut
         return throw_runtime_error(ctx, "sendto() data must be string or buffer");
     }
 
-    // Only support IPv4 for now
-    if (sock->domain != AF_INET) {
-        return throw_runtime_error(ctx, "Only AF_INET sockets supported currently");
+    ssize_t sent;
+    if (sock->domain == AF_INET) {
+        struct sockaddr_in dest_addr;
+        memset(&dest_addr, 0, sizeof(dest_addr));
+        dest_addr.sin_family = AF_INET;
+        dest_addr.sin_port = htons(port);
+
+        if (inet_pton(AF_INET, address, &dest_addr.sin_addr) != 1) {
+            return throw_runtime_error(ctx, "Invalid IPv4 address: %s", address);
+        }
+
+        sent = sendto(sock->fd, data, len, 0,
+                (struct sockaddr *)&dest_addr, sizeof(dest_addr));
+    } else if (sock->domain == AF_INET6) {
+        struct sockaddr_in6 dest_addr6;
+        memset(&dest_addr6, 0, sizeof(dest_addr6));
+        dest_addr6.sin6_family = AF_INET6;
+        dest_addr6.sin6_port = htons(port);
+
+        if (inet_pton(AF_INET6, address, &dest_addr6.sin6_addr) != 1) {
+            return throw_runtime_error(ctx, "Invalid IPv6 address: %s", address);
+        }
+
+        sent = sendto(sock->fd, data, len, 0,
+                (struct sockaddr *)&dest_addr6, sizeof(dest_addr6));
+    } else {
+        return throw_runtime_error(ctx, "Unsupported socket domain (use AF_INET or AF_INET6)");
     }
-
-    struct sockaddr_in dest_addr;
-    memset(&dest_addr, 0, sizeof(dest_addr));
-    dest_addr.sin_family = AF_INET;
-    dest_addr.sin_port = htons(port);
-
-    if (inet_pton(AF_INET, address, &dest_addr.sin_addr) != 1) {
-        return throw_runtime_error(ctx, "Invalid IP address: %s", address);
-    }
-
-    ssize_t sent = sendto(sock->fd, data, len, 0,
-            (struct sockaddr *)&dest_addr, sizeof(dest_addr));
 
     if (sent < 0) {
         return throw_runtime_error(ctx, "Failed to sendto %s:%d: %s",
@@ -423,7 +489,8 @@ Value socket_method_recvfrom(SocketHandle *sock, Value *args, int num_args, Exec
         return throw_runtime_error(ctx, "Memory allocation failed");
     }
 
-    struct sockaddr_in src_addr;
+    // Use sockaddr_storage to handle both IPv4 and IPv6
+    struct sockaddr_storage src_addr;
     socklen_t addr_len = sizeof(src_addr);
 
     ssize_t received = recvfrom(sock->fd, data, size, 0,
@@ -441,10 +508,18 @@ Value socket_method_recvfrom(SocketHandle *sock, Value *args, int num_args, Exec
     buf->capacity = size;
     buf->ref_count = 1;  // Start with 1 - caller owns the first reference
 
-    // Get source address and port
-    char addr_str[INET_ADDRSTRLEN];
-    inet_ntop(AF_INET, &src_addr.sin_addr, addr_str, sizeof(addr_str));
-    int src_port = ntohs(src_addr.sin_port);
+    // Get source address and port based on address family
+    char addr_str[INET6_ADDRSTRLEN];
+    int src_port;
+    if (sock->domain == AF_INET6) {
+        struct sockaddr_in6 *addr6 = (struct sockaddr_in6 *)&src_addr;
+        inet_ntop(AF_INET6, &addr6->sin6_addr, addr_str, sizeof(addr_str));
+        src_port = ntohs(addr6->sin6_port);
+    } else {
+        struct sockaddr_in *addr4 = (struct sockaddr_in *)&src_addr;
+        inet_ntop(AF_INET, &addr4->sin_addr, addr_str, sizeof(addr_str));
+        src_port = ntohs(addr4->sin_port);
+    }
 
     // Create result object { data, address, port }
     Object *result = object_new(NULL, 3);
@@ -553,6 +628,41 @@ Value socket_method_set_timeout(SocketHandle *sock, Value *args, int num_args, E
     return val_null();
 }
 
+// socket.set_nonblocking(enable: bool) -> null
+Value socket_method_set_nonblocking(SocketHandle *sock, Value *args, int num_args, ExecutionContext *ctx) {
+    if (num_args != 1) {
+        return throw_runtime_error(ctx, "set_nonblocking() expects 1 argument (bool)");
+    }
+
+    if (args[0].type != VAL_BOOL) {
+        return throw_runtime_error(ctx, "set_nonblocking() argument must be boolean");
+    }
+
+    if (sock->closed) {
+        return throw_runtime_error(ctx, "Cannot set_nonblocking on closed socket");
+    }
+
+    int enable = args[0].as.as_bool;
+
+    int flags = fcntl(sock->fd, F_GETFL, 0);
+    if (flags < 0) {
+        return throw_runtime_error(ctx, "Failed to get socket flags: %s", strerror(errno));
+    }
+
+    if (enable) {
+        flags |= O_NONBLOCK;
+    } else {
+        flags &= ~O_NONBLOCK;
+    }
+
+    if (fcntl(sock->fd, F_SETFL, flags) < 0) {
+        return throw_runtime_error(ctx, "Failed to set socket flags: %s", strerror(errno));
+    }
+
+    sock->nonblocking = enable;
+    return val_null();
+}
+
 // ========== RESOURCE MANAGEMENT ==========
 
 // socket.close() -> null (idempotent)
@@ -593,6 +703,10 @@ Value get_socket_property(SocketHandle *sock, const char *property, ExecutionCon
 
     if (strcmp(property, "fd") == 0) {
         return val_i32(sock->fd);
+    }
+
+    if (strcmp(property, "nonblocking") == 0) {
+        return val_bool(sock->nonblocking);
     }
 
     return throw_runtime_error(ctx, "Socket has no property '%s'", property);
@@ -640,6 +754,9 @@ Value call_socket_method(SocketHandle *sock, const char *method, Value *args, in
     if (strcmp(method, "set_timeout") == 0) {
         return socket_method_set_timeout(sock, args, num_args, ctx);
     }
+    if (strcmp(method, "set_nonblocking") == 0) {
+        return socket_method_set_nonblocking(sock, args, num_args, ctx);
+    }
 
     // Resource management
     if (strcmp(method, "close") == 0) {
@@ -647,4 +764,167 @@ Value call_socket_method(SocketHandle *sock, const char *method, Value *args, in
     }
 
     return throw_runtime_error(ctx, "Socket has no method '%s'", method);
+}
+
+// ========== POLL OPERATIONS ==========
+
+// Helper to extract file descriptor from a value
+static int get_fd_from_value(Value val) {
+    if (val.type == VAL_SOCKET) {
+        return val.as.as_socket->fd;
+    }
+    if (val.type == VAL_FILE) {
+        return fileno(val.as.as_file->fp);
+    }
+    return -1;
+}
+
+// poll(fds: array<{fd, events}>, timeout_ms: i32) -> array<{fd, revents}>
+// Wait for I/O events on multiple file descriptors
+Value builtin_poll(Value *args, int num_args, ExecutionContext *ctx) {
+    if (num_args != 2) {
+        ctx->exception_state.exception_value = val_string("poll() expects 2 arguments (fds, timeout_ms)");
+        value_retain(ctx->exception_state.exception_value);
+        ctx->exception_state.is_throwing = 1;
+        return val_null();
+    }
+
+    if (args[0].type != VAL_ARRAY) {
+        ctx->exception_state.exception_value = val_string("poll() first argument must be array");
+        value_retain(ctx->exception_state.exception_value);
+        ctx->exception_state.is_throwing = 1;
+        return val_null();
+    }
+
+    if (!is_integer(args[1])) {
+        ctx->exception_state.exception_value = val_string("poll() second argument must be integer (timeout_ms)");
+        value_retain(ctx->exception_state.exception_value);
+        ctx->exception_state.is_throwing = 1;
+        return val_null();
+    }
+
+    Array *fds_arr = args[0].as.as_array;
+    int timeout_ms = value_to_int(args[1]);
+
+    if (fds_arr->length == 0) {
+        // Return empty array
+        return val_array(array_new());
+    }
+
+    // Build pollfd array
+    struct pollfd *pfds = malloc(sizeof(struct pollfd) * fds_arr->length);
+    if (!pfds) {
+        ctx->exception_state.exception_value = val_string("poll() memory allocation failed");
+        value_retain(ctx->exception_state.exception_value);
+        ctx->exception_state.is_throwing = 1;
+        return val_null();
+    }
+
+    // Store original values for return
+    Value *original_fds = malloc(sizeof(Value) * fds_arr->length);
+    if (!original_fds) {
+        free(pfds);
+        ctx->exception_state.exception_value = val_string("poll() memory allocation failed");
+        value_retain(ctx->exception_state.exception_value);
+        ctx->exception_state.is_throwing = 1;
+        return val_null();
+    }
+
+    for (int i = 0; i < fds_arr->length; i++) {
+        Value item = fds_arr->elements[i];
+
+        if (item.type != VAL_OBJECT) {
+            free(pfds);
+            free(original_fds);
+            ctx->exception_state.exception_value = val_string("poll() array elements must be objects with 'fd' and 'events'");
+            value_retain(ctx->exception_state.exception_value);
+            ctx->exception_state.is_throwing = 1;
+            return val_null();
+        }
+
+        Object *obj = item.as.as_object;
+
+        // Find fd field
+        Value fd_val = val_null();
+        Value events_val = val_null();
+        for (int j = 0; j < obj->num_fields; j++) {
+            if (strcmp(obj->field_names[j], "fd") == 0) {
+                fd_val = obj->field_values[j];
+            } else if (strcmp(obj->field_names[j], "events") == 0) {
+                events_val = obj->field_values[j];
+            }
+        }
+
+        int fd = get_fd_from_value(fd_val);
+        if (fd < 0) {
+            free(pfds);
+            free(original_fds);
+            ctx->exception_state.exception_value = val_string("poll() fd must be a socket or file");
+            value_retain(ctx->exception_state.exception_value);
+            ctx->exception_state.is_throwing = 1;
+            return val_null();
+        }
+
+        if (!is_integer(events_val)) {
+            free(pfds);
+            free(original_fds);
+            ctx->exception_state.exception_value = val_string("poll() events must be an integer");
+            value_retain(ctx->exception_state.exception_value);
+            ctx->exception_state.is_throwing = 1;
+            return val_null();
+        }
+
+        pfds[i].fd = fd;
+        pfds[i].events = (short)value_to_int(events_val);
+        pfds[i].revents = 0;
+        original_fds[i] = fd_val;
+        value_retain(original_fds[i]);
+    }
+
+    // Call poll
+    int result = poll(pfds, fds_arr->length, timeout_ms);
+
+    if (result < 0) {
+        for (int i = 0; i < fds_arr->length; i++) {
+            value_release(original_fds[i]);
+        }
+        free(pfds);
+        free(original_fds);
+        char err_msg[256];
+        snprintf(err_msg, sizeof(err_msg), "poll() failed: %s", strerror(errno));
+        ctx->exception_state.exception_value = val_string(err_msg);
+        value_retain(ctx->exception_state.exception_value);
+        ctx->exception_state.is_throwing = 1;
+        return val_null();
+    }
+
+    // Build result array with only fds that have events
+    Array *result_arr = array_new();
+
+    for (int i = 0; i < fds_arr->length; i++) {
+        if (pfds[i].revents != 0) {
+            // Create result object { fd, revents }
+            Object *res_obj = object_new(NULL, 2);
+
+            res_obj->field_names[0] = strdup("fd");
+            res_obj->field_values[0] = original_fds[i];
+            value_retain(original_fds[i]);
+            res_obj->num_fields = 1;
+
+            res_obj->field_names[1] = strdup("revents");
+            res_obj->field_values[1] = val_i32(pfds[i].revents);
+            res_obj->num_fields = 2;
+
+            array_push(result_arr, val_object(res_obj));
+        }
+    }
+
+    // Cleanup
+    for (int i = 0; i < fds_arr->length; i++) {
+        value_release(original_fds[i]);
+    }
+    free(pfds);
+    free(original_fds);
+
+    return val_array(result_arr);
 }

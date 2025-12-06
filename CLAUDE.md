@@ -260,11 +260,11 @@ Test categories: primitives, memory, strings, arrays, functions, objects, async,
 
 ## Version
 
-**v0.1** - Current release with:
+**v1.0** - Current release with:
 - Full type system (i8-i64, u8-u64, f32/f64, bool, string, rune, ptr, buffer, array, object, enum, file, task, channel)
 - UTF-8 strings with 19 methods
 - Arrays with 18 methods including map/filter/reduce
-- Manual memory management
+- Manual memory management with `talloc()` and `sizeof()`
 - Async/await with true pthread parallelism
 - 21 stdlib modules
 - FFI for C interop
@@ -272,7 +272,7 @@ Test categories: primitives, memory, strings, arrays, functions, objects, async,
 - File I/O, signal handling, command execution
 - Compiler backend (C code generation)
 - LSP server for IDE support
-- 618+ tests (100% pass rate)
+- 479 tests (100% pass rate)
 
 ---
 

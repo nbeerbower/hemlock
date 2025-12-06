@@ -1,0 +1,139 @@
+// Test: poll() for I/O multiplexing
+// Tests the poll() builtin for waiting on multiple sockets
+
+// Test poll constants are defined
+assert(POLLIN > 0);
+assert(POLLOUT > 0);
+assert(POLLERR > 0);
+assert(POLLHUP > 0);
+print("PASS: poll constants defined");
+
+// Test poll with empty array
+let empty_result = poll([], 0);
+assert(empty_result.length == 0);
+print("PASS: poll with empty array");
+
+// Test poll with timeout on socket with no events
+async fn test_poll_timeout() {
+    let sock = socket_create(AF_INET, SOCK_STREAM, 0);
+    sock.setsockopt(SOL_SOCKET, SO_REUSEADDR, 1);
+    sock.bind("127.0.0.1", 19860);
+    sock.listen(1);
+    sock.set_nonblocking(true);
+
+    // Poll for incoming connections with short timeout
+    let start = __time_ms();
+    let result = poll([{ fd: sock, events: POLLIN }], 50);
+    let elapsed = __time_ms() - start;
+
+    // Should timeout (no connections)
+    let timed_out = (result.length == 0);
+    // Should have waited approximately 50ms
+    let waited = (elapsed >= 40);
+
+    sock.close();
+    return { timed_out: timed_out, waited: waited };
+}
+
+let timeout_result = join(spawn(test_poll_timeout));
+assert(timeout_result.timed_out == true);
+assert(timeout_result.waited == true);
+print("PASS: poll timeout works");
+
+// Test poll detects readable socket
+async fn test_poll_readable() {
+    let server = socket_create(AF_INET, SOCK_STREAM, 0);
+    server.setsockopt(SOL_SOCKET, SO_REUSEADDR, 1);
+    server.bind("127.0.0.1", 19861);
+    server.listen(1);
+
+    // Spawn client that connects
+    let client_task = spawn(async fn() {
+        __sleep(0.02);
+        let client = socket_create(AF_INET, SOCK_STREAM, 0);
+        client.connect("127.0.0.1", 19861);
+        __sleep(0.1);
+        client.close();
+        return "done";
+    });
+
+    // Poll for incoming connection
+    let result = poll([{ fd: server, events: POLLIN }], 1000);
+
+    // Should detect the incoming connection
+    let detected = (result.length > 0);
+    let has_pollin = false;
+    if (result.length > 0) {
+        has_pollin = (result[0].revents & POLLIN) != 0;
+    }
+
+    // Accept and clean up
+    if (detected) {
+        let conn = server.accept();
+        if (conn != null) {
+            conn.close();
+        }
+    }
+
+    server.close();
+    join(client_task);
+
+    return { detected: detected, has_pollin: has_pollin };
+}
+
+let readable_result = join(spawn(test_poll_readable));
+assert(readable_result.detected == true);
+assert(readable_result.has_pollin == true);
+print("PASS: poll detects readable socket");
+
+// Test poll with multiple sockets
+async fn test_poll_multiple() {
+    let s1 = socket_create(AF_INET, SOCK_STREAM, 0);
+    s1.setsockopt(SOL_SOCKET, SO_REUSEADDR, 1);
+    s1.bind("127.0.0.1", 19862);
+    s1.listen(1);
+
+    let s2 = socket_create(AF_INET, SOCK_STREAM, 0);
+    s2.setsockopt(SOL_SOCKET, SO_REUSEADDR, 1);
+    s2.bind("127.0.0.1", 19863);
+    s2.listen(1);
+
+    // Connect to second socket only
+    let client_task = spawn(async fn() {
+        __sleep(0.02);
+        let client = socket_create(AF_INET, SOCK_STREAM, 0);
+        client.connect("127.0.0.1", 19863);  // Connect to s2
+        __sleep(0.1);
+        client.close();
+        return "done";
+    });
+
+    // Poll both sockets
+    let result = poll([
+        { fd: s1, events: POLLIN },
+        { fd: s2, events: POLLIN }
+    ], 1000);
+
+    // Should detect exactly one socket ready (s2)
+    let one_ready = (result.length == 1);
+
+    // Clean up
+    if (result.length > 0) {
+        let conn = s2.accept();
+        if (conn != null) {
+            conn.close();
+        }
+    }
+
+    s1.close();
+    s2.close();
+    join(client_task);
+
+    return { one_ready: one_ready };
+}
+
+let multi_result = join(spawn(test_poll_multiple));
+assert(multi_result.one_ready == true);
+print("PASS: poll with multiple sockets");
+
+print("All poll tests passed!");

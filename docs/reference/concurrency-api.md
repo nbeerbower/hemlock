@@ -204,8 +204,7 @@ detach(t);  // Task continues running independently
 **Behavior:**
 - Task continues running independently
 - Cannot `join()` detached task
-- Thread is cleaned up by OS when task completes
-- Task struct currently leaks (~64-96 bytes)
+- Task and thread are automatically cleaned up when the task completes
 
 **Use Cases:**
 - Fire-and-forget background tasks
@@ -601,18 +600,17 @@ let parallel_time = get_time() - start2;
 ### Memory & Cleanup
 
 - **Joined tasks** - Automatically cleaned up after `join()`
-- **Detached tasks** - pthread cleaned up by OS, Task struct (~64-96 bytes) currently leaks
+- **Detached tasks** - Automatically cleaned up when the task completes
 - **Channels** - Reference-counted, freed when no longer used
 
 ---
 
-## Limitations (v0.1)
+## Limitations
 
 - No `select()` for multiplexing multiple channels
 - No work-stealing scheduler (1 thread per task)
 - No async I/O integration (file/network operations block)
 - Channel capacity fixed at creation time
-- Detached task structs leak memory
 
 ---
 

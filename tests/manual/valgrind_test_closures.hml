@@ -1,4 +1,4 @@
-// Closure test - CLAUDE.md notes this is known to leak
+// Closure test - validates closures work correctly
 fn makeAdder(x) {
     return fn(y) {
         return x + y;

@@ -1,4 +1,5 @@
 #include "internal.h"
+#include <poll.h>
 
 // Structure to hold builtin function info
 typedef struct {
@@ -18,6 +19,7 @@ static BuiltinInfo builtins[] = {
     {"buffer", builtin_buffer},
     {"typeof", builtin_typeof},
     {"read_line", builtin_read_line},
+    {"string_concat_many", builtin_string_concat_many},
     {"eprint", builtin_eprint},
     {"open", builtin_open},
     {"assert", builtin_assert},
@@ -27,12 +29,14 @@ static BuiltinInfo builtins[] = {
     {"join", builtin_join},
     {"detach", builtin_detach},
     {"channel", builtin_channel},
+    {"select", builtin_select},
     {"task_debug_info", builtin_task_debug_info},
     {"signal", builtin_signal},
     {"raise", builtin_raise},
     // Networking functions
     {"socket_create", builtin_socket_create},
     {"dns_resolve", builtin_dns_resolve},
+    {"poll", builtin_poll},
     // Math functions (use stdlib/math.hml module for public API)
     {"__sin", builtin_sin},
     {"__cos", builtin_cos},
@@ -260,6 +264,14 @@ void register_builtins(Environment *env, int argc, char **argv, ExecutionContext
     env_set(env, "SO_KEEPALIVE", val_i32(SO_KEEPALIVE), ctx);  // Keep connections alive
     env_set(env, "SO_RCVTIMEO", val_i32(SO_RCVTIMEO), ctx);    // Receive timeout
     env_set(env, "SO_SNDTIMEO", val_i32(SO_SNDTIMEO), ctx);    // Send timeout
+
+    // Poll constants - Events to monitor
+    env_set(env, "POLLIN", val_i32(POLLIN), ctx);        // Data available to read
+    env_set(env, "POLLOUT", val_i32(POLLOUT), ctx);      // Writing possible
+    env_set(env, "POLLERR", val_i32(POLLERR), ctx);      // Error condition
+    env_set(env, "POLLHUP", val_i32(POLLHUP), ctx);      // Hang up
+    env_set(env, "POLLNVAL", val_i32(POLLNVAL), ctx);    // Invalid request (fd not open)
+    env_set(env, "POLLPRI", val_i32(POLLPRI), ctx);      // Priority data available
 
     // Register builtin functions (may overwrite some type names if there are conflicts)
     for (int i = 0; builtins[i].name != NULL; i++) {

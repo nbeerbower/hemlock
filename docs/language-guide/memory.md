@@ -6,11 +6,112 @@ Hemlock embraces **manual memory management** with explicit control over allocat
 
 Hemlock follows the principle: "You allocated it, you free it." There is:
 - No garbage collection
-- No automatic resource cleanup
-- No reference counting (in v0.1)
-- Full responsibility on the programmer
+- No automatic resource cleanup at the language level
+- Full responsibility on the programmer to call `free()`
 
 This explicit approach gives you complete control but requires careful management to avoid memory leaks and dangling pointers.
+
+## Internal Reference Counting
+
+While Hemlock requires manual memory management, the runtime uses **internal reference counting** to track object lifetimes through scopes. This is an implementation detail, not automatic cleanup.
+
+### What Reference Counting Handles
+
+The runtime automatically manages reference counts when:
+
+1. **Variables are reassigned** - the old value is released:
+   ```hemlock
+   let x = "first";   // ref_count = 1
+   x = "second";      // "first" released internally, "second" ref_count = 1
+   ```
+
+2. **Scopes exit** - local variables are released:
+   ```hemlock
+   fn example() {
+       let arr = [1, 2, 3];  // ref_count = 1
+   }  // arr released when function returns
+   ```
+
+3. **Containers are freed** - elements are released:
+   ```hemlock
+   let arr = [obj1, obj2];
+   free(arr);  // obj1 and obj2 get their ref_counts decremented
+   ```
+
+### When You Need `free()` vs When It's Automatic
+
+**Automatic (no `free()` needed):** Local variables of refcounted types are freed when scope exits:
+
+```hemlock
+fn process_data() {
+    let arr = [1, 2, 3];
+    let obj = { name: "test" };
+    let buf = buffer(64);
+    // ... use them ...
+}  // All automatically freed when function returns - no free() needed
+```
+
+**Manual `free()` required:**
+
+1. **Raw pointers** - `alloc()` has no refcounting:
+   ```hemlock
+   let p = alloc(64);
+   // ... use p ...
+   free(p);  // Always required - will leak otherwise
+   ```
+
+2. **Early cleanup** - free before scope ends to release memory sooner:
+   ```hemlock
+   fn long_running() {
+       let big = buffer(10000000);  // 10MB
+       // ... done with big ...
+       free(big);  // Free now, don't wait for function to return
+       // ... more work that doesn't need big ...
+   }
+   ```
+
+3. **Long-lived data** - globals or data stored in persistent structures:
+   ```hemlock
+   let cache = {};  // Module-level, lives until program exit unless freed
+
+   fn cleanup() {
+       free(cache);  // Manual cleanup for long-lived data
+   }
+   ```
+
+### Refcounting vs Garbage Collection
+
+| Aspect | Hemlock Refcounting | Garbage Collection |
+|--------|---------------------|-------------------|
+| Cleanup timing | Deterministic (immediate when ref hits 0) | Non-deterministic (GC decides when) |
+| User responsibility | Must call `free()` | Fully automatic |
+| Runtime pauses | None | "Stop the world" pauses |
+| Visibility | Hidden implementation detail | Usually invisible |
+| Cycles | Handled with visited-set tracking | Handled by tracing |
+
+### Which Types Have Refcounting
+
+| Type | Refcounted | Notes |
+|------|------------|-------|
+| `ptr` | ❌ No | Always requires manual `free()` |
+| `buffer` | ✅ Yes | Auto-freed on scope exit; manual `free()` for early cleanup |
+| `array` | ✅ Yes | Auto-freed on scope exit; manual `free()` for early cleanup |
+| `object` | ✅ Yes | Auto-freed on scope exit; manual `free()` for early cleanup |
+| `string` | ✅ Yes | Fully automatic, no `free()` needed |
+| `function` | ✅ Yes | Fully automatic (closure environments) |
+| `task` | ✅ Yes | Thread-safe atomic refcounting |
+| `channel` | ✅ Yes | Thread-safe atomic refcounting |
+| Primitives | ❌ No | Stack-allocated, no heap allocation |
+
+### Why This Design?
+
+This hybrid approach gives you:
+- **Explicit control** - You decide when to deallocate
+- **Safety from scope bugs** - Reassignment doesn't leak
+- **Predictable performance** - No GC pauses
+- **Closure support** - Functions can safely capture variables
+
+The philosophy remains: you're in control, but the runtime helps prevent common bugs like leaking on reassignment or double-freeing in containers.
 
 ## The Two Pointer Types
 
@@ -140,14 +241,29 @@ free(p);
 
 **Note:** After `realloc()`, the old pointer may be invalid. Always use the returned pointer.
 
-### Typed Allocation (TODO - v0.2)
+### Typed Allocation
 
-Future versions will include typed allocation helpers:
+Hemlock provides typed allocation helpers for convenience:
 
 ```hemlock
-// Planned for v0.2
-let arr = talloc(i32, 100);  // Allocate 100 i32 values
-let size = sizeof(i32);      // Get size of type
+let arr = talloc(i32, 100);  // Allocate 100 i32 values (400 bytes)
+let size = sizeof(i32);      // Returns 4 (bytes)
+```
+
+**`sizeof(type)`** returns the size in bytes of a type:
+- `sizeof(i8)` / `sizeof(u8)` → 1
+- `sizeof(i16)` / `sizeof(u16)` → 2
+- `sizeof(i32)` / `sizeof(u32)` / `sizeof(f32)` → 4
+- `sizeof(i64)` / `sizeof(u64)` / `sizeof(f64)` → 8
+- `sizeof(ptr)` → 8 (on 64-bit systems)
+
+**`talloc(type, count)`** allocates `count` elements of `type`:
+
+```hemlock
+let ints = talloc(i32, 10);   // 40 bytes for 10 i32 values
+let floats = talloc(f64, 5);  // 40 bytes for 5 f64 values
+free(ints);
+free(floats);
 ```
 
 ## Common Patterns
@@ -355,13 +471,11 @@ let p2 = pool_alloc(200);
 free(pool);
 ```
 
-## Limitations (v0.1)
+## Limitations
 
 Current limitations to be aware of:
 
-- **No reference counting** - Objects and arrays are never freed automatically
-- **No cycle detection** - Circular references will leak memory
-- **No typed allocation** - `talloc()` and `sizeof()` planned for v0.2
+- **No automatic deallocation** - You must call `free()` explicitly
 - **No custom allocators** - Only system malloc/free
 
 ## Related Topics

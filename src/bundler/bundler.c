@@ -43,19 +43,19 @@ static char* find_stdlib_path(void) {
         exe_path[len] = '\0';
         char *dir = dirname(exe_path);
 
-        snprintf(resolved, PATH_MAX, "%s/stdlib", dir);
+        snprintf(resolved, sizeof(resolved), "%s/stdlib", dir);
         if (access(resolved, F_OK) == 0) {
             return realpath(resolved, NULL);
         }
 
-        snprintf(resolved, PATH_MAX, "%s/../stdlib", dir);
+        snprintf(resolved, sizeof(resolved), "%s/../stdlib", dir);
         if (access(resolved, F_OK) == 0) {
             return realpath(resolved, NULL);
         }
     }
 
     if (getcwd(resolved, sizeof(resolved))) {
-        char stdlib_path[PATH_MAX];
+        char stdlib_path[PATH_MAX + 16];
         snprintf(stdlib_path, sizeof(stdlib_path), "%s/stdlib", resolved);
         if (access(stdlib_path, F_OK) == 0) {
             return realpath(stdlib_path, NULL);

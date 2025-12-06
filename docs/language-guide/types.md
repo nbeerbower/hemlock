@@ -434,7 +434,7 @@ print(cfg2.debug);    // true (overridden)
 
 ## Type System Limitations
 
-Current limitations (v0.1):
+Current limitations:
 
 - **No generics** - Cannot parameterize types
 - **No union types** - Cannot express "A or B"

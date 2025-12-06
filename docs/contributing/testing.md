@@ -663,33 +663,15 @@ void func() {
 
 ### Known Acceptable Leaks
 
-Some "leaks" are intentional in Hemlock v0.1:
+Some small "leaks" are intentional startup allocations:
 
-**1. Closure environments (to be fixed in v0.2):**
+**Global built-ins:**
 ```hemlock
-fn makeAdder(x) {
-    return fn(y) { return x + y; };  // Environment leaks
-}
+// Built-in functions, FFI types, and constants are allocated at startup
+// and not freed at exit (typically ~200 bytes)
 ```
 
-**2. Detached task structures:**
-```hemlock
-async fn background_work() { /* ... */ }
-detach(spawn(background_work));  // Task struct leaks
-```
-
-**3. Global built-ins:**
-```hemlock
-// Built-in functions and constants are never freed
-```
-
-Document these in tests with comments:
-```hemlock
-// NOTE: This test has a known leak in closure environment (v0.1)
-fn makeAdder(x) {
-    return fn(y) { return x + y; };
-}
-```
+These are not true leaks - they're one-time allocations that persist for the program lifetime and are cleaned up by the OS on exit.
 
 ---
 

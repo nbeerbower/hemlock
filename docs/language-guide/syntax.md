@@ -71,14 +71,14 @@ let text: string = "hello";
 
 ### Constants
 
-Use `const` for immutable values (experimental):
+Use `const` for immutable values:
 
 ```hemlock
 const MAX_SIZE: i32 = 1000;
 const PI: f64 = 3.14159;
 ```
 
-**Note**: `const` is parsed but not yet fully enforced in v0.1.
+Attempting to reassign a const will result in a runtime error: "Cannot assign to const variable".
 
 ## Expressions
 

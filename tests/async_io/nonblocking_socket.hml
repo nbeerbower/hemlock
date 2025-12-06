@@ -1,0 +1,90 @@
+// Test: Non-blocking socket operations
+// Tests set_nonblocking() and recv/send behavior in non-blocking mode
+
+// Create a socket and test non-blocking mode
+let sock = socket_create(AF_INET, SOCK_STREAM, 0);
+
+// Initially should be blocking mode
+assert(sock.nonblocking == false);
+
+// Enable non-blocking mode
+sock.set_nonblocking(true);
+assert(sock.nonblocking == true);
+
+// Disable non-blocking mode
+sock.set_nonblocking(false);
+assert(sock.nonblocking == false);
+
+sock.close();
+print("PASS: set_nonblocking basic");
+
+// Test non-blocking accept with server
+async fn test_nonblocking_accept() {
+    let listener = socket_create(AF_INET, SOCK_STREAM, 0);
+    listener.setsockopt(SOL_SOCKET, SO_REUSEADDR, 1);
+    listener.bind("127.0.0.1", 19850);
+    listener.listen(5);
+
+    // Set to non-blocking
+    listener.set_nonblocking(true);
+
+    // accept() should return null when no connections pending
+    let client = listener.accept();
+    assert(client == null);
+
+    listener.close();
+    return "accept_ok";
+}
+
+let result = join(spawn(test_nonblocking_accept));
+assert(result == "accept_ok");
+print("PASS: non-blocking accept returns null");
+
+// Test non-blocking recv
+async fn test_nonblocking_recv_send() {
+    let server = socket_create(AF_INET, SOCK_STREAM, 0);
+    server.setsockopt(SOL_SOCKET, SO_REUSEADDR, 1);
+    server.bind("127.0.0.1", 19851);
+    server.listen(1);
+
+    // Spawn a client in background
+    let client_task = spawn(async fn() {
+        __sleep(0.05);  // Give server time to accept
+        let client = socket_create(AF_INET, SOCK_STREAM, 0);
+        client.connect("127.0.0.1", 19851);
+        __sleep(0.1);  // Wait before sending
+        client.send("hello");
+        __sleep(0.05);
+        client.close();
+        return "client_done";
+    });
+
+    let conn = server.accept();
+
+    // Set connection to non-blocking
+    conn.set_nonblocking(true);
+
+    // First recv should return null (no data yet)
+    let data = conn.recv(1024);
+    let first_recv_null = (data == null);
+
+    // Wait for data to arrive
+    __sleep(0.15);
+
+    // Now recv should return data
+    let data2 = conn.recv(1024);
+    let second_recv_has_data = (data2 != null && data2.length > 0);
+
+    conn.close();
+    server.close();
+    join(client_task);
+
+    return { first_null: first_recv_null, second_has_data: second_recv_has_data };
+}
+
+let recv_result = join(spawn(test_nonblocking_recv_send));
+assert(recv_result.first_null == true);
+assert(recv_result.second_has_data == true);
+print("PASS: non-blocking recv returns null when no data");
+
+print("All non-blocking socket tests passed!");

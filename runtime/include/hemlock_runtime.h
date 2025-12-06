@@ -279,6 +279,9 @@ HmlValue hml_array_reduce(HmlValue arr, HmlValue reducer, HmlValue initial);
 HmlValue hml_object_get_field(HmlValue obj, const char *field);
 void hml_object_set_field(HmlValue obj, const char *field, HmlValue val);
 int hml_object_has_field(HmlValue obj, const char *field);
+int hml_object_num_fields(HmlValue obj);
+HmlValue hml_object_key_at(HmlValue obj, int index);
+HmlValue hml_object_value_at(HmlValue obj, int index);
 
 // ========== SERIALIZATION (JSON) ==========
 
@@ -344,6 +347,7 @@ void hml_runtime_error(const char *format, ...);
 typedef void (*HmlDeferFn)(void *arg);
 
 void hml_defer_push(HmlDeferFn fn, void *arg);
+void hml_defer_push_call(HmlValue fn);
 void hml_defer_pop_and_execute(void);
 void hml_defer_execute_all(void);
 
