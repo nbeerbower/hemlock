@@ -20,10 +20,12 @@ static void* task_thread_wrapper(void* arg) {
     task->state = TASK_RUNNING;
     pthread_mutex_unlock((pthread_mutex_t*)task->task_mutex);
 
-    // Create new environment for function execution
-    Environment *func_env = env_new(task->env);
+    // Create isolated environment for function execution
+    // THREAD SAFETY: task->env is NULL to ensure no shared state with parent
+    // Tasks communicate via channels, not shared variables
+    Environment *func_env = env_new(NULL);
 
-    // Bind parameters
+    // Bind parameters (these are deep-copied, so safe to use directly)
     for (int i = 0; i < fn->num_params && i < task->num_args; i++) {
         Value arg = task->args[i];
         // Type check if parameter has type annotation
@@ -85,21 +87,24 @@ Value builtin_spawn(Value *args, int num_args, ExecutionContext *ctx) {
     }
 
     // Create task with remaining args as function arguments
+    // THREAD SAFETY: Deep copy all arguments to isolate task from parent
+    // This ensures tasks don't share mutable state - they communicate via channels
     Value *task_args = NULL;
     int task_num_args = num_args - 1;
 
     if (task_num_args > 0) {
         task_args = malloc(sizeof(Value) * task_num_args);
         for (int i = 0; i < task_num_args; i++) {
-            task_args[i] = args[i + 1];
-            // Retain arguments to ensure they stay alive for the task's lifetime
-            value_retain(task_args[i]);
+            // Deep copy each argument for thread isolation
+            task_args[i] = value_deep_copy(args[i + 1]);
         }
     }
 
     // Create task (atomically increment task ID for thread-safety)
+    // NOTE: We pass NULL for the closure environment to isolate the task
+    // Tasks should not access parent scope variables - use channels instead
     int task_id = atomic_fetch_add(&next_task_id, 1);
-    Task *task = task_new(task_id, fn, task_args, task_num_args, fn->closure_env);
+    Task *task = task_new(task_id, fn, task_args, task_num_args, NULL);
 
     // Allocate pthread_t
     task->thread = malloc(sizeof(pthread_t));
@@ -252,21 +257,22 @@ Value builtin_detach(Value *args, int num_args, ExecutionContext *ctx) {
         }
 
         // Create task with remaining args as function arguments
+        // THREAD SAFETY: Deep copy all arguments to isolate task from parent
         Value *task_args = NULL;
         int task_num_args = num_args - 1;
 
         if (task_num_args > 0) {
             task_args = malloc(sizeof(Value) * task_num_args);
             for (int i = 0; i < task_num_args; i++) {
-                task_args[i] = args[i + 1];
-                // Retain arguments to ensure they stay alive for the task's lifetime
-                value_retain(task_args[i]);
+                // Deep copy each argument for thread isolation
+                task_args[i] = value_deep_copy(args[i + 1]);
             }
         }
 
         // Create task (atomically increment task ID for thread-safety)
+        // NOTE: We pass NULL for the closure environment to isolate the task
         int task_id = atomic_fetch_add(&next_task_id, 1);
-        Task *task = task_new(task_id, fn, task_args, task_num_args, fn->closure_env);
+        Task *task = task_new(task_id, fn, task_args, task_num_args, NULL);
 
         // Mark as detached before starting thread
         task->detached = 1;
